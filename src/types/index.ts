@@ -367,18 +367,15 @@ export type SessionLaunchOptions =
   | AntigravitySessionLaunchOptions
   | QoderSessionLaunchOptions;
 
-/**
- * User-level launch preferences for the permission-related controls exposed by
- * each agent. Options unrelated to permissions, such as model effort, are
- * intentionally excluded so a successful launch only becomes the next
- * default for its permission mode.
- */
+/** User launch defaults managed in Settings / Agents. */
+export type GlobalAgentPermissionPreset = "yolo" | "manual" | "custom";
+
 export interface AgentPermissionDefaults {
-  claude?: Pick<ClaudeSessionLaunchOptions, "skipPermissions">;
+  claude?: Pick<ClaudeSessionLaunchOptions, "skipPermissions"> & Partial<Pick<ClaudeSessionLaunchOptions, "effort">>;
   codex?: Pick<
     CodexSessionLaunchOptions,
     "yolo" | "approvalMode" | "sandboxMode"
-  >;
+  > & Partial<Pick<CodexSessionLaunchOptions, "effort">>;
   antigravity?: Pick<
     AntigravitySessionLaunchOptions,
     "dangerouslySkipPermissions" | "sandbox" | "mode"

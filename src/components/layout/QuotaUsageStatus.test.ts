@@ -3,18 +3,59 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test, vi } from "vitest";
+import { useTranslation } from "react-i18next";
 import type { CodexRateLimits, UsageQuotaWindow } from "@/types";
 
 vi.mock("react-i18next", async () => {
   const { createInstance } = await import("i18next");
   const en = (await import("@/locales/en-US.json")).default;
+  const zh = (await import("@/locales/zh-CN.json")).default;
+  const ja = (await import("@/locales/ja-JP.json")).default;
   const i18n = createInstance();
-  await i18n.init({ lng: "en", resources: { en: { translation: en } } });
+  await i18n.init({ lng: "en", resources: { en: { translation: en }, zh: { translation: zh }, ja: { translation: ja } } });
   return { useTranslation: () => ({ t: i18n.t, i18n }) };
 });
 import { QuotaDetailsContent, QuotaUsageStatus } from "./QuotaUsageStatus";
 
 const window = (minutes: number, used: number): UsageQuotaWindow => ({ id: String(minutes), usedPercent: used, windowMinutes: minutes, resetsAt: null, resetDescription: null, bucketId: "codex", bucketName: null, label: null });
+test.each([
+  ["en", "Plan", "Weekly", "Credits balance"],
+  ["zh", "套餐", "每周", "Credits 余额"],
+  ["ja", "プラン", "週間", "Credits 残高"],
+])("%s renders a new plan and actual quota labels without corrupted text", async (locale, plan, period, credits) => {
+  const { i18n } = useTranslation();
+  try {
+    await i18n.changeLanguage(locale);
+    const markup = renderToStaticMarkup(createElement(QuotaDetailsContent, { details: {
+      planType: "future_premium-v2", quotaWindows: [window(10080, 15)],
+      balances: [{ bucketId: "codex", bucketName: null, balance: 0, unlimited: false, hasCredits: false }],
+    } }));
+    expect(markup).toContain(`${plan} · Future Premium V2`);
+    expect(markup).toContain(period);
+    expect(markup).toContain(credits);
+    expect(markup).toContain("85%");
+    expect(markup).toContain(">0<");
+    expect(markup).not.toMatch(/\?{2,}/);
+  } finally {
+    await i18n.changeLanguage("en");
+  }
+});
+
+test("blank plan identifiers do not render an empty plan row", () => {
+  const markup = renderToStaticMarkup(createElement(QuotaDetailsContent, { details: { planType: "   ", quotaWindows: [window(15, 0)] } }));
+  expect(markup).not.toContain("Plan");
+  expect(markup).toContain("15 minutes");
+});
+test.each(["pro", "lite", "plus", "free"])("%s plans retain their actual monthly window and uniform reset date", (planType) => {
+  const markup = renderToStaticMarkup(createElement(QuotaDetailsContent, { details: {
+    planType,
+    quotaWindows: [{ ...window(43200, 25), resetsAt: new Date(2027, 0, 1, 4, 8, 45).getTime() }],
+  } }));
+  expect(markup).toContain(`Plan · ${planType[0].toUpperCase()}${planType.slice(1)}`);
+  expect(markup).toContain("30 days");
+  expect(markup).toContain("2027-01-01 04:08");
+  expect(markup).not.toContain("5 hours");
+});
 test("a balance-only response renders zero as a known balance without an unavailable warning", () => {
   const markup = renderToStaticMarkup(createElement(QuotaDetailsContent, { details: { balances: [{ bucketId: "codex", bucketName: null, balance: 0, hasCredits: false, unlimited: false }] } }));
   expect(markup).toContain("Credits balance");

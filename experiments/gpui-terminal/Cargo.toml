@@ -1,0 +1,39 @@
+[package]
+name = "termflow-terminal-eval"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[features]
+default = ["gpui-ui"]
+gpui-ui = ["dep:gpui"]
+webview-ui = ["dep:tauri", "dep:tauri-build", "tauri/custom-protocol"]
+
+[dependencies]
+anyhow = "1"
+portable-pty = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+vt100 = "0.15"
+gpui = { version = "=0.2.2", default-features = false, optional = true }
+tauri = { version = "=2.11.0", optional = true }
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true }
+
+[[bin]]
+name = "gpui-terminal-eval"
+path = "src/gpui_main.rs"
+required-features = ["gpui-ui"]
+
+[[bin]]
+name = "webview-terminal-eval"
+path = "src/webview_main.rs"
+required-features = ["webview-ui"]
+
+[profile.release]
+opt-level = 2
+debug = 0
+

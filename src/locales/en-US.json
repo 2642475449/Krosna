@@ -1,4 +1,9 @@
 {
+  "markdownImage": {
+    "readFailed": "Could not read the image file. Check that it exists or try again.",
+    "displayFailed": "Could not display the image. It may be inaccessible or use an unsupported format.",
+    "loading": "Loading image"
+  },
   "errorBoundary": {
     "title": "This view encountered an error",
     "description": "Try again. If the error returns, keep the details below.",
@@ -550,7 +555,7 @@
       "rateLimited": "Too many usage queries. Retrying later.",
       "serviceError": "The usage service is temporarily unavailable.",
       "invalidResponse": "The usage service returned an unrecognized response.",
-      "loading": "Loading usage?",
+      "loading": "Loading usage…",
       "attention": "Usage needs attention",
       "limitReached": "The service reports a reached usage limit.",
       "creditsDepleted": "The service reports depleted credits.",
@@ -559,7 +564,7 @@
     "opencodeUsage": {
       "title": "OpenCode usage",
       "pending": "Pending",
-      "accountsHint": "Shown per connected provider; these are not necessarily the active session?s billing accounts.",
+      "accountsHint": "Shown per connected provider; these are not necessarily the active session's billing accounts.",
       "unavailable": "No saved OpenCode sign-in found. Use /connect for Go, Zen or another provider."
     }
   },
@@ -697,7 +702,6 @@
     "gitAutoFetchInterval": "Fetch interval",
     "gitFetchMinutes": "{{count}} minutes",
     "gitErrorDetails": "View error details",
-
     "titleInvalidResponse": "The model returned an empty or invalid title",
     "titleRetryScheduled": "Title generation failed; retry scheduled",
     "titleRetryFailed": "Title generation failed; retry now",
@@ -1224,9 +1228,24 @@
     "noAgents": "No available agents detected. Install Claude Code, Codex, Antigravity CLI, OpenCode, or Qoder CLI first.",
     "detectionFailed": "Agent detection failed. Please try again.",
     "create": "Create Session",
-    "createFailed": "Failed to create session"
+    "createFailed": "Failed to create session",
+    "yoloActive": "Yolo Mode",
+    "manualActive": "Manual Approval",
+    "permissionManagedInSettings": "Default permission and sandbox habits are configured in Settings -> Agents",
+    "commandPreview": "Startup Command",
+    "commandCopyHint": "Click to copy startup command",
+    "commandCopied": "Startup command copied",
+    "codexYolo": "Bypass approvals and sandbox (YOLO)",
+    "approvalMode": "Approval mode",
+    "sandboxMode": "Sandbox mode",
+    "workspaceWrite": "Workspace write",
+    "readOnly": "Read only",
+    "defaultValue": "Current default: {{value}}"
   },
   "fileTabs": {
+    "externalChange": "This file changed on disk. Reload it or overwrite it with your edits.",
+    "reloadFromDisk": "Reload from disk",
+    "overwriteFile": "Overwrite file",
     "loading": "Loading file",
     "save": "Save",
     "saveSuccess": "File saved",
@@ -1575,7 +1594,17 @@
         "weeklyShort": "weekly"
       },
       "viewDetails": "View details",
-      "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again."
+      "pathHint": "Detection uses the system PATH currently available to Termflow. If a newly installed or updated agent is not detected, restart your computer and try again.",
+      "permissions": {
+        "title": "Agent Permissions",
+        "description": "Choose whether to launch agents with fewer permission prompts (Yolo) or manual approval checks.",
+        "yolo": "Yolo",
+        "manual": "Manual",
+        "custom": "Customized"
+      },
+      "installedSection": "Installed",
+      "availableSection": "Available",
+      "configureLaunch": "Launch Options"
     },
     "theme": {
       "dark-starry": {
@@ -1626,7 +1655,7 @@
       "clearInput": "Clear input",
       "voiceInput": "Voice Input",
       "hint1": "These global shortcuts also work when the terminal has focus.",
-      "description": "Click a shortcut and press a new combination. Changes apply immediately and save automatically. The voice shortcut is shared with Voice Recognition settings.",
+      "description": "Click a shortcut, then press a key combination or mouse side button to save it immediately. Voice shortcuts stay in sync with voice recognition settings.",
       "edit": "Edit {{action}} shortcut",
       "resetAll": "Reset all",
       "reset": "Reset",
@@ -1638,8 +1667,8 @@
       "recording": "Press a shortcut…",
       "doubleShift": "Double Shift",
       "conflict": "This shortcut is assigned to “{{action}}”. Change or clear that binding first.",
-      "invalid": "Use Ctrl, Alt, or Cmd with a key, or F1–F24. Ctrl+A/C/V are reserved for selection, copy, and paste.",
-      "recordHint": "Press Esc or click again to cancel. Global search also supports Double Shift. Clear input only applies in terminals.",
+      "invalid": "Use Ctrl, Alt, or Cmd with a key, F1–F24, or a mouse Back / Forward button. Ctrl+A/C/V are reserved for select all, copy, and paste.",
+      "recordHint": "Press Esc or click again to cancel. MouseBack and MouseForward support Ctrl / Alt / Shift modifiers. Search Everywhere also supports double Shift. Clear input works only in terminals; mouse voice shortcuts work only inside the Termflow window.",
       "resetSuccess": "Default shortcuts restored"
     },
     "notifications": {
@@ -2673,7 +2702,7 @@
       "shortcutReset": "Reset Default",
       "shortcutClear": "Clear",
       "shortcutCurrent": "Current shortcut: {{shortcut}}",
-      "shortcutRecordHint": "Press a single key (such as F8, a letter, or Space) or a key combination to save; Esc cancels recording",
+      "shortcutRecordHint": "Press a key, key combination, or mouse Back / Forward button to save; Esc cancels. Mouse voice shortcuts work only inside the Termflow window.",
       "shortcutRecordCancelled": "Shortcut recording cancelled",
       "shortcutModifierRequired": "Please include at least one modifier key, such as Ctrl, Alt, Shift, or Cmd",
       "shortcutSaved": "Voice shortcut updated",
@@ -2954,7 +2983,10 @@
     "reviewPrefix": "Changes",
     "empty": "Add a terminal, file, or side task",
     "pin": "Pin",
-    "openInWorkspace": "Open in main workspace",
+    "openInWorkspace": "Move to main tabs",
+    "saveBeforeCloseFailed": "Could not save before closing. Resolve the file save error or conflict and retry.",
+    "closeProcessesTitle": "Close tabs and end processes?",
+    "closeProcessesDescription": "These tabs contain live task or terminal processes. Closing will end those processes. Tabs outside the auxiliary workspace are unaffected.",
     "binaryFile": "This binary file cannot be previewed yet",
     "sessionUnavailable": "This Session is no longer available",
     "openFile": "Open file on the right",

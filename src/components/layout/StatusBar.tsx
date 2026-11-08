@@ -1,3 +1,4 @@
+import { formatQuotaResetTime } from "@/lib/quotaDateTime";
 import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { message, Popover } from "antd";
@@ -947,10 +948,7 @@ function AntigravityUsageWindowRow({ window }: { window: AntigravityQuotaWindow 
   const { t } = useTranslation();
   const remaining = Math.max(0, Math.min(100, Math.round(window.remainingPercent)));
   const color = codexUsageBarColor(remaining);
-  const reset = window.resetDescription ? new Date(window.resetDescription) : null;
-  const resetLabel = reset && Number.isFinite(reset.getTime())
-    ? t("statusBar.codexUsage.resetsAt", { time: reset.toLocaleString() })
-    : t("statusBar.codexUsage.resetUnknown");
+  const resetLabel = formatQuotaResetTime(null, window.resetDescription, t);
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-[12px]">

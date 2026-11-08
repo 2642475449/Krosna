@@ -405,7 +405,7 @@ function normalizeAgentPermissionDefaults(value: unknown): AgentPermissionDefaul
   const defaults: AgentPermissionDefaults = {};
   const claude = asSettingsRecord(source.claude);
   if (typeof claude?.skipPermissions === "boolean") {
-    defaults.claude = { skipPermissions: claude.skipPermissions };
+    defaults.claude = { skipPermissions: claude.skipPermissions, effort: ["inherit", "low", "medium", "high", "xhigh", "max"].includes(String(claude.effort)) ? claude.effort as NonNullable<AgentPermissionDefaults["claude"]>["effort"] : "inherit" };
   }
 
   const codex = asSettingsRecord(source.codex);
@@ -420,6 +420,7 @@ function normalizeAgentPermissionDefaults(value: unknown): AgentPermissionDefaul
       yolo: codex.yolo,
       approvalMode: codex.approvalMode,
       sandboxMode: codex.sandboxMode,
+      effort: ["inherit", "low", "medium", "high"].includes(String(codex.effort)) ? codex.effort as NonNullable<AgentPermissionDefaults["codex"]>["effort"] : "inherit",
     };
   }
 
@@ -1614,6 +1615,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
         set((state) => ({
           terminalQuickCommands: state.terminalQuickCommands.filter((command) => command.id !== id),
         })),
+      setAllAgentPermissionDefaults: (defaults) => set({ agentPermissionDefaults: normalizeAgentPermissionDefaults(defaults) }),
       setAgentPermissionDefaults: (agentId, launchOptions) =>
         set((state) => ({
           agentPermissionDefaults: {

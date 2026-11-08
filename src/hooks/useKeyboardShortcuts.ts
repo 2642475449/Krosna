@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAppStore } from "@/store";
-import { matchesShortcut, parseShortcut } from "@/lib/shortcut";
+import { matchesShortcut, parseShortcut, mouseShortcutKey, shortcutEventKey, type ShortcutInputEvent } from "@/lib/shortcut";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import type { ShortcutAction } from "@/constants/shortcuts";
@@ -26,6 +26,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const openTab = useAppStore((s) => s.openTab);
   const voiceShortcutPressedRef = useRef(false);
+  // Keep a held voice button across renders caused by starting recognition.
+  useEffect(() => () => {
+    if (voiceShortcutPressedRef.current) {
+      voiceShortcutPressedRef.current = false;
+      handlers.onVoiceShortcutRelease?.();
+    }
+  }, [handlers.voiceShortcut, handlers.enableVoiceShortcut]);
   const overrides = useShortcutStore((s) => s.overrides);
 
   useEffect(() => {
@@ -42,12 +49,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
     }
 
     const globalActions: ShortcutAction[] = ["newSession", "globalTextSearch", "closeTab", "nextTab", "openSettings", "toggleSidebar", "toggleBottomRunner"];
-    const matches = (event: KeyboardEvent, action: ShortcutAction) => matchesShortcut(event, getAppShortcut(overrides, action));
+    const matches = (event: ShortcutInputEvent, action: ShortcutAction) => matchesShortcut(event, getAppShortcut(overrides, action));
 
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.isComposing || useShortcutStore.getState().recordingAction) return;
+    function handleKeyDown(e: ShortcutInputEvent) {
+      if (("isComposing" in e && e.isComposing) || useShortcutStore.getState().recordingAction) return;
       const hasPrimaryModifier = e.ctrlKey || e.metaKey;
-      const lowerKey = e.key.toLowerCase();
+      const lowerKey = shortcutEventKey(e).toLowerCase();
+      const repeat = "repeat" in e && e.repeat;
       const isTerminalTarget = isTerminalShortcutTarget(e.target);
 
       // 全局快捷键在 Monaco 编辑器中也生效
@@ -74,7 +82,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       // Ctrl+N: New session
       if (matches(e, "newSession")) {
         consumeShortcut(e);
-        if (e.repeat) return;
+        if (repeat) return;
         handlers.onNewSession?.();
         return;
       }
@@ -82,7 +90,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       // Ctrl+Shift+F: Search text across the project.
       if (matches(e, "globalTextSearch")) {
         consumeShortcut(e);
-        if (e.repeat) return;
+        if (repeat) return;
         handlers.onGlobalTextSearch?.();
         return;
       }
@@ -90,7 +98,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       // Ctrl+W: Close current tab
       if (matches(e, "closeTab")) {
         consumeShortcut(e);
-        if (e.repeat) return;
+        if (repeat) return;
         if (e.target instanceof HTMLElement && e.target.closest(".app-bottom-runner-panel")) {
           handlers.onRequestCloseRunnerTab?.();
           return;
@@ -104,7 +112,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       // Ctrl+Tab: Switch to next tab
       if (matches(e, "nextTab")) {
         consumeShortcut(e);
-        if (e.repeat) return;
+        if (repeat) return;
         if (openTabs.length > 1) {
           const currentIndex = openTabs.indexOf(activeSessionId ?? "");
           const nextIndex = (currentIndex + 1) % openTabs.length;
@@ -116,21 +124,21 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       // Ctrl+,: Open settings
       if (matches(e, "openSettings")) {
         consumeShortcut(e);
-        if (e.repeat) return;
+        if (repeat) return;
         openTab(SETTINGS_ID);
         return;
       }
 
       if (matches(e, "toggleBottomRunner")) {
         consumeShortcut(e);
-        if (!e.repeat) handlers.onToggleBottomRunner?.();
+        if (!repeat) handlers.onToggleBottomRunner?.();
         return;
       }
 
       // Ctrl+B: Toggle sidebar
       if (matches(e, "toggleSidebar")) {
         consumeShortcut(e);
-        if (e.repeat) return;
+        if (repeat) return;
         handlers.onToggleSidebar?.();
         return;
       }
@@ -172,6 +180,20 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
     }
 
+    function handleMouseDown(e: MouseEvent) {
+      if (mouseShortcutKey(e.button)) handleKeyDown(e);
+    }
+
+    function handleMouseEnd(e: MouseEvent) {
+      const key = mouseShortcutKey(e.button)?.toLowerCase();
+      if (!key) return;
+      const configured = [...globalActions, "searchEverywhere", "clearInput"] as ShortcutAction[];
+      if (useShortcutStore.getState().recordingAction ||
+          configured.some(action => parseShortcut(getAppShortcut(overrides, action))?.key === key) ||
+          parsedVoiceShortcut?.key === key) consumeShortcut(e);
+      if (e.type === "mouseup" && parsedVoiceShortcut?.key === key) releaseVoiceShortcut();
+    }
+
     function handleWindowBlur() {
       releaseVoiceShortcut();
     }
@@ -182,21 +204,26 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
     }
 
+    document.addEventListener("mousedown", handleMouseDown, true);
+    document.addEventListener("mouseup", handleMouseEnd, true);
+    document.addEventListener("auxclick", handleMouseEnd, true);
     document.addEventListener("keydown", handleKeyDown, true);
     document.addEventListener("keyup", handleKeyUp, true);
     window.addEventListener("blur", handleWindowBlur);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
+      document.removeEventListener("mousedown", handleMouseDown, true);
+      document.removeEventListener("mouseup", handleMouseEnd, true);
+      document.removeEventListener("auxclick", handleMouseEnd, true);
       document.removeEventListener("keydown", handleKeyDown, true);
       document.removeEventListener("keyup", handleKeyUp, true);
       window.removeEventListener("blur", handleWindowBlur);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      voiceShortcutPressedRef.current = false;
     };
   }, [openTabs, activeSessionId, openTab, handlers, overrides]);
 }
 
-export function shouldIgnoreShortcut(event: KeyboardEvent): boolean {
+export function shouldIgnoreShortcut(event: ShortcutInputEvent): boolean {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -233,7 +260,7 @@ function isExplorerShortcutTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && !!target.closest("[data-explorer-shortcuts='true']");
 }
 
-function consumeShortcut(event: KeyboardEvent) {
+function consumeShortcut(event: Event) {
   event.preventDefault();
   event.stopPropagation();
 }

@@ -1,23 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Input, Modal, Select, Spin, Switch, type InputRef } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { Button, Input, Modal, Select, Spin, Tooltip, message } from "antd";
 import { EnterOutlined } from "@ant-design/icons";
-import dayjs from "dayjs";
 import { useTranslation } from "react-i18next";
-import { getCachedAgentClis, getClaudeEffortInfo, inspectAgentClis } from "@/lib/api";
-import { formatAgentVersion, getDefaultAgentLaunchOptions, supportsAgentCapability } from "@/lib/agents";
-import type {
-  AgentCliInfo,
-  AiAgentId,
-  AntigravitySessionLaunchOptions,
-  ClaudeEffortInfo,
-  ClaudeEffortLevel,
-  ClaudeSessionLaunchOptions,
-  CodexSessionLaunchOptions,
-  QoderSessionLaunchOptions,
-  Session,
-  SessionLaunchOptions,
-} from "@/types";
+import { getCachedAgentClis, getClaudeEffortInfo, inspectAgentClis, getClaudeRateLimits, getCodexRateLimits, getAntigravityUsage, getQoderUsage } from "@/lib/api";
+import { formatAgentVersion, getAgentCommandPreview, getDefaultAgentLaunchOptions, isAgentYoloEnabled, supportsAgentCapability } from "@/lib/agents";
+import { quotaWindows } from "@/lib/usageQuota";
+import { getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
+import type { AgentCliInfo, AiAgentId, ClaudeEffortInfo, Session, SessionLaunchOptions } from "@/types";
 import { AgentIcon } from "@/components/AgentIcon";
+import { TASK_CHOICES, useLaunchChoiceLabel } from "@/components/AgentLaunchConfigPanel";
 import { useDefaultInstalledAgentSelection } from "@/hooks/useDefaultInstalledAgentSelection";
 import { useAppStore } from "@/store";
 
@@ -26,524 +17,140 @@ interface NewSessionDialogProps {
   creating: boolean;
   title?: string;
   onCancel: () => void;
-  onCreate: (
-    name: string,
-    agent: AgentCliInfo,
-    launchOptions?: SessionLaunchOptions,
-    titleSource?: Session["titleSource"],
-  ) => void;
+  onCreate: (name: string, agent: AgentCliInfo, launchOptions?: SessionLaunchOptions, titleSource?: Session["titleSource"]) => void;
 }
-
-const CLAUDE_EFFORT_OPTIONS: ClaudeEffortLevel[] = [
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
-
-export function NewSessionDialog({
-  open,
-  creating,
-  title,
-  onCancel,
-  onCreate,
-}: NewSessionDialogProps) {
+export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: NewSessionDialogProps) {
   const { t } = useTranslation();
-  const nameInputRef = useRef<InputRef>(null);
-  const currentProject = useAppStore((state) => state.currentProject);
-  const agentPermissionDefaults = useAppStore((state) => state.agentPermissionDefaults);
+  const choiceLabel = useLaunchChoiceLabel();
+  const defaults = useAppStore(s => s.agentPermissionDefaults);
+  const projectPath = useAppStore(s => s.currentProject?.path);
   const [name, setName] = useState("");
   const [nameEdited, setNameEdited] = useState(false);
   const [agents, setAgents] = useState<AgentCliInfo[]>([]);
   const [agentId, setAgentId] = useState<AiAgentId | null>(null);
+  const [selectOpen, setSelectOpen] = useState(false);
   const [detecting, setDetecting] = useState(false);
-  const [detectionFailed, setDetectionFailed] = useState(false);
-  const [claudeSkipPermissions, setClaudeSkipPermissions] = useState(false);
-  const [claudeEffort, setClaudeEffort] = useState<ClaudeSessionLaunchOptions["effort"]>("inherit");
-  const [claudeEffortInfo, setClaudeEffortInfo] = useState<ClaudeEffortInfo | null>(null);
-
-  const [codexYolo, setCodexYolo] = useState(false);
-  const [codexApprovalMode, setCodexApprovalMode] = useState<CodexSessionLaunchOptions["approvalMode"]>("on-request");
-  const [codexSandboxMode, setCodexSandboxMode] = useState<CodexSessionLaunchOptions["sandboxMode"]>("workspace-write");
-  const [codexEffort, setCodexEffort] = useState<CodexSessionLaunchOptions["effort"]>("inherit");
-  const [antigravitySkipPermissions, setAntigravitySkipPermissions] = useState(false);
-  const [antigravitySandbox, setAntigravitySandbox] = useState(false);
-  const [antigravityMode, setAntigravityMode] =
-    useState<AntigravitySessionLaunchOptions["mode"]>("inherit");
-  const [qoderPermissionMode, setQoderPermissionMode] =
-    useState<QoderSessionLaunchOptions["permissionMode"]>("inherit");
-
+  const [failed, setFailed] = useState(false);
+  const [overrides, setOverrides] = useState<Partial<Record<AiAgentId, string>>>({});
+  const [effortInfo, setEffortInfo] = useState<ClaudeEffortInfo | null>(null);
+  const [quotas, setQuotas] = useState<Partial<Record<AiAgentId, number>>>({});
+  const submitting = useRef(false);
   useEffect(() => {
     if (!open) return;
     let disposed = false;
-    setName(t("sidebar.sessionDefaultName", { time: dayjs().format("HH:mm:ss") }));
-    setNameEdited(false);
-    // 弹窗组件关闭后仍保留状态；每次新建都重新采用当前默认智能体。
-    setAgentId(null);
-    setDetecting(true);
-    setDetectionFailed(false);
-    const claudeDefaults = getDefaultAgentLaunchOptions(
-      "claude",
-      agentPermissionDefaults,
-    ) as ClaudeSessionLaunchOptions;
-    const codexDefaults = getDefaultAgentLaunchOptions(
-      "codex",
-      agentPermissionDefaults,
-    ) as CodexSessionLaunchOptions;
-    const antigravityDefaults = getDefaultAgentLaunchOptions(
-      "antigravity",
-      agentPermissionDefaults,
-    ) as AntigravitySessionLaunchOptions;
-    const qoderDefaults = getDefaultAgentLaunchOptions(
-      "qoder",
-      agentPermissionDefaults,
-    ) as QoderSessionLaunchOptions;
-    setClaudeSkipPermissions(claudeDefaults.skipPermissions);
-    setClaudeEffort("inherit");
-    setClaudeEffortInfo(null);
-    setCodexYolo(codexDefaults.yolo);
-    setCodexApprovalMode(codexDefaults.approvalMode);
-    setCodexSandboxMode(codexDefaults.sandboxMode);
-    setCodexEffort("inherit");
-    setAntigravitySkipPermissions(antigravityDefaults.dangerouslySkipPermissions);
-    setAntigravitySandbox(antigravityDefaults.sandbox);
-    setAntigravityMode(antigravityDefaults.mode);
-    setQoderPermissionMode(qoderDefaults.permissionMode);
-
-    // 缓存过期时仍先让用户选择智能体，版本检测转为后台刷新，避免新建会话
-    // 弹窗被慢速或异常的 CLI 检测阻塞。
-    const cachedAgents = getCachedAgentClis();
-    const hasCachedAgents = cachedAgents !== null;
-    if (cachedAgents) {
-      setAgents(cachedAgents.filter(
-        (agent) =>
-          agent.installed &&
-          supportsAgentCapability(agent.id, "interactiveTerminal"),
-      ));
-      setDetecting(false);
-    }
-
-    void inspectAgentClis()
-      .then((result) => {
-        if (disposed) return;
-        const installed = result.filter(
-          (agent) =>
-            agent.installed &&
-            supportsAgentCapability(agent.id, "interactiveTerminal"),
-        );
-        setAgents(installed);
-      })
-      .catch((error) => {
-        console.error("Failed to inspect agents for new session:", error);
-        if (!disposed) {
-          // 已有缓存时保留可用的旧检测结果，用户仍可继续创建会话。
-          if (!hasCachedAgents) {
-            setAgents([]);
-            setAgentId(null);
-            setDetectionFailed(true);
-          }
-        }
-      })
-      .finally(() => {
-        if (!disposed && !hasCachedAgents) setDetecting(false);
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [agentPermissionDefaults, open, t]);
-
+    setName("");
+    setNameEdited(false); setAgentId(null); setSelectOpen(false); setOverrides({}); setFailed(false); submitting.current = false;
+    const filter = (items: AgentCliInfo[]) => items.filter(a => a.installed && supportsAgentCapability(a.id, "interactiveTerminal"));
+    const cached = getCachedAgentClis();
+    setAgents(filter(cached ?? [])); setDetecting(cached === null);
+    void inspectAgentClis().then(items => { if (!disposed) setAgents(filter(items)); }).catch(error => {
+      console.error("Failed to inspect launcher agents", error);
+      if (!disposed && !cached) setFailed(true);
+    }).finally(() => { if (!disposed) setDetecting(false); });
+    return () => { disposed = true; };
+  }, [open, t]);
   useEffect(() => {
     if (!open) return;
-    let disposed = false;
-
-    void getClaudeEffortInfo(currentProject?.path ?? null)
-      .then((info) => {
-        if (!disposed) {
-          setClaudeEffortInfo(info);
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to load Claude effort info for new session:", error);
-        if (!disposed) {
-          setClaudeEffortInfo(null);
-        }
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [currentProject?.path, open]);
-
-  useDefaultInstalledAgentSelection({
-    enabled: open && !detecting,
-    installedAgents: agents,
-    selectedAgentId: agentId,
-    onSelectedAgentChange: setAgentId,
-    emptyValue: null,
-  });
-
-  const selectedAgent = useMemo(
-    () => agents.find((agent) => agent.id === agentId) ?? null,
-    [agentId, agents],
-  );
-  const inheritedClaudeEffortLabel = useMemo(
-    () =>
-      claudeEffortInfo
-        ? t(`statusBar.effort.${claudeEffortInfo.effectiveLevel}`)
-        : t("statusBar.effort.auto"),
-    [claudeEffortInfo, t],
-  );
-  const claudeEffortHint = useMemo(() => {
-    if (claudeEffort === "inherit") {
-      return t("newSession.effortHintInherit", {
-        level: inheritedClaudeEffortLabel,
-      });
-    }
-
-    return t("newSession.effortHintOverride", {
-      level: t(`statusBar.effort.${claudeEffort}`),
+    let disposed = false; setEffortInfo(null);
+    void getClaudeEffortInfo(projectPath ?? null).then(info => { if (!disposed) setEffortInfo(info); }).catch(error => console.warn("Failed to read Claude effort", error));
+    return () => { disposed = true; };
+  }, [open, projectPath]);
+  useEffect(() => {
+    if (!open) return;
+    let disposed = false; setQuotas({});
+    const ids = new Set(agents.map(a => a.id));
+    const session = useAppStore.getState().sessions.find(s => s.agentId === "claude" && s.path === projectPath);
+    const requests: [AiAgentId, Promise<number | null>][] = [];
+    const percent = (windows: { usedPercent: number }[]) => windows.length ? Math.min(...windows.map(w => 100 - w.usedPercent)) : null;
+    if (ids.has("claude") && session) requests.push(["claude", getClaudeRateLimits(session.id).then(v => v.status === "ok" ? percent(quotaWindows(v)) : null)]);
+    if (ids.has("codex")) requests.push(["codex", getCodexRateLimits().then(v => v.status === "ok" ? percent(quotaWindows(v)) : null)]);
+    if (ids.has("antigravity")) requests.push(["antigravity", getAntigravityUsage().then(v => { const windows = getAntigravityGeminiQuotaWindows(v.windows); return v.status === "ok" && windows.length ? Math.min(...windows.map(w => w.remainingPercent)) : null; })]);
+    if (ids.has("qoder")) requests.push(["qoder", getQoderUsage().then(v => { const used = v.totalUsagePercentage ?? v.userQuota?.percentage; return v.status === "ok" && used != null ? 100 - used : null; })]);
+    for (const [id, request] of requests) void request.then(value => { if (!disposed && value != null && Number.isFinite(value)) setQuotas(current => ({ ...current, [id]: Math.max(0, Math.min(100, Math.round(value))) })); }).catch(error => console.warn("Launcher quota unavailable", id, error));
+    return () => { disposed = true; };
+  }, [open, agents, projectPath]);
+  useDefaultInstalledAgentSelection({ enabled: open && !detecting, installedAgents: agents, selectedAgentId: agentId, onSelectedAgentChange: setAgentId, emptyValue: null });
+  const selected = agents.find(a => a.id === agentId);
+  const base = selected ? getDefaultAgentLaunchOptions(selected.id, defaults) : undefined;
+  const taskKey = agentId === "qoder" ? "permissionMode" : agentId === "antigravity" ? "mode" : "effort";
+  const taskValue = agentId ? overrides[agentId] ?? "inherit" : "inherit";
+  const launchOptions = base && taskValue !== "inherit" ? { ...base, [taskKey]: taskValue } as SessionLaunchOptions : base;
+  const command = selected ? getAgentCommandPreview(selected.id, launchOptions) : "";
+  const copyCommand = () => {
+    if (!command) return;
+    void navigator.clipboard.writeText(command).then(() => {
+      message.success(t("newSession.commandCopied"));
     });
-  }, [claudeEffort, inheritedClaudeEffortLabel, t]);
-  const isClaudeSelected = selectedAgent?.id === "claude";
-  const isCodexSelected = selectedAgent?.id === "codex";
-  const isAntigravitySelected = selectedAgent?.id === "antigravity";
-  const isQoderSelected = selectedAgent?.id === "qoder";
-  const canCreate = Boolean(name.trim() && selectedAgent && !detecting && !creating);
-  const titleSource: Session["titleSource"] = nameEdited ? "manual" : "default";
-  const launchOptions = useMemo(
-    () =>
-      isClaudeSelected
-        ? {
-            skipPermissions: claudeSkipPermissions,
-            effort: claudeEffort,
-          }
-        : isCodexSelected
-          ? {
-              yolo: codexYolo,
-              approvalMode: codexApprovalMode,
-              sandboxMode: codexSandboxMode,
-              effort: codexEffort,
-            }
-          : isAntigravitySelected
-            ? {
-                dangerouslySkipPermissions: antigravitySkipPermissions,
-                sandbox: antigravitySandbox,
-                mode: antigravityMode,
-              }
-          : isQoderSelected
-            ? {
-                permissionMode: qoderPermissionMode,
-              }
-          : undefined,
-    [
-      claudeEffort,
-      claudeSkipPermissions,
-      isClaudeSelected,
-      isCodexSelected,
-      isAntigravitySelected,
-      isQoderSelected,
-      codexYolo,
-      codexApprovalMode,
-      codexSandboxMode,
-      codexEffort,
-      antigravitySkipPermissions,
-      antigravitySandbox,
-      antigravityMode,
-      qoderPermissionMode,
-    ],
-  );
-  const handleConfirmCreate = useCallback(() => {
-    if (canCreate && selectedAgent) {
-      onCreate(name.trim(), selectedAgent, launchOptions, titleSource);
-    }
-  }, [canCreate, launchOptions, name, onCreate, selectedAgent, titleSource]);
-
-  return (
-    <Modal
-      open={open}
-      title={title ?? t("newSession.title")}
-      okText={
-        <span className="inline-flex items-center gap-2">
-          {t("newSession.create")}
-          <EnterOutlined aria-hidden="true" />
-        </span>
-      }
-      cancelText={t("common.cancel")}
-      confirmLoading={creating}
-      okButtonProps={{ disabled: !canCreate }}
-      onOk={handleConfirmCreate}
-      onCancel={onCancel}
-      afterOpenChange={(visible) => {
-        // 等弹窗完成焦点管理后再聚焦，保证 Ctrl+N 后可直接回车创建。
-        if (visible) nameInputRef.current?.focus();
-      }}
-      destroyOnHidden
-      width={480}
-    >
-      <div className="space-y-5 py-3">
-        <div>
-          <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-            {t("newSession.name")}
-          </div>
-          <Input
-            ref={nameInputRef}
-            value={name}
-            onChange={(event) => {
-              setNameEdited(true);
-              setName(event.target.value);
-            }}
-            placeholder={t("newSession.namePlaceholder")}
-            maxLength={80}
-            autoFocus
-            onPressEnter={(event) => {
-              if (
-                event.nativeEvent.isComposing ||
-                event.nativeEvent.keyCode === 229 ||
-                event.repeat
-              ) return;
-              event.preventDefault();
-              event.stopPropagation();
-              handleConfirmCreate();
-            }}
-          />
-        </div>
-
-        <div>
-          <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-            {t("newSession.agent")}
-          </div>
-          {detecting ? (
-            <div className="flex h-8 items-center gap-2 text-sm" style={{ color: "var(--cs-text-tertiary)" }}>
-              <Spin size="small" /> {t("newSession.detecting")}
-            </div>
-          ) : agents.length > 0 ? (
-            <Select
-              className="w-full"
-              value={agentId}
-              placeholder={t("settings.agents.defaultRequired")}
-              onChange={(value) => setAgentId(value)}
-              options={agents.map((agent) => ({
-                value: agent.id,
-                label: (
-                  <span className="flex items-center gap-2">
-                    <AgentIcon agentId={agent.id} />
-                    <span>{agent.name}</span>
-                    {agent.version && (
-                      <span className="truncate text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                        {formatAgentVersion(agent.version, agent.name)}
+  };
+  const sessionName = nameEdited ? name : selected?.name ?? "";
+  const canCreate = Boolean(selected && sessionName.trim() && !creating && !detecting);
+  const confirm = () => { if (!canCreate || !selected || submitting.current) return; submitting.current = true; onCreate(sessionName.trim(), selected, launchOptions, nameEdited ? "manual" : "default"); };
+  useEffect(() => { if (!creating) submitting.current = false; }, [creating]);
+  const move = (step: number) => { if (!agents.length || creating) return; const index = Math.max(0, agents.findIndex(a => a.id === agentId)); const next = (index + step + agents.length) % agents.length; setAgentId(agents[next].id); };
+  const choices = agentId && agentId in TASK_CHOICES ? TASK_CHOICES[agentId as keyof typeof TASK_CHOICES] : null;
+  const defaultTask = base ? (base as unknown as Record<string, string>)[taskKey] : "inherit";
+  const defaultLabel = agentId === "claude" && defaultTask === "inherit" ? t(`statusBar.effort.${effortInfo?.effectiveLevel ?? "auto"}`) : agentId ? choiceLabel(agentId, defaultTask) : "";
+  return <Modal open={open} title={null} closable={false} footer={null} width={580} keyboard={!selectOpen} className="app-session-launcher-modal" classNames={{ mask: "app-session-launcher-mask" }} onCancel={() => { if (!creating) onCancel(); }} destroyOnHidden>
+    <div aria-label={title ?? t("newSession.title")} onKeyDown={event => {
+      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.repeat) return;
+      if (event.key === "Enter" && !selectOpen) { event.preventDefault(); event.stopPropagation(); confirm(); }
+      else if (event.altKey && ["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); move(event.key === "ArrowLeft" ? -1 : 1); }
+    }}>
+      <div className="app-launcher-header"><span className="font-mono text-[var(--cs-primary)]">&gt;_</span><Input variant="borderless" aria-label={t("newSession.name")} value={sessionName} disabled={creating} maxLength={80} onChange={e => { setName(e.target.value); setNameEdited(true); }} />
+        {selected && !["pi", "opencode"].includes(selected.id) && <Tooltip title={t("newSession.permissionManagedInSettings")}><button type="button" className="app-launcher-permission" disabled={creating} data-yolo={isAgentYoloEnabled(selected.id, defaults)} onClick={() => { onCancel(); sessionStorage.setItem("termflow.settings.pendingPage", "agents"); useAppStore.getState().openTab("__settings__"); window.dispatchEvent(new CustomEvent("settings:navigate", { detail: "agents" })); }}>{isAgentYoloEnabled(selected.id, defaults) ? "⚡ " + t("newSession.yoloActive") : t("newSession.manualActive")}</button></Tooltip>}
+      </div>
+      <div className="app-launcher-body"><div className="mb-2 text-xs text-[var(--cs-text-secondary)]">{t("newSession.agent")}</div>
+        {!detecting && !agents.length ? <p role="status" className="mb-0 text-xs text-[var(--cs-text-secondary)]">{t(failed ? "newSession.detectionFailed" : "newSession.noAgents")}</p> : (
+          <Select<AiAgentId>
+            className="app-launcher-select w-full"
+            classNames={{ popup: { root: "app-launcher-select-dropdown" } }}
+            size="large"
+            aria-label={t("newSession.agent")}
+            value={agentId ?? undefined}
+            open={selectOpen}
+            onOpenChange={setSelectOpen}
+            disabled={creating || detecting || !agents.length}
+            loading={detecting}
+            placeholder={t(detecting ? "newSession.detecting" : "newSession.agent")}
+            notFoundContent={detecting ? <Spin size="small" /> : t("newSession.noAgents")}
+            onChange={value => setAgentId(value)}
+            options={agents.map(agent => ({
+              value: agent.id,
+              label: (
+                <span className="app-launcher-agent-option">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <AgentIcon agentId={agent.id} size={18} />
+                    <strong className="truncate font-semibold text-[var(--cs-text-primary)]">{agent.name}</strong>
+                  </span>
+                  <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-[var(--cs-text-tertiary)]">
+                    <span>{formatAgentVersion(agent.version, agent.name)}</span>
+                    {quotas[agent.id] != null && (
+                      <span style={{ color: quotas[agent.id]! <= 5 ? "var(--cs-danger)" : quotas[agent.id]! <= 20 ? "var(--cs-warning)" : "var(--cs-success)" }}>
+                        · {quotas[agent.id]}%
                       </span>
                     )}
                   </span>
-                ),
-              }))}
-            />
-          ) : (
-            <Alert
-              type="warning"
-              showIcon
-              title={t(detectionFailed ? "newSession.detectionFailed" : "newSession.noAgents")}
-            />
-          )}
-        </div>
-
-        {isClaudeSelected ? (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                  {t("newSession.skipPermissions")}
-                </div>
-                <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                  {t("newSession.skipPermissionsHint")}
-                </div>
-              </div>
-              <Switch
-                checked={claudeSkipPermissions}
-                onChange={setClaudeSkipPermissions}
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                {t("newSession.effort")}
-              </div>
-              <Select
-                className="w-full"
-                value={claudeEffort}
-                onChange={(value) => setClaudeEffort(value)}
-                options={[
-                  {
-                    value: "inherit",
-                    label: t("newSession.effortInherit"),
-                  },
-                  ...CLAUDE_EFFORT_OPTIONS.map((level) => ({
-                    value: level,
-                    label: t(`statusBar.effort.${level}`),
-                  })),
-                ]}
-              />
-              <div className="mt-2 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                {claudeEffortHint}
-              </div>
-            </div>
-          </div>
-        ) : isCodexSelected ? (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                  跳过审批和沙箱 (YOLO)
-                </div>
-              </div>
-              <Switch
-                checked={codexYolo}
-                onChange={setCodexYolo}
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                审批模式
-              </div>
-              <Select
-                className="w-full"
-                value={codexApprovalMode}
-                onChange={(value) => setCodexApprovalMode(value)}
-                disabled={codexYolo}
-                options={[
-                  { value: "on-request", label: t("newSession.codexApprovalOnRequest") },
-                  { value: "never", label: t("newSession.codexApprovalNever") },
-                ]}
-              />
-              <p className="mb-0 mt-2 text-xs text-[var(--cs-text-tertiary)]">{t("newSession.codexApprovalHint")}</p>
-            </div>
-
-            <div>
-              <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                沙箱模式
-              </div>
-              <Select
-                className="w-full"
-                value={codexSandboxMode}
-                onChange={(value) => setCodexSandboxMode(value)}
-                disabled={codexYolo}
-                options={[
-                  { value: "workspace-write", label: "工作区可写" },
-                  { value: "read-only", label: "只读" },
-                ]}
-              />
-            </div>
-
-            <div>
-              <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                思考强度
-              </div>
-              <Select
-                className="w-full"
-                value={codexEffort}
-                onChange={(value) => setCodexEffort(value)}
-                options={[
-                  { value: "inherit", label: t("newSession.effortInherit") },
-                  { value: "low", label: t("statusBar.effort.low") },
-                  { value: "medium", label: t("statusBar.effort.medium") },
-                  { value: "high", label: t("statusBar.effort.high") },
-                ]}
-              />
-            </div>
-          </div>
-        ) : isAntigravitySelected ? (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                  {t("newSession.antigravitySkipPermissions")}
-                </div>
-                <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                  {t("newSession.antigravitySkipPermissionsHint")}
-                </div>
-              </div>
-              <Switch
-                checked={antigravitySkipPermissions}
-                onChange={setAntigravitySkipPermissions}
-              />
-            </div>
-
-            {antigravitySkipPermissions ? (
-              <Alert
-                type="warning"
-                showIcon
-                title={t("newSession.antigravitySkipPermissionsWarning")}
-              />
-            ) : null}
-
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                  {t("newSession.antigravitySandbox")}
-                </div>
-                <div className="text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                  {t("newSession.antigravitySandboxHint")}
-                </div>
-              </div>
-              <Switch checked={antigravitySandbox} onChange={setAntigravitySandbox} />
-            </div>
-
-            <div>
-              <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                {t("newSession.antigravityMode")}
-              </div>
-              <Select
-                className="w-full"
-                value={antigravityMode}
-                onChange={setAntigravityMode}
-                options={[
-                  { value: "inherit", label: t("newSession.antigravityModeInherit") },
-                  { value: "accept-edits", label: t("newSession.antigravityModeAcceptEdits") },
-                  { value: "plan", label: t("newSession.antigravityModePlan") },
-                ]}
-              />
-            </div>
-          </div>
-        ) : isQoderSelected ? (
-          <div className="space-y-4">
-            <div>
-              <div className="mb-2 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-                {t("newSession.qoderPermissionMode")}
-              </div>
-              <Select<QoderSessionLaunchOptions["permissionMode"]>
-                className="w-full"
-                value={qoderPermissionMode}
-                onChange={setQoderPermissionMode}
-                options={[
-                  { value: "inherit", label: t("newSession.qoderPermissionModeInherit") },
-                  { value: "default", label: t("newSession.qoderPermissionModeDefault") },
-                  { value: "accept_edits", label: t("newSession.qoderPermissionModeAcceptEdits") },
-                  { value: "plan", label: t("newSession.qoderPermissionModePlan") },
-                  { value: "auto", label: t("newSession.qoderPermissionModeAuto") },
-                  { value: "dont_ask", label: t("newSession.qoderPermissionModeDontAsk") },
-                  {
-                    value: "bypass_permissions",
-                    label: t("newSession.qoderPermissionModeBypass"),
-                  },
-                ]}
-              />
-              <div className="mt-2 text-xs" style={{ color: "var(--cs-text-tertiary)" }}>
-                {t(`newSession.qoderPermissionModeHint.${qoderPermissionMode}`)}
-              </div>
-            </div>
-
-            {qoderPermissionMode === "bypass_permissions" ? (
-              <Alert
-                type="warning"
-                showIcon
-                title={t("newSession.qoderPermissionModeBypassWarning")}
-              />
-            ) : null}
-          </div>
-        ) : null}
+                </span>
+              ),
+            }))}
+          />
+        )}
       </div>
-    </Modal>
-  );
+      {choices && agentId && <div className="app-launcher-task"><div className="mb-2 flex justify-between gap-2 text-xs text-[var(--cs-text-secondary)]"><span>{t(agentId === "qoder" ? "newSession.qoderPermissionMode" : agentId === "antigravity" ? "newSession.antigravityMode" : "newSession.effort")}</span><span>{t("newSession.defaultValue", { value: defaultLabel })}</span></div><div className="app-launcher-pills">{choices.filter(value => value !== "dont_ask").map(value => <button type="button" key={value} disabled={creating} aria-pressed={taskValue === value} onClick={() => setOverrides(current => ({ ...current, [agentId]: value }))}>{choiceLabel(agentId, value)}</button>)}</div></div>}
+      <div className="app-launcher-footer">
+        <button
+          type="button"
+          className="app-launcher-command"
+          disabled={!command}
+          aria-label={t("newSession.commandCopyHint")}
+          onMouseDown={e => e.preventDefault()}
+          onClick={copyCommand}
+        >
+          <code aria-label={t("newSession.commandPreview")}>$ {command}</code>
+        </button>
+        <Button disabled={creating} onClick={onCancel}>{t("common.cancel")}</Button>
+        <Button type="primary" loading={creating} disabled={!canCreate} onClick={confirm}>{t("newSession.create")} <EnterOutlined /></Button>
+      </div>
+    </div>
+  </Modal>;
 }

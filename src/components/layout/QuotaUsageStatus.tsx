@@ -3,9 +3,10 @@ import { Popover } from "antd";
 import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatQuotaDateTime, formatQuotaResetTime } from "@/lib/quotaDateTime";
 import { AgentIcon } from "@/components/AgentIcon";
 import type { ClaudeRateLimits, CodexRateLimits, CodexRateLimitWindow, CodexRateLimitResetCredit, OpenCodeUsage, UsageQuotaDetails } from "@/types";
-import { hasQuotaData, legacyQuotaDetails, quotaWindowLabel, quotaWindows, remainingQuota, tightestQuota } from "@/lib/usageQuota";
+import { hasQuotaData, legacyQuotaDetails, quotaPlanLabel, quotaWindowLabel, quotaWindows, remainingQuota, tightestQuota } from "@/lib/usageQuota";
 
 export function QuotaUsageStatus({
   agentId,
@@ -20,7 +21,7 @@ export function QuotaUsageStatus({
   error: string | null;
   onRefresh: () => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [resetCreditsExpanded, setResetCreditsExpanded] = useState(false);
   const [, setClock] = useState(0);
   useEffect(() => {
@@ -121,7 +122,6 @@ export function QuotaUsageStatus({
                 count={resetCredits}
                 credits={resetCreditDetails?.credits ?? []}
                 fallbackExpiresAt={resetCreditDetails?.nextExpiresAt ?? null}
-                locale={i18n.language}
                 expanded={resetCreditsExpanded}
                 onToggle={() => setResetCreditsExpanded((expanded) => !expanded)}
               />
@@ -254,14 +254,12 @@ function CodexResetCreditList({
   count,
   credits,
   fallbackExpiresAt,
-  locale,
   expanded,
   onToggle,
 }: {
   count: number;
   credits: CodexRateLimitResetCredit[];
   fallbackExpiresAt: number | null;
-  locale: string;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -272,10 +270,7 @@ function CodexResetCreditList({
     if (right.expiresAt == null) return -1;
     return left.expiresAt - right.expiresAt;
   });
-  const formatExpiry = (expiresAt: number) => new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(expiresAt);
+  const formatExpiry = (expiresAt: number) => formatQuotaDateTime(expiresAt) ?? t("statusBar.codexUsage.resetUnknown");
 
   return (
     <div className="space-y-1">
@@ -328,8 +323,9 @@ function providerName(provider: string): string {
 export function QuotaDetailsContent({ details, emptyLabel }: { details: UsageQuotaDetails; emptyLabel?: string }) {
   const { t } = useTranslation();
   const windows = quotaWindows(details);
+  const planLabel = quotaPlanLabel(details.planType);
   return <div className="space-y-3">
-    {details.planType && <div className="text-[11px]" style={{ color: "var(--cs-text-secondary)" }}>{t("statusBar.quota.plan")} ? {details.planType}</div>}
+    {planLabel && <div className="text-[11px]" style={{ color: "var(--cs-text-secondary)" }}>{t("statusBar.quota.plan")} · {planLabel}</div>}
     {details.limitReached && <div role="status" className="text-[11px]" style={{ color: "var(--cs-warning)" }}>{t(details.limitReached.endsWith("credits_depleted") ? "statusBar.quota.creditsDepleted" : "statusBar.quota.limitReached")}</div>}
     {windows.map((window) => <div key={window.id}>
       <CodexUsageWindowRow label={quotaWindowLabel(window, t)} window={window} />
@@ -338,7 +334,7 @@ export function QuotaDetailsContent({ details, emptyLabel }: { details: UsageQuo
       </div>}
     </div>)}
     {details.balances?.map((balance) => <div key={balance.bucketId} className="flex justify-between gap-2 text-[12px]">
-      <span>{balance.bucketName ? `${balance.bucketName} ? ` : ""}{t("statusBar.quota.credits")}</span>
+      <span>{balance.bucketName ? `${balance.bucketName} · ` : ""}{t("statusBar.quota.credits")}</span>
       <span>{balance.unlimited ? t("statusBar.quota.unlimited") : balance.balance != null ? balance.balance.toLocaleString() : t(balance.hasCredits === true ? "statusBar.quota.balanceAvailable" : balance.hasCredits === false ? "statusBar.quota.noCredits" : "statusBar.quota.balanceUnknown")}</span>
     </div>)}
     {!hasQuotaData(details) && <p className="text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>
@@ -351,35 +347,7 @@ function formatResetLabel(
   window: CodexRateLimitWindow,
   t: TFunction,
 ): string {
-  if (window.resetsAt) {
-    const diffMs = window.resetsAt - Date.now();
-    if (diffMs <= 0) {
-      return t("statusBar.codexUsage.resetsSoon");
-    }
-    const totalMinutes = Math.max(1, Math.round(diffMs / 60_000));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    if (hours <= 0) {
-      return t("statusBar.codexUsage.resetsInMinutes", { minutes });
-    }
-    if (hours < 48) {
-      return minutes > 0
-        ? t("statusBar.codexUsage.resetsInHoursMinutes", { hours, minutes })
-        : t("statusBar.codexUsage.resetsInHours", { hours });
-    }
-    return t("statusBar.codexUsage.resetsAt", {
-      time: new Date(window.resetsAt).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-    });
-  }
-  if (window.resetDescription) {
-    return t("statusBar.codexUsage.resetsAt", { time: window.resetDescription });
-  }
-  return t("statusBar.codexUsage.resetUnknown");
+  return formatQuotaResetTime(window.resetsAt, window.resetDescription, t);
 }
 
 function formatUpdatedAt(updatedAt: number, t: TFunction): string {

@@ -3,19 +3,29 @@ import { createInstance } from "i18next";
 import en from "@/locales/en-US.json";
 import zh from "@/locales/zh-CN.json";
 import ja from "@/locales/ja-JP.json";
-import { hasQuotaData, quotaWindowLabel, quotaWindows, remainingQuota, tightestQuota } from "./usageQuota";
+import { hasQuotaData, quotaPlanLabel, quotaWindowLabel, quotaWindows, remainingQuota, tightestQuota } from "./usageQuota";
 import type { UsageQuotaWindow } from "@/types";
 
 const i18n = createInstance();
 beforeAll(async () => { await i18n.init({ lng: "en", resources: { en: { translation: en }, zh: { translation: zh }, ja: { translation: ja } } }); });
 const window = (minutes: number, usedPercent = 0): UsageQuotaWindow => ({ id: String(minutes), label: null, bucketId: "codex", bucketName: null, windowMinutes: minutes, usedPercent, resetsAt: null, resetDescription: null });
 
+test.each([
+  ["prolite", "Prolite"],
+  ["  future_premium-v2  ", "Future Premium V2"],
+  ["CHATGPT__pro---lite", "ChatGPT Pro Lite"],
+  ["新套餐", "新套餐"],
+  ["", null], ["   ", null], ["_-", null], [null, null], [undefined, null],
+])("provider plan %s can be displayed without a registered name", (raw, expected) => {
+  expect(quotaPlanLabel(raw)).toBe(expected);
+});
+
 test.each([[15, "15 minutes"], [300, "5 hours"], [1440, "1 days"], [10080, "Weekly"], [43200, "30 days"], [0, "Unknown period"]])("actual %s minute window is never mislabeled", (minutes, expected) => {
   expect(quotaWindowLabel(window(minutes as number), i18n.t)).toBe(expected);
 });
 
 test("missing duration is never inferred from a Free or Go plan", () => {
-  for (const planType of ["free", "go", "plus", "pro"]) {
+  for (const planType of ["free", "go", "plus", "pro", "prolite", "future_premium"]) {
     const details = { planType, quotaWindows: [window(0)] };
     expect(quotaWindowLabel(quotaWindows(details)[0], i18n.t)).toBe("Unknown period");
   }

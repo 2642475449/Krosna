@@ -5,7 +5,7 @@ import { SHORTCUTS, type ShortcutAction } from "@/constants/shortcuts";
 import { useAppStore, DEFAULT_VOICE_SHORTCUT } from "@/store";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { captureAppShortcut, createDoubleShiftMatcher, findShortcutConflict, getAppShortcut, isValidAppShortcut } from "@/lib/appShortcuts";
-import { formatShortcutDisplay } from "@/lib/shortcut";
+import { captureMouseShortcut, formatShortcutDisplay } from "@/lib/shortcut";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
@@ -62,11 +62,20 @@ export function ShortcutsPage() {
       }
       applyShortcut(recordingAction, keys);
     };
+    const handleMouse = (event: MouseEvent) => {
+      const keys = captureMouseShortcut(event);
+      if (!keys) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!preparing) applyShortcut(recordingAction, keys);
+    };
     const cancel = () => { void setRecordingAction(null); };
+    window.addEventListener("mousedown", handleMouse, true);
     window.addEventListener("keydown", handleKey, true);
     window.addEventListener("keyup", handleKey, true);
     window.addEventListener("blur", cancel);
     return () => {
+      window.removeEventListener("mousedown", handleMouse, true);
       window.removeEventListener("keydown", handleKey, true);
       window.removeEventListener("keyup", handleKey, true);
       window.removeEventListener("blur", cancel);

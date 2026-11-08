@@ -24,6 +24,26 @@ describe("translation catalog parity", () => {
       expect(flattenTranslationKeys(catalog).sort()).toEqual(expectedKeys);
     }
   });
+
+  it.each([["zh-CN", zhCN], ["en-US", enUS], ["ja-JP", jaJP]] as const)(
+    "%s usage translations contain readable text and preserve interpolation variables",
+    (_locale, catalog) => {
+      const variables = (value: string) => [...value.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)]
+        .map((match) => match[1]).sort();
+      for (const section of ["quota", "opencodeUsage"] as const) {
+        for (const key of Object.keys(enUS.statusBar[section])) {
+          const value = (catalog.statusBar[section] as Record<string, string>)[key];
+          const reference = (enUS.statusBar[section] as Record<string, string>)[key];
+          expect(value?.trim(), `${section}.${key}`).toBeTruthy();
+          expect(value, `${section}.${key}`).not.toMatch(/\?{2,}|\uFFFD/);
+          expect(variables(value), `${section}.${key}`).toEqual(variables(reference));
+          if (_locale !== "en-US") {
+            expect(value, `${section}.${key}`).toMatch(/[\u3040-\u30ff\u3400-\u9fff]/);
+          }
+        }
+      }
+    },
+  );
 });
 
 describe("Japanese translations", () => {

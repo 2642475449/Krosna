@@ -16,6 +16,7 @@ import {
   ZoomOutOutlined,
 } from "@ant-design/icons";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { MermaidBlock } from "./MermaidBlock";
 import { readProjectImage } from "@/lib/api";
 import type { ElementContent, Root, RootContent } from "hast";
@@ -432,36 +433,47 @@ function ImageWithFallback({
   style?: CSSProperties;
   enablePreview?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
+  const { t } = useTranslation();
+  const [attempt, setAttempt] = useState(0);
+  const requestKey = JSON.stringify([src, localPath, projectPath, attempt]);
+  const [image, setImage] = useState<{
+    key: string;
+    src: string;
+    error?: { stage: "read" | "display"; detail: string };
+  }>(() => ({ key: requestKey, src: localPath && projectPath ? "" : src }));
   const [showPreview, setShowPreview] = useState(false);
-  const [displaySrc, setDisplaySrc] = useState(src);
+  // A new resource must never briefly render the previous image or local asset URL.
+  const currentImage = image.key === requestKey ? image : undefined;
+  const displaySrc = currentImage?.src ?? "";
+  const failed = Boolean(currentImage?.error);
   const isBadge = useMemo(() => isBadgeImage(displaySrc || src, alt), [alt, displaySrc, src]);
 
   useEffect(() => {
     let disposed = false;
-    setFailed(false);
     setShowPreview(false);
+    setImage({ key: requestKey, src: localPath && projectPath ? "" : src });
 
     if (!localPath || !projectPath) {
-      setDisplaySrc(src);
       return () => {
         disposed = true;
       };
     }
 
-    setDisplaySrc("");
     void readProjectImage(projectPath, localPath)
       .then((result) => {
-        if (!disposed) setDisplaySrc(result.dataUrl);
+        if (!disposed) setImage({ key: requestKey, src: result.dataUrl });
       })
-      .catch(() => {
-        if (!disposed) setFailed(true);
+      .catch((reason: unknown) => {
+        if (disposed) return;
+        const detail = reason instanceof Error ? reason.message
+          : typeof reason === "string" ? reason : String(reason);
+        setImage({ key: requestKey, src: "", error: { stage: "read", detail } });
       });
 
     return () => {
       disposed = true;
     };
-  }, [localPath, projectPath, src]);
+  }, [localPath, projectPath, requestKey, src]);
 
   const handleClick = useCallback((e: MouseEvent) => {
     if (enablePreview && !failed) {
@@ -496,7 +508,25 @@ function ImageWithFallback({
           <circle cx="8.5" cy="8.5" r="1.5" />
           <polyline points="21 15 16 10 5 21" />
         </svg>
-        {alt || "图片加载失败"}
+        <span className="min-w-0">
+          {alt ? <span className="block">{alt}</span> : null}
+          <span className="block" role="status">
+            {t(currentImage?.error?.stage === "read" ? "markdownImage.readFailed" : "markdownImage.displayFailed")}
+          </span>
+          <span className="block break-all text-[11px]" title={localPath || src}>{localPath || src}</span>
+          {currentImage?.error?.detail ? (
+            <span className="block break-all text-[11px]">{currentImage.error.detail}</span>
+          ) : null}
+        </span>
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer rounded border border-[var(--cs-border-card)] bg-transparent px-2 py-1 text-[var(--cs-primary)]"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setAttempt((value) => value + 1);
+          }}
+        >{t("common.retry")}</button>
       </span>
     );
   }
@@ -505,7 +535,7 @@ function ImageWithFallback({
     return (
       <span
         className={`inline-block h-6 w-6 animate-pulse rounded-sm bg-[var(--cs-bg-hover)] ${className ?? ""}`}
-        aria-label={alt || "图片加载中"}
+        aria-label={alt || t("markdownImage.loading")}
       />
     );
   }
@@ -518,11 +548,14 @@ function ImageWithFallback({
   return (
     <>
       <img
+        key={requestKey}
         src={displaySrc}
         alt={alt}
         className={`${isBadge ? badgeClassName : normalClassName} ${enablePreview && !isBadge ? "cursor-pointer hover:opacity-90 transition-opacity" : ""}`}
         style={style}
-        onError={() => setFailed(true)}
+        onError={() => setImage((current) => current.key === requestKey
+          ? { ...current, error: { stage: "display", detail: "" } }
+          : current)}
         onClick={isBadge ? undefined : handleClick}
       />
       {showPreview && !isBadge && (

@@ -249,9 +249,17 @@ function TitleBarQuickSearch() {
         closeSearch();
       }
     }
+    function handleMouse(event: MouseEvent) {
+      if (open || useShortcutStore.getState().recordingAction || !matchesShortcut(event, searchShortcut)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openSearch();
+    }
+    document.addEventListener("mousedown", handleMouse, true);
     document.addEventListener("keydown", handleKey, true);
     document.addEventListener("keyup", handleKey, true);
     return () => {
+      document.removeEventListener("mousedown", handleMouse, true);
       document.removeEventListener("keydown", handleKey, true);
       document.removeEventListener("keyup", handleKey, true);
     };

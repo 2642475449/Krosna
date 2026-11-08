@@ -42,7 +42,7 @@ import {
   DEFAULT_VOICE_SHORTCUT,
 } from "@/store";
 import { createSilentWavDataUrl, type MimoAuthMode } from "@/lib/mimoAsr";
-import { captureShortcutFromEvent, formatShortcutDisplay, toTauriShortcut } from "@/lib/shortcut";
+import { captureMouseShortcut, captureShortcutFromEvent, formatShortcutDisplay, toTauriShortcut } from "@/lib/shortcut";
 import { stripAnsiEscapeSequences } from "@/lib/textContent";
 import { TERMINAL_SCROLLBACK_OPTIONS } from "@/lib/terminalSettings";
 import {
@@ -353,7 +353,7 @@ function GeneralPage() {
       <SettingsPageHeader
         title={t("settings.menu.general")}
       />
-      <SettingSection title={t("settings.general.appearance.title")}>
+      <SettingSection aria-label={t("settings.general.appearance.title")}>
         <div>
           <div className="app-settings-control-line justify-between">
             <div className="min-w-0">
@@ -897,8 +897,18 @@ export function VoiceRecognitionPage() {
       );
     };
 
+    const handleMouseDown = (event: MouseEvent) => {
+      const shortcut = captureMouseShortcut(event);
+      if (!shortcut) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      applyRecordedShortcut(shortcut);
+      message.success(t("settings.voiceRecognition.shortcutSaved"));
+    };
+    window.addEventListener("mousedown", handleMouseDown, true);
     window.addEventListener("keydown", handleKeyDown, true);
     return () => {
+      window.removeEventListener("mousedown", handleMouseDown, true);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [applyRecordedShortcut, cancelShortcutRecording, isRecordingShortcut, t]);
@@ -3196,7 +3206,8 @@ const pageComponents: Record<SettingsPage, React.FC> = {
 /* ────────────── Main Settings Panel ────────────── */
 function SettingsPanel() {
   const { t } = useTranslation();
-  const [activePage, setActivePage] = useState<SettingsPage>("general");
+  const [activePage, setActivePage] = useState<SettingsPage>(() => { const pending = sessionStorage.getItem("termflow.settings.pendingPage"); return pending === "agents" ? "agents" : "general"; });
+  useEffect(() => { const navigate = () => { if (sessionStorage.getItem("termflow.settings.pendingPage") === "agents") { sessionStorage.removeItem("termflow.settings.pendingPage"); setActivePage("agents"); } }; navigate(); window.addEventListener("settings:navigate", navigate); return () => window.removeEventListener("settings:navigate", navigate); }, []);
   const [menuSearch, setMenuSearch] = useState("");
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const PageComponent = pageComponents[activePage];

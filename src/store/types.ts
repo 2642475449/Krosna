@@ -467,6 +467,7 @@ export interface AppState
     defaultProfileId: string,
   ) => void;
   // Security actions
+  setAllAgentPermissionDefaults: (defaults: AgentPermissionDefaults) => void;
   setAgentPermissionDefaults: (agentId: AiAgentId, launchOptions?: SessionLaunchOptions) => void;
   // Notification actions
   setNotificationEnabled: (enabled: boolean) => void;

@@ -1,0 +1,6 @@
+html, body { margin: 0; background: #171b22; color: #d8dee9; font: 14px "Cascadia Mono", monospace; }
+header { display: flex; gap: 8px; background: #222936; }
+button { background: #34405a; color: inherit; border: 0; padding: 12px; cursor: pointer; }
+p { padding: 8px; margin: 0; }
+#terminals { padding: 8px; }
+.terminal { width: 840px; height: 504px; }

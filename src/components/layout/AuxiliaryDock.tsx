@@ -16,7 +16,8 @@ import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import CheckpointReviewDrawer from "@/components/CheckpointReviewDrawer";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { TaskMonitorPanel } from "@/components/TaskMonitorPopover";
-import { cleanupSessionProcess, searchProjectEntries } from "@/lib/api";
+import { getFileDocument } from "@/lib/fileDocument";
+import { cleanupSessionProcess, openInAssociatedApplication, openInFileManager, searchProjectEntries } from "@/lib/api";
 import {
   OPEN_AUXILIARY_FILE_EVENT,
   type OpenAuxiliaryFileDetail,
@@ -74,6 +75,8 @@ export default function AuxiliaryDock({
   const pinTab = useAuxiliaryDockStore((state) => state.pinTab);
   const closeTab = useAuxiliaryDockStore((state) => state.closeTab);
   const reset = useAuxiliaryDockStore((state) => state.reset);
+  const [pendingClose, setPendingClose] = useState<AuxiliaryTab[]>([]);
+  const [closing, setClosing] = useState(false);
   const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [fileQuery, setFileQuery] = useState("");
   const [fileResults, setFileResults] = useState<FileTreeEntry[]>([]);
@@ -110,6 +113,7 @@ export default function AuxiliaryDock({
 
   useEffect(() => {
     reset();
+    setPendingClose([]);
   }, [currentProject?.path, reset]);
 
   useEffect(() => {
@@ -211,27 +215,94 @@ export default function AuxiliaryDock({
   const handleCloseTab = useCallback(async (tab: AuxiliaryTab) => {
     if (tab.kind !== "terminal" && tab.kind !== "task") {
       closeTab(tab.id);
-      return;
+      return true;
     }
     const session = useAppStore.getState().sessions.find((item) => item.id === tab.resourceId);
     if (!session?.active) {
       useAppStore.getState().clearTerminalExitCode(tab.resourceId);
       removeSession(tab.resourceId);
       closeTab(tab.id);
-      return;
+      return true;
     }
-    if (closingSessionIdsRef.current.has(tab.resourceId)) return;
+    if (closingSessionIdsRef.current.has(tab.resourceId)) return false;
     closingSessionIdsRef.current.add(tab.resourceId);
     try {
       await cleanupSessionProcess(tab.resourceId);
+      if (useAppStore.getState().currentProject?.path !== tab.projectPath) return false;
       removeSession(tab.resourceId);
       closeTab(tab.id);
+      return true;
     } catch (error) {
       void message.error(String(error));
+      return false;
     } finally {
       closingSessionIdsRef.current.delete(tab.resourceId);
     }
   }, [closeTab, removeSession]);
+
+  const closeTabs = async (targets: AuxiliaryTab[]) => {
+    for (const tab of targets) {
+      if (useAppStore.getState().currentProject?.path !== tab.projectPath && tab.projectPath) break;
+      if (!useAuxiliaryDockStore.getState().tabs.some((item) => item.id === tab.id)) continue;
+      if (tab.kind === "file" && !await getFileDocument(tab.projectPath, tab.resourceId).save()) {
+        void message.error(t("auxiliaryDock.saveBeforeCloseFailed"));
+        break;
+      }
+      if (useAppStore.getState().currentProject?.path !== tab.projectPath && tab.projectPath) break;
+      if (!await handleCloseTab(tab)) break;
+    }
+  };
+
+  const requestClose = (targets: AuxiliaryTab[]) => {
+    const hasLiveProcess = targets.some((tab) =>
+      (tab.kind === "task" || tab.kind === "terminal") &&
+      useAppStore.getState().sessions.some((session) => session.id === tab.resourceId && session.active));
+    if (hasLiveProcess) setPendingClose(targets);
+    else void closeTabs(targets).catch((error) => message.error(String(error)));
+  };
+
+  const finishMove = (tab: AuxiliaryTab) => {
+    const app = useAppStore.getState();
+    if (app.currentProject?.path !== tab.projectPath || !useAuxiliaryDockStore.getState().tabs.some((item) => item.id === tab.id)) return;
+    if (!app.openFileTab(tab.resourceId, { preview: false })) return;
+    openTaskMonitor({ title: t("taskMonitor.title"), projectPath: tab.projectPath });
+    closeTab(tab.id, "aux:task-monitor");
+  };
+
+  const moveToWorkspace = async (tab: AuxiliaryTab) => {
+    if (!await getFileDocument(tab.projectPath, tab.resourceId).save()) {
+      void message.error(t("auxiliaryDock.saveBeforeCloseFailed"));
+      return;
+    }
+    finishMove(tab);
+  };
+
+  const tabMenu = (tab: AuxiliaryTab) => ({
+    items: [
+      { key: "close", label: t("tabBar.closeTab") },
+      { key: "close-others", label: t("tabBar.closeOtherTabs"), disabled: tabs.length <= 1 },
+      { key: "close-all", label: t("tabBar.closeAllTabs") },
+      ...(tab.kind === "file" ? [
+        { type: "divider" as const },
+        ...(tab.preview ? [{ key: "pin", label: t("auxiliaryDock.pin") }] : []),
+        { key: "move", label: t("auxiliaryDock.openInWorkspace") },
+        { type: "divider" as const },
+        { key: "folder", label: t("common.openInFileManager") },
+        { key: "copy", label: t("common.copyPath") },
+        { key: "associated", label: t("common.openInAssociatedApp") },
+      ] : []),
+    ],
+    onClick: ({ key }: { key: string }) => {
+      if (key === "close") requestClose([tab]);
+      if (key === "close-others") requestClose(tabs.filter((item) => item.id !== tab.id));
+      if (key === "close-all") requestClose(tabs);
+      if (key === "pin") pinTab(tab.id);
+      if (key === "move") void moveToWorkspace(tab).catch((error) => message.error(String(error)));
+      if (key === "folder") void openInFileManager(tab.resourceId).catch((error) => message.error(String(error)));
+      if (key === "copy") void navigator.clipboard.writeText(tab.resourceId).catch((error) => message.error(String(error)));
+      if (key === "associated") void openInAssociatedApplication(tab.resourceId).catch((error) => message.error(String(error)));
+    },
+  });
 
   const resetWidth = useCallback(() => {
     resetStoredWidth(hostWidth);
@@ -277,48 +348,49 @@ export default function AuxiliaryDock({
                     : tab.title;
               const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
               return (
-                <div
-                  key={tab.id}
-                  role="tab"
-                  tabIndex={active ? 0 : -1}
-                  aria-selected={active}
-                  data-active={active ? "true" : "false"}
-                  className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${active ? "app-glass-tab-active" : ""} group flex max-w-52 shrink-0 cursor-pointer items-center gap-1.5 px-3 text-xs`}
-                  style={{ fontStyle: tab.preview ? "italic" : "normal" }}
-                  title={displayTitle}
-                  onClick={() => activateTab(tab.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      activateTab(tab.id);
-                    }
-                  }}
-                  onDoubleClick={() => pinTab(tab.id)}
-                >
-                  {session ? (
-                    <AgentActivityIcon
-                      agentId={session.agentId ?? "claude"}
-                      active={session.active}
-                      status={session.status}
-                      size={15}
-                    />
-                  ) : fileVisual ? (
-                    <span className="inline-flex" style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
-                  ) : tabIcon(tab.kind)}
-                  <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
-                  <button
-                    type="button"
-                    className="tab-close-btn ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-[var(--cs-bg-hover)]"
-                    aria-label={t("common.delete")}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void handleCloseTab(tab);
+                <Dropdown key={tab.id} trigger={["contextMenu"]} menu={tabMenu(tab)}>
+                  <div
+                    role="tab"
+                    tabIndex={active ? 0 : -1}
+                    aria-selected={active}
+                    data-active={active ? "true" : "false"}
+                    className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${active ? "app-glass-tab-active" : ""} group flex max-w-52 shrink-0 cursor-pointer items-center gap-1.5 px-3 text-xs`}
+                    style={{ fontStyle: tab.preview ? "italic" : "normal" }}
+                    title={displayTitle}
+                    onClick={() => activateTab(tab.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        activateTab(tab.id);
+                      }
                     }}
-                    onDoubleClick={(event) => event.stopPropagation()}
+                    onDoubleClick={() => pinTab(tab.id)}
                   >
-                    <CloseOutlined style={{ fontSize: 11 }} />
-                  </button>
-                </div>
+                    {session ? (
+                      <AgentActivityIcon
+                        agentId={session.agentId ?? "claude"}
+                        active={session.active}
+                        status={session.status}
+                        size={15}
+                      />
+                    ) : fileVisual ? (
+                      <span className="inline-flex" style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
+                    ) : tabIcon(tab.kind)}
+                    <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
+                    <button
+                      type="button"
+                      className="tab-close-btn ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-[var(--cs-bg-hover)]"
+                      aria-label={t("common.delete")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        requestClose([tab]);
+                      }}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                    >
+                      <CloseOutlined style={{ fontSize: 11 }} />
+                    </button>
+                  </div>
+                </Dropdown>
               );
             })}
             <Dropdown
@@ -462,7 +534,7 @@ export default function AuxiliaryDock({
                       preview={tab.preview}
                       active={active}
                       onPin={() => pinTab(tab.id)}
-                      onPromoteToWorkspace={() => closeTab(tab.id)}
+                      onPromoteToWorkspace={() => finishMove(tab)}
                     />
                   </Suspense>
                   </ErrorBoundary>
@@ -490,6 +562,21 @@ export default function AuxiliaryDock({
         </div>
       </aside>
 
+      <Modal
+        open={pendingClose.length > 0}
+        title={t("auxiliaryDock.closeProcessesTitle")}
+        confirmLoading={closing}
+        onCancel={() => { if (!closing) setPendingClose([]); }}
+        onOk={() => {
+          setClosing(true);
+          void closeTabs(pendingClose).catch((error) => message.error(String(error))).finally(() => {
+            setClosing(false);
+            setPendingClose([]);
+          });
+        }}
+      >
+        {t("auxiliaryDock.closeProcessesDescription")}
+      </Modal>
       <Modal
         open={filePickerOpen}
         title={t("auxiliaryDock.openFile")}

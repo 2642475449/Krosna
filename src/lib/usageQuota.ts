@@ -1,6 +1,18 @@
 import type { TFunction } from "i18next";
 import type { ClaudeRateLimits, CodexRateLimits, UsageQuotaDetails, UsageQuotaWindow } from "@/types";
 
+export function quotaPlanLabel(plan: string | null | undefined): string | null {
+  const words = plan?.trim().split(/[\s_-]+/).filter(Boolean);
+  if (!words?.length) return null;
+  // Plan identifiers are provider data; new names must not require a release.
+  return words.map((word) => {
+    const normalized = word.toLowerCase();
+    return normalized === "chatgpt"
+      ? "ChatGPT"
+      : normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }).join(" ");
+}
+
 export function quotaWindows(value: (UsageQuotaDetails & Partial<Pick<CodexRateLimits, "session" | "weekly">>) | null): UsageQuotaWindow[] {
   if (!value) return [];
   // An explicitly empty list is authoritative; old windows must not reappear after a reset.

@@ -47,6 +47,7 @@ import {
   getAgentIdsWithCapability,
   isAiAgentId,
   getAgentStartupCommand,
+  getDefaultAgentLaunchOptions,
   prepareAgentInitialPrompt,
 } from "@/lib/agents";
 import { detectClaudeRuntimeState } from "@/lib/runtimeDetection";
@@ -550,7 +551,6 @@ function AppLayout() {
   const setVoiceTriggerVisible = useAppStore((s) => s.setVoiceTriggerVisible);
   const addSession = useAppStore((s) => s.addSession);
   const removeSession = useAppStore((s) => s.removeSession);
-  const setAgentPermissionDefaults = useAppStore((s) => s.setAgentPermissionDefaults);
   const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
   const { handleOpenFolder } = useProjectLauncher();
   const [newSessionOpen, setNewSessionOpen] = useState(false);
@@ -569,7 +569,7 @@ function AppLayout() {
       const store = useAppStore.getState();
       const codex = store.agentPermissionDefaults.codex;
       if (codex?.approvalMode === "untrusted") {
-        store.setAgentPermissionDefaults("codex", { ...codex, approvalMode: "on-request", effort: "inherit" });
+        store.setAgentPermissionDefaults("codex", { ...codex, approvalMode: "on-request", effort: codex.effort ?? "inherit" });
       }
     };
     migratePermissions();
@@ -657,14 +657,14 @@ function AppLayout() {
       closeDialog = true,
       presentation: "workspace" | "auxiliary" = "workspace",
       initialPrompt?: string,
-      rememberPermissionDefaults = true,
     ): Promise<string | null> => {
       if (!currentProject || creatingSession) return null;
+      const effectiveLaunchOptions = launchOptions ?? getDefaultAgentLaunchOptions(agent.id, useAppStore.getState().agentPermissionDefaults);
       setCreatingSession(true);
       const sessionId = crypto.randomUUID();
       const sessionCreatedAt = Date.now();
       const isClaude = agent.id === "claude";
-      const claudeOptions = isClaude ? (launchOptions as ClaudeSessionLaunchOptions | undefined) : undefined;
+      const claudeOptions = isClaude ? (effectiveLaunchOptions as ClaudeSessionLaunchOptions | undefined) : undefined;
       const claudeSkipPermissions = isClaude
         ? (claudeOptions?.skipPermissions ?? false)
         : false;
@@ -672,10 +672,10 @@ function AppLayout() {
         ? claudeOptions?.effort ?? null
         : null;
       const antigravityOptions = agent.id === "antigravity"
-        ? (launchOptions as AntigravitySessionLaunchOptions | undefined)
+        ? (effectiveLaunchOptions as AntigravitySessionLaunchOptions | undefined)
         : undefined;
       const qoderOptions = agent.id === "qoder"
-        ? (launchOptions as QoderSessionLaunchOptions | undefined)
+        ? (effectiveLaunchOptions as QoderSessionLaunchOptions | undefined)
         : undefined;
       const providerInitialPrompt = prepareAgentInitialPrompt(agent.id, initialPrompt);
 
@@ -731,7 +731,7 @@ function AppLayout() {
             agent.executablePath,
             agent.id === "pi" ? sessionId : null,
             providerInitialPrompt,
-            launchOptions,
+            effectiveLaunchOptions,
           ),
           providerInitialPrompt,
           getAgentCommandShell(agent.id),
@@ -741,9 +741,6 @@ function AppLayout() {
           { label: name, kind: "agent" },
         );
         if (closeDialog) setNewSessionOpen(false);
-        if (rememberPermissionDefaults) {
-          setAgentPermissionDefaults(agent.id, launchOptions);
-        }
         updateSession(sessionId, {
           active: true,
           status: agent.id === "opencode" && providerInitialPrompt ? "running" : "waiting",
@@ -777,7 +774,7 @@ function AppLayout() {
         setCreatingSession(false);
       }
     },
-    [addSession, creatingSession, currentProject, defaultTerminalShell, removeSession, setAgentPermissionDefaults, updateSession],
+    [addSession, creatingSession, currentProject, defaultTerminalShell, removeSession, updateSession],
   );
 
   const handleOpenSideQuestion = useCallback(
@@ -796,7 +793,6 @@ function AppLayout() {
         false,
         "auxiliary",
         prompt,
-        false,
       );
       return Boolean(sessionId);
     },

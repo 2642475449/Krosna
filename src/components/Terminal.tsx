@@ -1394,6 +1394,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       return true; // let xterm handle all other keys
     });
 
+    const handleMouseShortcut = (event: MouseEvent) => {
+      if (useShortcutStore.getState().recordingAction ||
+          !matchesShortcut(event, getAppShortcut(useShortcutStore.getState().overrides, "clearInput"))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      ptyInput(sessionId, "\x15").catch(console.error);
+    };
+    container.addEventListener("mousedown", handleMouseShortcut, true);
+
     // Resize PTY only when the character grid changes. Claude and other
     // full-screen TUIs redraw on SIGWINCH, so duplicate resize calls pollute
     // the normal-screen scrollback with historical full-screen frames.
@@ -1576,6 +1585,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     });
 
     return () => {
+      container.removeEventListener("mousedown", handleMouseShortcut, true);
       isTerminalDisposed = true;
       window.removeEventListener("terminal:clear", handleRunnerClear);
       container.removeEventListener("wheel", onRunnerWheel);

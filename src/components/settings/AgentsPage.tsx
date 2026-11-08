@@ -1,10 +1,14 @@
+import { AgentLaunchConfigPanel } from "@/components/AgentLaunchConfigPanel";
+import { QuotaDetailsContent } from "@/components/layout/QuotaUsageStatus";
+import { hasQuotaData, legacyQuotaDetails, quotaWindowLabel, quotaWindows } from "@/lib/usageQuota";
+import { formatQuotaResetTime } from "@/lib/quotaDateTime";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircleFilled, CheckOutlined, CloseCircleFilled, CopyOutlined, DownOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Drawer, Dropdown, Spin, Tag, message } from "antd";
+import { Button, Drawer, Dropdown, Segmented, Spin, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { getAntigravityUsage, getClaudeRateLimits, getCodexRateLimits, getQoderUsage, inspectAgentClis } from "@/lib/api";
-import { AGENT_DEFINITIONS, AI_AGENT_ORDER, formatAgentVersion } from "@/lib/agents";
-import type { AgentCliInfo, AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimitWindow, CodexRateLimits, QoderUsage } from "@/types";
+import { AGENT_DEFINITIONS, AI_AGENT_ORDER, formatAgentVersion, getAgentCommandPreview, getDefaultAgentLaunchOptions, getGlobalPermissionPreset, applyGlobalPermissionPreset } from "@/lib/agents";
+import type { AgentCliInfo, AiAgentId, AntigravityQuotaWindow, AntigravityUsage, ClaudeRateLimits, CodexRateLimits, QoderUsage } from "@/types";
 import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
@@ -24,6 +28,8 @@ export function AgentsPage() {
   const versionLoading = useAgentVersionsStore((state) => Object.values(state.versions).some((version) => version.status === "checking"));
   const defaultAgentId = useAppStore((state) => state.defaultAgentId);
   const setDefaultAgentId = useAppStore((state) => state.setDefaultAgentId);
+  const permissionDefaults = useAppStore(s => s.agentPermissionDefaults);
+  const setAllDefaults = useAppStore(s => s.setAllAgentPermissionDefaults);
   const sessions = useAppStore((state) => state.sessions);
   const activeSessionId = useAppStore((state) => state.activeSessionId);
   const [agents, setAgents] = useState<AgentCliInfo[]>([]);
@@ -140,6 +146,7 @@ export function AgentsPage() {
         actions={<Button icon={<ReloadOutlined />} loading={loading || quotaLoading || versionLoading} onClick={() => void refresh(true)}>{t("settings.agents.refresh")}</Button>}
       />
 
+      <div className="app-agent-permissions"><div><strong>{t("settings.agents.permissions.title")}</strong>{getGlobalPermissionPreset(permissionDefaults, agents.filter(a => a.installed).map(a => a.id)) === "custom" && <Tag className="ml-2">{t("settings.agents.permissions.custom")}</Tag>}<p>{t("settings.agents.permissions.description")}</p></div><Segmented value={getGlobalPermissionPreset(permissionDefaults, agents.filter(a => a.installed).map(a => a.id))} options={[{ value: "yolo", label: "Yolo" }, { value: "manual", label: t("settings.agents.permissions.manual") }]} onChange={value => setAllDefaults(applyGlobalPermissionPreset(permissionDefaults, value as "yolo" | "manual"))} /></div>
       <div className="app-settings-summary">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-sm font-medium" style={{ color: "var(--cs-text-primary)" }}>{t("settings.agents.defaultTitle")}</div>
@@ -154,20 +161,20 @@ export function AgentsPage() {
       </div>
 
       {loading && agents.length === 0 ? <div className="flex min-h-64 items-center justify-center"><Spin /></div> : (
-        <div className="app-settings-list app-agent-list">
-          {agents.map((agent, index) => (
+        <div>
+          {[true, false].map(installed => { const group = agents.filter(a => a.installed === installed); return group.length ? <section key={String(installed)} className="mb-5"><h3 className="mb-2 text-xs text-[var(--cs-text-secondary)]">{t(installed ? "settings.agents.installedSection" : "settings.agents.availableSection")} · {group.length}</h3><div className="app-settings-list app-agent-list">{group.map((agent, index) => (
             <AgentRow
               key={agent.id}
               agent={agent}
               quota={agent.id === "claude" ? quotas.claude : agent.id === "codex" ? quotas.codex : agent.id === "antigravity" ? quotas.antigravity : agent.id === "qoder" ? quotas.qoder : null}
               quotaLoading={quotaLoading}
               isDefault={defaultAgentId === agent.id}
-              isLast={index === agents.length - 1}
+              isLast={index === group.length - 1}
               onOpen={() => setSelectedAgentId(agent.id)}
               onSetDefault={() => selectDefault(agent)}
               onCopyInstall={(command, shell) => void copyInstall(agent, command, shell)}
             />
-          ))}
+          ))}</div></section> : null; })}
         </div>
       )}
 
@@ -187,10 +194,13 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
   onCopyInstall: (command: string, shell?: string) => void;
 }) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const defaults = useAppStore(s => s.agentPermissionDefaults);
+  const configurable = agent.installed && ["claude", "codex", "antigravity", "qoder"].includes(agent.id);
   const definition = AGENT_DEFINITIONS[agent.id];
   const version = formatAgentVersion(agent.version, definition.displayName);
   return (
-    <div className={`app-agent-row ${isLast ? "app-agent-row--last" : ""}`}>
+    <div className="app-agent-item"><div className={`app-agent-row ${isLast ? "app-agent-row--last" : ""}`}>
       <div className="min-w-0">
         <button type="button" className="app-agent-identity" onClick={onOpen} aria-haspopup="dialog"
           aria-label={`${definition.displayName} ${t("settings.agents.viewDetails")}`}>
@@ -198,17 +208,18 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold">{definition.displayName}</span>
             <span className="block truncate text-xs text-[var(--cs-text-secondary)]">
-              <code>{definition.command}</code>{version ? ` · ${version}` : ""}
+              {version}
             </span>
           </span>
         </button>
+        <code className="app-agent-command" title={getAgentCommandPreview(agent.id, getDefaultAgentLaunchOptions(agent.id, defaults))}>{getAgentCommandPreview(agent.id, getDefaultAgentLaunchOptions(agent.id, defaults))}</code>
         <div className="app-agent-version"><AgentVersionStatus agent={agent} /></div>
       </div>
       <Tag icon={agent.installed ? <CheckCircleFilled /> : <CloseCircleFilled />} color={agent.installed ? "success" : "default"} className="m-0 w-fit shrink-0">{t(agent.installed ? "settings.agents.installed" : "settings.agents.notInstalled")}</Tag>
       <div className="app-agent-quota">
         <AgentQuota agent={agent} quota={quota} loading={quotaLoading} />
       </div>
-      <div className="app-agent-actions justify-self-end">
+      <div className="app-agent-actions flex flex-wrap items-center gap-2 justify-self-end">
         {!agent.installed ? (
           definition.installCommands.length > 1 ? (
             <Dropdown trigger={["click"]} menu={{ items: definition.installCommands.map(({ shell }) => ({ key: shell, label: shell })), onClick: ({ key }) => { const selected = definition.installCommands.find(({ shell }) => shell === key); if (selected) onCopyInstall(selected.command, selected.shell); } }}>
@@ -220,8 +231,10 @@ function AgentRow({ agent, quota, quotaLoading, isDefault, isLast, onOpen, onSet
         ) : (
           <Button className="w-[150px]" type={isDefault ? "primary" : "default"} disabled={isDefault} icon={isDefault ? <CheckOutlined /> : undefined} onClick={onSetDefault}>{t(isDefault ? "settings.agents.defaultActive" : "settings.agents.setDefault")}</Button>
         )}
+        <Button type="text" onClick={onOpen}>{t("settings.agents.viewDetails")}</Button>
+        {configurable && <Button type="text" aria-label={t("settings.agents.configureLaunch")} aria-expanded={expanded} onClick={() => setExpanded(value => !value)} icon={<DownOutlined rotate={expanded ? 180 : 0} />} />}
       </div>
-    </div>
+    </div>{expanded && configurable && <AgentLaunchConfigPanel agentId={agent.id} />}</div>
   );
 }
 
@@ -265,26 +278,21 @@ function AgentQuota({ agent, quota, loading, expanded = false }: { agent: AgentC
 
   const limits = quota as ClaudeRateLimits | CodexRateLimits | null;
   if (limits?.status !== "ok") return <QuotaUnavailable agentId={agent.id} />;
-  const windows = [limits.session, limits.weekly].filter((window): window is CodexRateLimitWindow => window !== null);
-  if (windows.length === 0) return <QuotaUnavailable agentId={agent.id} />;
+  const details = legacyQuotaDetails(limits);
+  const windows = quotaWindows(details);
+  if (!hasQuotaData(details)) return <QuotaUnavailable agentId={agent.id} />;
   const percentages = windows.map((window) => clampPercent(100 - window.usedPercent));
+  const headline = percentages.length
+    ? quotaHeadline(Math.min(...percentages), t)
+    : t("settings.agents.details.quota");
   if (expanded) return (
     <div className="space-y-4">
-      <QuotaDetailsHeader headline={quotaHeadline(Math.min(...percentages), t)} updatedAt={limits.updatedAt} />
-      {(["session", "weekly"] as const).map((period) => {
-        const window = limits[period];
-        return window ? <QuotaWindowDetail key={period}
-          label={t(`settings.agents.quota.${period}Short`)}
-          remaining={clampPercent(100 - window.usedPercent)}
-          resetDescription={window.resetDescription ?? (window.resetsAt != null ? new Date(window.resetsAt).toISOString() : null)} /> : null;
-      })}
+      <QuotaDetailsHeader headline={headline} updatedAt={limits.updatedAt} />
+      <QuotaDetailsContent details={details} />
     </div>
   );
-  const detail = [
-    limits.session ? t("settings.agents.quota.session", { value: clampPercent(100 - limits.session.usedPercent) }) : null,
-    limits.weekly ? t("settings.agents.quota.weekly", { value: clampPercent(100 - limits.weekly.usedPercent) }) : null,
-  ].filter(Boolean).join(" · ");
-  return <QuotaSummary headline={quotaHeadline(Math.min(...percentages), t)} detail={detail} percentages={percentages} />;
+  const detail = windows.map((window) => `${quotaWindowLabel(window, t)} · ${t("settings.agents.quota.remainingPercent", { value: clampPercent(100 - window.usedPercent) })}`).join(" · ");
+  return <QuotaSummary headline={headline} detail={detail} percentages={percentages} />;
 }
 
 function Muted({ children }: { children: React.ReactNode }) {
@@ -444,10 +452,7 @@ function AgentDetail({ label, children }: { label: string; children: React.React
 function clampPercent(value: number) { return Math.max(0, Math.min(100, Math.round(value))); }
 function formatNumber(value: number) { return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value); }
 function formatQuotaReset(resetDescription: string | null, t: ReturnType<typeof useTranslation>["t"]) {
-  const reset = resetDescription ? new Date(resetDescription) : null;
-  return reset && Number.isFinite(reset.getTime())
-    ? t("statusBar.codexUsage.resetsAt", { time: reset.toLocaleString() })
-    : t("statusBar.codexUsage.resetUnknown");
+  return formatQuotaResetTime(null, resetDescription, t);
 }
 function formatQuotaUpdatedAt(updatedAt: number, t: ReturnType<typeof useTranslation>["t"]) {
   if (updatedAt <= 0) return t("statusBar.antigravityUsage.pending");

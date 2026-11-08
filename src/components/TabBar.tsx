@@ -31,7 +31,6 @@ import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
   getAgentIdsWithCapability,
   getAgentDisplayName,
-  getDefaultAgentLaunchOptions,
   isAiAgentId,
 } from "@/lib/agents";
 import type {
@@ -126,7 +125,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const dragState = useAppStore((s) => s.dragState);
   const currentProject = useAppStore((s) => s.currentProject);
   const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
-  const agentPermissionDefaults = useAppStore((s) => s.agentPermissionDefaults);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const closeTab = useAppStore((s) => s.closeTab);
   const splitTab = useAppStore((s) => s.splitTab);
@@ -547,8 +545,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     if (!isAiAgentId(agentId)) return;
     const agent = availableAgents?.find((item) => item.id === agentId && item.installed);
     if (agent) {
-      const launchOptions = getDefaultAgentLaunchOptions(agent.id, agentPermissionDefaults);
-      handleCreateSession({ kind: "agent", agent, launchOptions });
+      handleCreateSession({ kind: "agent", agent });
     }
   }
 

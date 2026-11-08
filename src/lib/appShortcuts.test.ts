@@ -60,3 +60,12 @@ describe("application shortcuts", () => {
     expect(match(keyEvent("Shift", { repeat: true }), 520)).toBe(false);
   });
 });
+
+
+it("persists mouse bindings and detects mouse conflicts with voice and app actions", () => {
+  expect(isValidAppShortcut("MouseBack")).toBe(true);
+  expect(isValidAppShortcut("Shift+MouseForward")).toBe(true);
+  expect(normalizeShortcutOverrides({ newSession: "ctrl+mouseback" })).toEqual({ newSession: "Ctrl+MouseBack" });
+  expect(findShortcutConflict({ nextTab: "MouseBack" }, "newSession", "mouseback", "F8")).toBe("nextTab");
+  expect(findShortcutConflict({}, "newSession", "Alt+MouseForward", "Alt+MouseForward")).toBe("voiceInput");
+});

@@ -63,6 +63,7 @@ tempfile = "3"
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.7.2"
 windows-registry = "0.6"
+webview2-com = "0.38.2"
 windows = { version = "0.58", features = [
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",

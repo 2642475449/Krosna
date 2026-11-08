@@ -24,7 +24,6 @@ export function SettingsPanelSkeleton() {
         <div className="app-settings-content">
           <div className="app-settings-page-header"><SkeletonBlock className="h-[30px] w-28" /></div>
           <div className="app-settings-section">
-            <SkeletonBlock className="mb-4 h-4 w-20" />
             <div className="app-settings-control-line justify-between">
               <SkeletonBlock className="h-4 w-24" /><SkeletonBlock className="h-8 w-44 max-w-full" />
             </div>

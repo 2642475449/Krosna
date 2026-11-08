@@ -6,6 +6,21 @@ export interface ShortcutMatch {
   key: string;
 }
 
+export type ShortcutInputEvent = KeyboardEvent | MouseEvent;
+
+export function mouseShortcutKey(button: number): string | null {
+  return button === 3 ? "MouseBack" : button === 4 ? "MouseForward" : null;
+}
+
+export function shortcutEventKey(event: ShortcutInputEvent): string {
+  return "key" in event ? event.key : mouseShortcutKey(event.button) ?? "";
+}
+
+export function isMouseShortcut(keys: string): boolean {
+  const key = parseShortcut(keys)?.key;
+  return key === "mouseback" || key === "mouseforward";
+}
+
 interface ShortcutEventLike {
   altKey: boolean;
   ctrlKey: boolean;
@@ -99,6 +114,10 @@ function formatDisplayKey(key: string): string {
       return ".";
     case " ":
       return "Space";
+    case "mouseback":
+      return "MouseBack";
+    case "mouseforward":
+      return "MouseForward";
     case "tab":
       return "Tab";
     case "escape":
@@ -202,13 +221,18 @@ export function captureShortcutFromEvent(event: ShortcutEventLike): string | nul
   return parts.join("+");
 }
 
-export function matchesShortcut(event: KeyboardEvent, shortcutText: string): boolean {
+export function captureMouseShortcut(event: MouseEvent): string | null {
+  const key = mouseShortcutKey(event.button);
+  return key ? captureShortcutFromEvent({ key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey }) : null;
+}
+
+export function matchesShortcut(event: ShortcutInputEvent, shortcutText: string): boolean {
   const shortcut = parseShortcut(shortcutText);
   if (!shortcut) {
     return false;
   }
 
-  const eventKey = normalizeEventKey(event.key);
+  const eventKey = normalizeEventKey(shortcutEventKey(event));
   return (
     shortcut.altKey === event.altKey &&
     (shortcut.metaKey ? event.metaKey : (!event.metaKey || (shortcut.primaryKey && !event.ctrlKey))) &&
@@ -219,6 +243,7 @@ export function matchesShortcut(event: KeyboardEvent, shortcutText: string): boo
 }
 
 export function toTauriShortcut(shortcutText: string): string | null {
+  if (isMouseShortcut(shortcutText)) return null;
   const shortcut = parseShortcut(shortcutText);
   if (!shortcut) {
     return null;

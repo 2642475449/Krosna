@@ -25,6 +25,8 @@ mod scheduled_tasks;
 mod usage_cache;
 mod usage_process;
 mod usage_quota;
+#[cfg(windows)]
+mod webview_permissions;
 
 use claude_rate_limits::ClaudeRateLimitStore;
 use commands::content_search::ContentSearchState;
@@ -71,6 +73,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("foreground-activation")
+                .on_webview_ready(|webview| {
+                    #[cfg(windows)]
+                    webview_permissions::install(&webview);
+                    #[cfg(not(windows))]
+                    let _ = webview;
+                })
                 .setup(|app, _| {
                     #[cfg(windows)]
                     commands::window::allow_existing_instance_foreground(&app.config().identifier);

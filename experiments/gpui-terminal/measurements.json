@@ -1,0 +1,1313 @@
+{
+  "machine": {
+    "recordedAt": "2026-11-07T22:33:05.2706714+08:00",
+    "os": [
+      {
+        "Caption": "Microsoft Windows 11 专业版",
+        "Version": "10.0.26300",
+        "TotalVisibleMemorySize": 33027448
+      }
+    ],
+    "cpu": [
+      {
+        "Name": "Intel(R) Core(TM) Ultra 5 225H",
+        "NumberOfLogicalProcessors": 14
+      }
+    ],
+    "gpu": [
+      {
+        "Name": "IddDesk Device",
+        "DriverVersion": "25.0.0.4"
+      },
+      {
+        "Name": "Intel(R) Arc(TM) 130T GPU (16GB)",
+        "DriverVersion": "32.0.101.6554"
+      },
+      {
+        "Name": "Honor Virtual Display Device",
+        "DriverVersion": "1.0.23.3"
+      }
+    ],
+    "rust": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "sampleIntervalMs": 500,
+    "memoryDefinition": "Sum of sampled process-tree private bytes; includes workload children, excludes short-lived unsampled processes; not working set",
+    "cpuDefinition": "Sum of maximum sampled lifetime CPU seconds per observed process; includes workload children; not normalized CPU percent"
+  },
+  "versions": {
+    "gpui": "0.2.2",
+    "tao": "0.35.0",
+    "tauri": "2.11.0",
+    "tauri-build": "2.6.0",
+    "tauri-macros": "2.6.0",
+    "tauri-runtime": "2.11.0",
+    "tauri-runtime-wry": "2.11.0",
+    "vt100": "0.15.2",
+    "wry": "0.55.0"
+  },
+  "web_versions": {
+    "@xterm/xterm": "6.1.0-beta.304",
+    "@xterm/addon-webgl": "0.19.0",
+    "@tauri-apps/api": "2.11.1"
+  },
+  "source_sha256": {
+    "Cargo.toml": "de761643953955aeb462da9fa962bc855a7aa4fca0a53d911cc032eddf5384ff",
+    "Cargo.lock": "371561d26c29a6b5ba84f45492526c58ae7a3f2f26bcd62b4aa403b155bcee2a",
+    "build.rs": "65c5e2d800cecfc8dd65ddd67b9b922155dc7505ee347325a028ac3c606c048f",
+    "src/lib.rs": "fddf0956bf7caab6254745dd6b1cd3e59626600bb9f4e0e040ec96a37a2d7f15",
+    "src/gpui_main.rs": "d00f4d3578b2f6897aa6affcd48df73b27ee18154b765efad00300359017b1a5",
+    "src/webview_main.rs": "a525845a0dbc13828018cff2bb56472d65c853d06875e60f9fa7cdcb4243602b",
+    "web/main.ts": "de42afc91d299d551594523be36403c62abcdc23644146d3aac945959e7f3fde",
+    "web/style.css": "bb084970faf80a67ee0a919a62c14cd82dba119bd07d73ea153fe3a4a0cb138b",
+    "tauri.conf.json": "27cce5500b70c76713ca8635e1401976dc5896c41637e6b55a8dfe3a37185d4b",
+    "run-evaluation.ps1": "8d0b7efea732ca4c90b458447b394d9f3ddd31c4bd621ad08fb8c39d7227d5ea"
+  },
+  "binary_sha256": {
+    "gpui-terminal-eval.exe": "318803e3160f53ff9aa890b8c90e95ac5c17eb56dda2887405d196308d3b8bd2",
+    "webview-terminal-eval.exe": "baa51b02b8f26056c3801f559f4a62a982aa7b938882ddef5cc63c2b16637596"
+  },
+  "stderr": {
+    "webview-s1-r131072-i1.stderr.log": "[1107/223331.981:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s1-r131072-i2.stderr.log": "[1107/223459.201:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s1-r524288-i1.stderr.log": "[1107/223356.231:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s1-r524288-i2.stderr.log": "[1107/223523.287:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s4-r131072-i1.stderr.log": "[1107/223420.803:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s4-r131072-i2.stderr.log": "[1107/223548.584:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s4-r524288-i1.stderr.log": "[1107/223446.259:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412",
+    "webview-s4-r524288-i2.stderr.log": "[1107/223613.566:ERROR:ui\\gfx\\win\\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412"
+  },
+  "problems": [],
+  "records": [
+    {
+      "case": "gpui-s1-r131072-i1",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\gpui-s1-r131072-i1.json"
+        },
+        "elapsed_seconds": 11.0080082,
+        "pty_read_bytes": 1045101,
+        "parsed_utf8_bytes": 1045101,
+        "packets": 1442,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 652,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 8.9979,
+          "p95": 16.3839,
+          "p99": 16.9951,
+          "max": 17.8386
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3151,
+          "p95": 1.1615,
+          "p99": 1.8404999999999998,
+          "max": 2.7423
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 1442,
+          "p50": 8.242500000000117,
+          "p95": 15.785100000000092,
+          "p99": 18.00919999999972,
+          "max": 90.5404
+        },
+        "packet_parse_us": {
+          "count": 1442,
+          "p50": 17.6,
+          "p95": 59.5,
+          "p99": 77.60000000000001,
+          "max": 268.9
+        },
+        "ui_tick_gap_ms": {
+          "count": 653,
+          "p50": 16.5777,
+          "p95": 18.1783,
+          "p99": 18.795099999999998,
+          "max": 24.2985
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s1-r131072-i1",
+        "engine": "gpui",
+        "sessions": 1,
+        "rate": 131072,
+        "iteration": 1,
+        "durationSeconds": 12.608275599999999,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 82.4296875,
+        "observedCpuSeconds": 3.40625,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s1-r131072-i1",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\webview-s1-r131072-i1.json"
+        },
+        "elapsed_seconds": 11.0107456,
+        "pty_read_bytes": 1045104,
+        "parsed_utf8_bytes": 1045104,
+        "packets": 1443,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 480,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 11.8943,
+          "p95": 19.0857,
+          "p99": 19.639,
+          "max": 20.6473
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3137,
+          "p95": 1.1919000000000002,
+          "p99": 1.9243999999999999,
+          "max": 2.7005000000000003
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 1443,
+          "p50": 11.150900000000373,
+          "p95": 19.160700000000187,
+          "p99": 20.9075,
+          "max": 79.8077
+        },
+        "packet_parse_us": {
+          "count": 1443,
+          "p50": 99.99999403953552,
+          "p95": 400.0000059604645,
+          "p99": 2800.000011920929,
+          "max": 39700.00001788139
+        },
+        "ui_tick_gap_ms": {
+          "count": 659,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 16.80000000000109,
+          "max": 33.0
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s1-r131072-i1",
+        "engine": "webview",
+        "sessions": 1,
+        "rate": 131072,
+        "iteration": 1,
+        "durationSeconds": 12.644506,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 308.5625,
+        "observedCpuSeconds": 13.28125,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s1-r524288-i1",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\gpui-s1-r524288-i1.json"
+        },
+        "elapsed_seconds": 11.0072858,
+        "pty_read_bytes": 4176324,
+        "parsed_utf8_bytes": 4176324,
+        "packets": 2245,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 652,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 9.2674,
+          "p95": 17.5885,
+          "p99": 19.0166,
+          "max": 21.1046
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3781,
+          "p95": 1.955,
+          "p99": 2.1264000000000003,
+          "max": 2.6132
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 2245,
+          "p50": 9.380999999999768,
+          "p95": 16.417700000000185,
+          "p99": 18.824600000000558,
+          "max": 98.58489999999998
+        },
+        "packet_parse_us": {
+          "count": 2245,
+          "p50": 21.2,
+          "p95": 117.1,
+          "p99": 163.39999999999998,
+          "max": 226.3
+        },
+        "ui_tick_gap_ms": {
+          "count": 653,
+          "p50": 16.630300000000002,
+          "p95": 18.0779,
+          "p99": 18.7319,
+          "max": 23.268400000000003
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s1-r524288-i1",
+        "engine": "gpui",
+        "sessions": 1,
+        "rate": 524288,
+        "iteration": 1,
+        "durationSeconds": 11.887202199999999,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 82.14453125,
+        "observedCpuSeconds": 3.890625,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s1-r524288-i1",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\webview-s1-r524288-i1.json"
+        },
+        "elapsed_seconds": 11.012918,
+        "pty_read_bytes": 4176392,
+        "parsed_utf8_bytes": 4176392,
+        "packets": 2245,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 479,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 11.8169,
+          "p95": 19.6035,
+          "p99": 20.4527,
+          "max": 21.9402
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3678,
+          "p95": 1.7385,
+          "p99": 1.7918,
+          "max": 1.9562999999999997
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 2245,
+          "p50": 11.728799999999813,
+          "p95": 18.30839999999944,
+          "p99": 21.776800000000076,
+          "max": 85.17089999999999
+        },
+        "packet_parse_us": {
+          "count": 2245,
+          "p50": 99.99999403953552,
+          "p95": 300.00001192092896,
+          "p99": 1900.0000059604645,
+          "max": 7199.999988079071
+        },
+        "ui_tick_gap_ms": {
+          "count": 659,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 16.899999999999636,
+          "max": 33.400000000000006
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s1-r524288-i1",
+        "engine": "webview",
+        "sessions": 1,
+        "rate": 524288,
+        "iteration": 1,
+        "durationSeconds": 12.2675977,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 318.1796875,
+        "observedCpuSeconds": 14.25,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s4-r131072-i1",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\gpui-s4-r131072-i1.json"
+        },
+        "elapsed_seconds": 11.0013565,
+        "pty_read_bytes": 4175922,
+        "parsed_utf8_bytes": 4175922,
+        "packets": 5394,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 648,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 9.0837,
+          "p95": 16.453200000000002,
+          "p99": 18.232499999999998,
+          "max": 19.6923
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.2714,
+          "p95": 1.3921999999999999,
+          "p99": 1.8117999999999999,
+          "max": 3.6391999999999998
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 5394,
+          "p50": 8.275600000000559,
+          "p95": 16.415300000000745,
+          "p99": 30.384399999999996,
+          "max": 144.951
+        },
+        "packet_parse_us": {
+          "count": 5394,
+          "p50": 15.7,
+          "p95": 39.7,
+          "p99": 71.69999999999999,
+          "max": 196.70000000000002
+        },
+        "ui_tick_gap_ms": {
+          "count": 649,
+          "p50": 16.6252,
+          "p95": 18.081400000000002,
+          "p99": 18.9659,
+          "max": 26.53
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s4-r131072-i1",
+        "engine": "gpui",
+        "sessions": 4,
+        "rate": 131072,
+        "iteration": 1,
+        "durationSeconds": 11.9104341,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 105.5546875,
+        "observedCpuSeconds": 5.078125,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s4-r131072-i1",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\webview-s4-r131072-i1.json"
+        },
+        "elapsed_seconds": 11.0033502,
+        "pty_read_bytes": 4175934,
+        "parsed_utf8_bytes": 4175934,
+        "packets": 5390,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 473,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 12.0692,
+          "p95": 20.1875,
+          "p99": 28.3073,
+          "max": 39.5094
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3766,
+          "p95": 1.2245,
+          "p99": 2.3833,
+          "max": 3.6909
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 5390,
+          "p50": 12.009400000000372,
+          "p95": 20.010799999999815,
+          "p99": 62.7095,
+          "max": 151.0573
+        },
+        "packet_parse_us": {
+          "count": 5390,
+          "p50": 99.99999403953552,
+          "p95": 399.9999761581421,
+          "p99": 5599.9999940395355,
+          "max": 37700.00001788139
+        },
+        "ui_tick_gap_ms": {
+          "count": 649,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 17.300000000000182,
+          "max": 49.900000000000034
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s4-r131072-i1",
+        "engine": "webview",
+        "sessions": 4,
+        "rate": 131072,
+        "iteration": 1,
+        "durationSeconds": 12.7730678,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 361.53515625,
+        "observedCpuSeconds": 14.984375,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s4-r524288-i1",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\gpui-s4-r524288-i1.json"
+        },
+        "elapsed_seconds": 11.0160603,
+        "pty_read_bytes": 16700671,
+        "parsed_utf8_bytes": 16700671,
+        "packets": 8577,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 638,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 8.5762,
+          "p95": 16.7436,
+          "p99": 114.493,
+          "max": 212.3665
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3375,
+          "p95": 1.4132,
+          "p99": 1.553,
+          "max": 2.1218
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 8577,
+          "p50": 9.0315,
+          "p95": 16.526399999999906,
+          "p99": 236.87939999999998,
+          "max": 345.0239
+        },
+        "packet_parse_us": {
+          "count": 8577,
+          "p50": 19.599999999999998,
+          "p95": 99.4,
+          "p99": 143.7,
+          "max": 489.79999999999995
+        },
+        "ui_tick_gap_ms": {
+          "count": 639,
+          "p50": 16.6269,
+          "p95": 18.089199999999998,
+          "p99": 18.6006,
+          "max": 27.9017
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s4-r524288-i1",
+        "engine": "gpui",
+        "sessions": 4,
+        "rate": 524288,
+        "iteration": 1,
+        "durationSeconds": 12.6127617,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 106.19921875,
+        "observedCpuSeconds": 6.59375,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s4-r524288-i1",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\webview-s4-r524288-i1.json"
+        },
+        "elapsed_seconds": 11.0087335,
+        "pty_read_bytes": 16700358,
+        "parsed_utf8_bytes": 16700358,
+        "packets": 8593,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 479,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 11.6959,
+          "p95": 19.7861,
+          "p99": 20.1472,
+          "max": 60.606100000000005
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.29159999999999997,
+          "p95": 1.5528,
+          "p99": 2.4658,
+          "max": 4.018800000000001
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 8593,
+          "p50": 11.772099999999627,
+          "p95": 19.480000000000466,
+          "p99": 90.6935,
+          "max": 167.14100000000002
+        },
+        "packet_parse_us": {
+          "count": 8593,
+          "p50": 99.99999403953552,
+          "p95": 400.0000059604645,
+          "p99": 8699.999988079071,
+          "max": 59900.000005960464
+        },
+        "ui_tick_gap_ms": {
+          "count": 654,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 16.80000000000109,
+          "max": 50.0
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s4-r524288-i1",
+        "engine": "webview",
+        "sessions": 4,
+        "rate": 524288,
+        "iteration": 1,
+        "durationSeconds": 12.650508499999999,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 426.2578125,
+        "observedCpuSeconds": 18.90625,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s1-r131072-i2",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\webview-s1-r131072-i2.json"
+        },
+        "elapsed_seconds": 11.0121511,
+        "pty_read_bytes": 1045104,
+        "parsed_utf8_bytes": 1045104,
+        "packets": 1442,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 479,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 12.336099999999998,
+          "p95": 19.5983,
+          "p99": 20.6312,
+          "max": 20.7028
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.342,
+          "p95": 1.4908000000000001,
+          "p99": 1.9895,
+          "max": 2.2018
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 1442,
+          "p50": 11.273700000000652,
+          "p95": 19.3055,
+          "p99": 20.925599999999978,
+          "max": 81.75640000000001
+        },
+        "packet_parse_us": {
+          "count": 1442,
+          "p50": 99.99999403953552,
+          "p95": 300.00001192092896,
+          "p99": 2300.000011920929,
+          "max": 4699.999988079071
+        },
+        "ui_tick_gap_ms": {
+          "count": 658,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 16.899999999999636,
+          "max": 33.0
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s1-r131072-i2",
+        "engine": "webview",
+        "sessions": 1,
+        "rate": 131072,
+        "iteration": 2,
+        "durationSeconds": 12.730315,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 306.4296875,
+        "observedCpuSeconds": 12.5625,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s1-r131072-i2",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\gpui-s1-r131072-i2.json"
+        },
+        "elapsed_seconds": 11.0143395,
+        "pty_read_bytes": 1045101,
+        "parsed_utf8_bytes": 1045101,
+        "packets": 1443,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 653,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 9.0843,
+          "p95": 17.2217,
+          "p99": 17.3103,
+          "max": 18.2639
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3455,
+          "p95": 0.9569,
+          "p99": 1.1261999999999999,
+          "max": 1.5552000000000001
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 1443,
+          "p50": 8.967699999999953,
+          "p95": 16.53459999999986,
+          "p99": 17.71839999999944,
+          "max": 83.30950000000001
+        },
+        "packet_parse_us": {
+          "count": 1443,
+          "p50": 18.2,
+          "p95": 62.6,
+          "p99": 101.8,
+          "max": 260.0
+        },
+        "ui_tick_gap_ms": {
+          "count": 654,
+          "p50": 16.638900000000003,
+          "p95": 17.989600000000003,
+          "p99": 18.371,
+          "max": 23.1522
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s1-r131072-i2",
+        "engine": "gpui",
+        "sessions": 1,
+        "rate": 131072,
+        "iteration": 2,
+        "durationSeconds": 11.6859348,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 81.82421875,
+        "observedCpuSeconds": 4.09375,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s1-r524288-i2",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\webview-s1-r524288-i2.json"
+        },
+        "elapsed_seconds": 11.0085104,
+        "pty_read_bytes": 4176353,
+        "parsed_utf8_bytes": 4176353,
+        "packets": 2243,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 479,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 11.8369,
+          "p95": 18.56,
+          "p99": 19.3991,
+          "max": 19.5044
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.339,
+          "p95": 1.269,
+          "p99": 1.6831,
+          "max": 1.8087000000000002
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 2243,
+          "p50": 11.256400000000372,
+          "p95": 17.811000000000465,
+          "p99": 20.467299999999813,
+          "max": 54.55140000000001
+        },
+        "packet_parse_us": {
+          "count": 2243,
+          "p50": 99.99999403953552,
+          "p95": 399.9999761581421,
+          "p99": 1900.0000059604645,
+          "max": 6400.0000059604645
+        },
+        "ui_tick_gap_ms": {
+          "count": 658,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 16.80000000000109,
+          "max": 33.30000000000001
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s1-r524288-i2",
+        "engine": "webview",
+        "sessions": 1,
+        "rate": 524288,
+        "iteration": 2,
+        "durationSeconds": 12.6329358,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 325.375,
+        "observedCpuSeconds": 12.609375,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s1-r524288-i2",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 1,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\gpui-s1-r524288-i2.json"
+        },
+        "elapsed_seconds": 11.0035939,
+        "pty_read_bytes": 4176454,
+        "parsed_utf8_bytes": 4176454,
+        "packets": 2242,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 652,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 8.8436,
+          "p95": 16.720200000000002,
+          "p99": 17.3073,
+          "max": 17.7426
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3482,
+          "p95": 1.5322,
+          "p99": 2.8003,
+          "max": 2.9034
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 2242,
+          "p50": 9.055099999999628,
+          "p95": 16.19769999999972,
+          "p99": 17.942300000000003,
+          "max": 90.29420000000002
+        },
+        "packet_parse_us": {
+          "count": 2242,
+          "p50": 23.0,
+          "p95": 120.10000000000001,
+          "p99": 162.20000000000002,
+          "max": 311.9
+        },
+        "ui_tick_gap_ms": {
+          "count": 653,
+          "p50": 16.5979,
+          "p95": 18.112,
+          "p99": 18.7577,
+          "max": 26.0564
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s1-r524288-i2",
+        "engine": "gpui",
+        "sessions": 1,
+        "rate": 524288,
+        "iteration": 2,
+        "durationSeconds": 12.514171099999999,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 81.98046875,
+        "observedCpuSeconds": 4.53125,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s4-r131072-i2",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\webview-s4-r131072-i2.json"
+        },
+        "elapsed_seconds": 11.0090541,
+        "pty_read_bytes": 4175934,
+        "parsed_utf8_bytes": 4175934,
+        "packets": 5394,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 473,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 12.7062,
+          "p95": 21.1573,
+          "p99": 28.117199999999997,
+          "max": 40.075399999999995
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3401,
+          "p95": 1.7895999999999999,
+          "p99": 3.4533,
+          "max": 3.6269
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 5394,
+          "p50": 12.506800000000744,
+          "p95": 20.9305,
+          "p99": 57.45469999999998,
+          "max": 147.35560000000004
+        },
+        "packet_parse_us": {
+          "count": 5394,
+          "p50": 99.99999403953552,
+          "p95": 400.0000059604645,
+          "p99": 4600.000023841858,
+          "max": 14400.000005960464
+        },
+        "ui_tick_gap_ms": {
+          "count": 649,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 17.599999999999454,
+          "max": 49.900000000000034
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s4-r131072-i2",
+        "engine": "webview",
+        "sessions": 4,
+        "rate": 131072,
+        "iteration": 2,
+        "durationSeconds": 12.5184407,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 368.85546875,
+        "observedCpuSeconds": 15.421875,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s4-r131072-i2",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 131072,
+          "interactive": false,
+          "output": "results\\gpui-s4-r131072-i2.json"
+        },
+        "elapsed_seconds": 11.0019818,
+        "pty_read_bytes": 4175922,
+        "parsed_utf8_bytes": 4175922,
+        "packets": 5391,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 651,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 10.2536,
+          "p95": 16.9821,
+          "p99": 17.563100000000002,
+          "max": 17.6711
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.3085,
+          "p95": 1.1794,
+          "p99": 2.1663,
+          "max": 2.4090000000000003
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 5391,
+          "p50": 8.93959999999986,
+          "p95": 16.37289999999944,
+          "p99": 18.815400000000373,
+          "max": 113.62
+        },
+        "packet_parse_us": {
+          "count": 5391,
+          "p50": 16.099999999999998,
+          "p95": 42.5,
+          "p99": 71.1,
+          "max": 255.00000000000003
+        },
+        "ui_tick_gap_ms": {
+          "count": 652,
+          "p50": 16.66,
+          "p95": 18.9437,
+          "p99": 19.406,
+          "max": 21.416999999999998
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s4-r131072-i2",
+        "engine": "gpui",
+        "sessions": 4,
+        "rate": 131072,
+        "iteration": 2,
+        "durationSeconds": 12.4713674,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 106.9453125,
+        "observedCpuSeconds": 5.265625,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "webview-s4-r524288-i2",
+      "valid": true,
+      "result": {
+        "engine": "webview",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\webview-s4-r524288-i2.json"
+        },
+        "elapsed_seconds": 11.0106692,
+        "pty_read_bytes": 16700332,
+        "parsed_utf8_bytes": 16700332,
+        "packets": 8597,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 474,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 11.7508,
+          "p95": 19.115,
+          "p99": 23.9838,
+          "max": 61.2621
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.34600000000000003,
+          "p95": 1.5826,
+          "p99": 2.9833,
+          "max": 7.6239
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 8597,
+          "p50": 11.15100000000093,
+          "p95": 19.4225,
+          "p99": 93.9321,
+          "max": 172.4914
+        },
+        "packet_parse_us": {
+          "count": 8597,
+          "p50": 99.99999403953552,
+          "p95": 400.0000059604645,
+          "p99": 9599.999994039536,
+          "max": 59500.0
+        },
+        "ui_tick_gap_ms": {
+          "count": 650,
+          "p50": 16.699999999999818,
+          "p95": 16.800000000000182,
+          "p99": 17.0,
+          "max": 50.099999999999994
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "xterm.js 6.1 beta",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "webview-s4-r524288-i2",
+        "engine": "webview",
+        "sessions": 4,
+        "rate": 524288,
+        "iteration": 2,
+        "durationSeconds": 12.3501924,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 446.015625,
+        "observedCpuSeconds": 19.296875,
+        "reportExists": true
+      }
+    },
+    {
+      "case": "gpui-s4-r524288-i2",
+      "valid": true,
+      "result": {
+        "engine": "gpui",
+        "config": {
+          "sessions": 4,
+          "duration": 8,
+          "rate": 524288,
+          "interactive": false,
+          "output": "results\\gpui-s4-r524288-i2.json"
+        },
+        "elapsed_seconds": 11.0080704,
+        "pty_read_bytes": 16701230,
+        "parsed_utf8_bytes": 16701230,
+        "packets": 8583,
+        "sequence_errors": 0,
+        "probe_sent": 63,
+        "probe_pending": 0,
+        "paint_callbacks": 647,
+        "synthetic_input_to_parser_ack_ms": {
+          "count": 63,
+          "p50": 8.4495,
+          "p95": 16.384900000000002,
+          "p99": 17.3007,
+          "max": 21.3069
+        },
+        "synthetic_input_to_pty_read_ms": {
+          "count": 63,
+          "p50": 0.37829999999999997,
+          "p95": 1.8252,
+          "p99": 1.8957,
+          "max": 12.9077
+        },
+        "pty_read_to_parser_ack_ms": {
+          "count": 8583,
+          "p50": 8.41539999999944,
+          "p95": 16.199800000000746,
+          "p99": 29.813199999999984,
+          "max": 121.67320000000001
+        },
+        "packet_parse_us": {
+          "count": 8583,
+          "p50": 30.7,
+          "p95": 145.6,
+          "p99": 202.1,
+          "max": 2098.7
+        },
+        "ui_tick_gap_ms": {
+          "count": 648,
+          "p50": 16.6913,
+          "p95": 18.5477,
+          "p99": 23.3549,
+          "max": 41.4017
+        },
+        "measurement_boundary": "parser completion / Rust acknowledgement; NOT physical keyboard-to-photon or GPU present latency",
+        "parser": "vt100 0.15",
+        "geometry": {
+          "rows": 28,
+          "cols": 100,
+          "scrollback": 1000
+        }
+      },
+      "process": {
+        "case": "gpui-s4-r524288-i2",
+        "engine": "gpui",
+        "sessions": 4,
+        "rate": 524288,
+        "iteration": 2,
+        "durationSeconds": 11.8649635,
+        "exitCode": 0,
+        "timedOut": false,
+        "peakPrivateMiB": 106.0859375,
+        "observedCpuSeconds": 10.125,
+        "reportExists": true
+      }
+    }
+  ]
+}

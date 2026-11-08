@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getAgentCommandPreview,
+  applyGlobalPermissionPreset,
+  getGlobalPermissionPreset,
+  isAgentYoloEnabled,
   getAgentCommandShell,
   getAgentIdsWithCapability,
   getAgentTerminalBehavior,
@@ -69,7 +73,7 @@ describe("getDefaultAgentLaunchOptions", () => {
     })).toEqual({ permissionMode: "bypass_permissions" });
   });
 
-  it("stores only permission-related values after a successful launch", () => {
+  it("stores effort alongside explicitly saved permission defaults", () => {
     expect(getPermissionDefaultsForLaunch("codex", {
       yolo: false,
       approvalMode: "on-request",
@@ -80,6 +84,7 @@ describe("getDefaultAgentLaunchOptions", () => {
         yolo: false,
         approvalMode: "on-request",
         sandboxMode: "workspace-write",
+        effort: "high",
       },
     });
   });
@@ -400,5 +405,54 @@ describe("prepareAgentInitialPrompt", () => {
   it("omits empty prompts", () => {
     expect(prepareAgentInitialPrompt("codex", "  ")).toBeUndefined();
     expect(prepareAgentInitialPrompt("codex", null)).toBeUndefined();
+  });
+});
+
+describe("launch preferences and command previews", () => {
+  it.each([
+    ["claude", undefined, "claude"],
+    ["claude", { skipPermissions: true, effort: "max" }, "claude --dangerously-skip-permissions --effort max"],
+    ["codex", undefined, "codex"],
+    ["codex", { yolo: true, effort: "inherit" }, "codex --dangerously-bypass-approvals-and-sandbox"],
+    ["codex", { yolo: true, effort: "high", approvalMode: "never", sandboxMode: "read-only" }, "codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort=high"],
+    ["codex", { yolo: false, approvalMode: "never", sandboxMode: "read-only", effort: "low" }, "codex --ask-for-approval never --sandbox read-only -c model_reasoning_effort=low"],
+    ["codex", { yolo: false, approvalMode: "on-request", sandboxMode: "workspace-write", effort: "inherit" }, "codex"],
+    ["antigravity", { dangerouslySkipPermissions: true, sandbox: true, mode: "plan" }, "agy --dangerously-skip-permissions --sandbox --mode plan"],
+    ["antigravity", { dangerouslySkipPermissions: false, sandbox: false, mode: "inherit" }, "agy"],
+    ["qoder", { permissionMode: "plan" }, "qoderclicn --permission-mode plan"],
+    ["qoder", { permissionMode: "inherit" }, "qoderclicn"],
+    ["opencode", undefined, "opencode"],
+    ["pi", undefined, "pi"],
+  ])("previews %s options %j", (agent, options, expected) => {
+    expect(getAgentCommandPreview(agent as import("@/types").AiAgentId, options as import("@/types").SessionLaunchOptions | undefined)).toBe(expected);
+  });
+  it("switches all permissions atomically without losing effort, mode or sandbox", () => {
+    const defaults: import("@/types").AgentPermissionDefaults = {
+      claude: { skipPermissions: false, effort: "max" },
+      codex: { yolo: false, approvalMode: "never", sandboxMode: "read-only", effort: "high" },
+      antigravity: { dangerouslySkipPermissions: false, sandbox: true, mode: "plan" },
+      qoder: { permissionMode: "plan" },
+    };
+    const yolo = applyGlobalPermissionPreset(defaults, "yolo");
+    expect(getGlobalPermissionPreset(yolo)).toBe("yolo");
+    for (const id of ["claude", "codex", "antigravity", "qoder"] as const) expect(isAgentYoloEnabled(id, yolo)).toBe(true);
+    expect(yolo.codex).toEqual({ ...defaults.codex, yolo: true });
+    expect(yolo.claude?.effort).toBe("max");
+    const manual = applyGlobalPermissionPreset(yolo, "manual");
+    expect(getGlobalPermissionPreset(manual)).toBe("manual");
+    expect(manual.codex).toEqual(defaults.codex);
+    expect(manual.antigravity).toEqual(defaults.antigravity);
+    expect(manual.qoder?.permissionMode).toBe("inherit");
+    expect(defaults.qoder?.permissionMode).toBe("plan");
+    expect(applyGlobalPermissionPreset(defaults, "manual").qoder?.permissionMode).toBe("plan");
+    expect(getGlobalPermissionPreset({ claude: { skipPermissions: true } })).toBe("custom");
+    expect(getGlobalPermissionPreset({ claude: { skipPermissions: true } }, ["claude", "pi"])).toBe("yolo");
+    expect(getGlobalPermissionPreset({}, ["pi", "opencode"])).toBe("manual");
+    expect(getGlobalPermissionPreset({}, [])).toBe("manual");
+  });
+  it("reads persisted effort and retains it when saving defaults", () => {
+    expect(getDefaultAgentLaunchOptions("claude", { claude: { skipPermissions: true, effort: "xhigh" } })).toEqual({ skipPermissions: true, effort: "xhigh" });
+    expect(getDefaultAgentLaunchOptions("codex", { codex: { yolo: true, approvalMode: "on-request", sandboxMode: "workspace-write", effort: "high" } })).toMatchObject({ effort: "high" });
+    expect(getPermissionDefaultsForLaunch("claude", { skipPermissions: true, effort: "max" }).claude?.effort).toBe("max");
   });
 });

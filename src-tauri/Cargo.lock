@@ -4979,6 +4979,7 @@ dependencies = [
  "tokio-tungstenite",
  "toml 0.8.2",
  "trash",
+ "webview2-com",
  "windows 0.58.0",
  "windows-registry",
 ]

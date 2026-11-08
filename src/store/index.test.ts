@@ -1581,3 +1581,38 @@ describe("git automatic fetch settings", () => {
     } finally { applyPersistentSettingsToStore(original); }
   });
 });
+
+it("updates agent defaults atomically and round trips effort through SQLite snapshots", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const store = createAppStore(storage);
+  const defaults = {
+    claude: { skipPermissions: true, effort: "max" },
+    codex: { yolo: true, approvalMode: "on-request", sandboxMode: "read-only", effort: "high" },
+    antigravity: { dangerouslySkipPermissions: true, sandbox: true, mode: "plan" },
+    qoder: { permissionMode: "bypass_permissions" },
+  } as const;
+  let updates = 0;
+  const unsubscribe = store.subscribe(() => { updates++; });
+  store.getState().setAllAgentPermissionDefaults(defaults);
+  unsubscribe();
+  expect(updates).toBe(1);
+  expect(store.getState().agentPermissionDefaults).toEqual(defaults);
+  const previous = getPersistentSettingsSnapshot();
+  try {
+    applyPersistentSettingsToStore({ ...previous, agentPermissionDefaults: defaults });
+    expect(getPersistentSettingsSnapshot().agentPermissionDefaults).toEqual(defaults);
+    applyPersistentSettingsToStore({ ...previous, agentPermissionDefaults: {
+      claude: { skipPermissions: false },
+      codex: { yolo: false, approvalMode: "on-request", sandboxMode: "workspace-write" },
+    } });
+    expect(useAppStore.getState().agentPermissionDefaults.claude?.effort).toBe("inherit");
+    expect(useAppStore.getState().agentPermissionDefaults.codex?.effort).toBe("inherit");
+  } finally {
+    applyPersistentSettingsToStore(previous);
+  }
+});

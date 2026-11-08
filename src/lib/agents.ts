@@ -256,14 +256,14 @@ export function getDefaultAgentLaunchOptions(
     case "claude":
       return {
         skipPermissions: permissionDefaults.claude?.skipPermissions ?? false,
-        effort: "inherit",
+        effort: permissionDefaults.claude?.effort ?? "inherit",
       };
     case "codex":
       return {
         yolo: permissionDefaults.codex?.yolo ?? false,
         approvalMode: normalizeCodexApprovalMode(permissionDefaults.codex?.approvalMode),
         sandboxMode: permissionDefaults.codex?.sandboxMode ?? "workspace-write",
-        effort: "inherit",
+        effort: permissionDefaults.codex?.effort ?? "inherit",
       };
     case "antigravity":
       return {
@@ -282,11 +282,7 @@ export function getDefaultAgentLaunchOptions(
   }
 }
 
-/**
- * Keep only the permission-related part of a successful launch. This is
- * deliberately separate from the full launch options: reasoning effort and
- * other non-permission controls should not silently become user defaults.
- */
+/** Normalize defaults explicitly saved in Settings / Agents. */
 export function getPermissionDefaultsForLaunch(
   agentId: AiAgentId,
   launchOptions?: SessionLaunchOptions,
@@ -294,7 +290,7 @@ export function getPermissionDefaultsForLaunch(
   switch (agentId) {
     case "claude": {
       const options = launchOptions as ClaudeSessionLaunchOptions | undefined;
-      return { claude: { skipPermissions: options?.skipPermissions ?? false } };
+      return { claude: { skipPermissions: options?.skipPermissions ?? false, ...(options?.effort && ["inherit", "low", "medium", "high", "xhigh", "max"].includes(options.effort) ? { effort: options.effort } : {}) } };
     }
     case "codex": {
       const options = launchOptions as CodexSessionLaunchOptions | undefined;
@@ -303,6 +299,7 @@ export function getPermissionDefaultsForLaunch(
           yolo: options?.yolo ?? false,
           approvalMode: normalizeCodexApprovalMode(options?.approvalMode),
           sandboxMode: options?.sandboxMode ?? "workspace-write",
+          ...(options?.effort && ["inherit", "low", "medium", "high"].includes(options.effort) ? { effort: options.effort } : {}),
         },
       };
     }
@@ -328,6 +325,62 @@ export function getPermissionDefaultsForLaunch(
 
 export function getAgentDisplayName(agentId: AiAgentId): string {
   return AGENT_DEFINITIONS[agentId].displayName;
+}
+
+export function getAgentCommandPreview(agentId: AiAgentId, launchOptions?: SessionLaunchOptions): string {
+  const parts: string[] = [AGENT_DEFINITIONS[agentId].command];
+  if (agentId === "claude") {
+    const options = launchOptions as ClaudeSessionLaunchOptions | undefined;
+    if (options?.skipPermissions) parts.push("--dangerously-skip-permissions");
+    if (options?.effort && options.effort !== "inherit") parts.push(`--effort ${options.effort}`);
+  } else if (agentId === "codex") {
+    const options = launchOptions as CodexSessionLaunchOptions | undefined;
+    if (options?.yolo) parts.push("--dangerously-bypass-approvals-and-sandbox");
+    else {
+      if (options?.approvalMode && options.approvalMode !== "on-request") parts.push(`--ask-for-approval ${normalizeCodexApprovalMode(options.approvalMode)}`);
+      if (options?.sandboxMode && options.sandboxMode !== "workspace-write") parts.push(`--sandbox ${options.sandboxMode}`);
+    }
+    if (options?.effort && options.effort !== "inherit") parts.push(`-c model_reasoning_effort=${options.effort}`);
+  } else if (agentId === "antigravity") {
+    const options = launchOptions as AntigravitySessionLaunchOptions | undefined;
+    if (options?.dangerouslySkipPermissions) parts.push("--dangerously-skip-permissions");
+    if (options?.sandbox) parts.push("--sandbox");
+    if (options?.mode && options.mode !== "inherit") parts.push(`--mode ${options.mode}`);
+  } else if (agentId === "qoder") {
+    const options = launchOptions as QoderSessionLaunchOptions | undefined;
+    if (options?.permissionMode && options.permissionMode !== "inherit") parts.push(`--permission-mode ${options.permissionMode}`);
+  }
+  return parts.join(" ");
+}
+
+const PERMISSION_AGENTS: AiAgentId[] = ["claude", "codex", "antigravity", "qoder"];
+
+export function isAgentYoloEnabled(agentId: AiAgentId, defaults: AgentPermissionDefaults): boolean {
+  switch (agentId) {
+    case "claude": return Boolean(defaults.claude?.skipPermissions);
+    case "codex": return Boolean(defaults.codex?.yolo);
+    case "antigravity": return Boolean(defaults.antigravity?.dangerouslySkipPermissions);
+    case "qoder": return defaults.qoder?.permissionMode === "bypass_permissions";
+    default: return false;
+  }
+}
+
+export function getGlobalPermissionPreset(defaults: AgentPermissionDefaults, installedAgentIds?: AiAgentId[]): import("@/types").GlobalAgentPermissionPreset {
+  const agents = installedAgentIds?.length ? installedAgentIds.filter(id => PERMISSION_AGENTS.includes(id)) : PERMISSION_AGENTS;
+  if (!agents.length) return "manual";
+  const enabled = agents.filter(id => isAgentYoloEnabled(id, defaults)).length;
+  return enabled === agents.length ? "yolo" : enabled === 0 ? "manual" : "custom";
+}
+
+export function applyGlobalPermissionPreset(defaults: AgentPermissionDefaults, preset: "yolo" | "manual"): AgentPermissionDefaults {
+  const yolo = preset === "yolo";
+  return {
+    ...defaults,
+    claude: { ...defaults.claude, skipPermissions: yolo },
+    codex: { approvalMode: "on-request", sandboxMode: "workspace-write", ...defaults.codex, yolo },
+    antigravity: { sandbox: false, mode: "inherit", ...defaults.antigravity, dangerouslySkipPermissions: yolo },
+    qoder: { permissionMode: yolo ? "bypass_permissions" : defaults.qoder?.permissionMode === "bypass_permissions" ? "inherit" : defaults.qoder?.permissionMode ?? "inherit" },
+  };
 }
 
 /**

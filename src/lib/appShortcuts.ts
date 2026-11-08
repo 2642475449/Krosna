@@ -1,5 +1,5 @@
 import { SHORTCUTS, type ShortcutAction, type ShortcutOverrides } from "@/constants/shortcuts";
-import { captureShortcutFromEvent, formatShortcutDisplay, parseShortcut } from "./shortcut";
+import { captureShortcutFromEvent, isMouseShortcut, formatShortcutDisplay, parseShortcut } from "./shortcut";
 
 export function getAppShortcut(overrides: ShortcutOverrides, action: ShortcutAction, voiceShortcut = "Ctrl+Shift+V"): string {
   if (action === "voiceInput") return voiceShortcut;
@@ -25,7 +25,7 @@ export function isValidAppShortcut(keys: string): boolean {
   const parsed = parseShortcut(keys);
   if (!parsed || ["unidentified", "dead", "process", "escape"].includes(parsed.key)) return false;
   if (parsed.primaryKey && !parsed.altKey && !parsed.shiftKey && !parsed.metaKey && ["a", "c", "v"].includes(parsed.key)) return false;
-  return parsed.primaryKey || parsed.altKey || parsed.metaKey || /^f([1-9]|1\d|2[0-4])$/.test(parsed.key);
+  return isMouseShortcut(keys) || parsed.primaryKey || parsed.altKey || parsed.metaKey || /^f([1-9]|1\d|2[0-4])$/.test(parsed.key);
 }
 
 export function normalizeShortcutOverrides(value: unknown): ShortcutOverrides {

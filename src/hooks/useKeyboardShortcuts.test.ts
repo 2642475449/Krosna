@@ -85,3 +85,47 @@ it("uses a customized bottom runner binding", () => {
   press("F12", { ctrlKey: false, altKey: true });
   expect(onToggleBottomRunner).toHaveBeenCalledTimes(1);
 });
+
+
+function mouse(type: string, button: number, modifiers = {}) {
+  const event = new Event(type, { cancelable: true });
+  Object.assign(event, { button, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...modifiers });
+  document.dispatchEvent(event);
+  return event;
+}
+
+it("dispatches side button actions with exact modifiers and blocks browser navigation", () => {
+  mocks.shortcuts.overrides = { newSession: "Ctrl+MouseBack", nextTab: "MouseForward" };
+  const onNewSession = vi.fn();
+  useKeyboardShortcuts({ onNewSession });
+  expect(mouse("mousedown", 3).defaultPrevented).toBe(false);
+  expect(mouse("mousedown", 3, { ctrlKey: true }).defaultPrevented).toBe(true);
+  expect(onNewSession).toHaveBeenCalledTimes(1);
+  mouse("mousedown", 4);
+  expect(mocks.app.openTab).toHaveBeenCalledWith("b");
+  expect(mouse("mouseup", 4).defaultPrevented).toBe(true);
+  expect(mouse("auxclick", 4).defaultPrevented).toBe(true);
+  mocks.shortcuts.recordingAction = "newSession";
+  mouse("mousedown", 3, { ctrlKey: true });
+  expect(onNewSession).toHaveBeenCalledTimes(1);
+});
+
+it("holds mouse voice input until the matching button or modifier is released", () => {
+  const onVoiceShortcutPress = vi.fn();
+  const onVoiceShortcutRelease = vi.fn();
+  useKeyboardShortcuts({ voiceShortcut: "Ctrl+MouseBack", onVoiceShortcutPress, onVoiceShortcutRelease });
+  mouse("mousedown", 3, { ctrlKey: true });
+  mouse("mouseup", 4);
+  expect(onVoiceShortcutPress).toHaveBeenCalledTimes(1);
+  expect(onVoiceShortcutRelease).not.toHaveBeenCalled();
+  mouse("mouseup", 3);
+  expect(onVoiceShortcutRelease).toHaveBeenCalledTimes(1);
+  mouse("mousedown", 3, { ctrlKey: true });
+  const up = new Event("keyup", { cancelable: true });
+  Object.assign(up, { key: "Control" });
+  document.dispatchEvent(up);
+  expect(onVoiceShortcutRelease).toHaveBeenCalledTimes(2);
+  mouse("mousedown", 3, { ctrlKey: true });
+  window.dispatchEvent(new Event("blur"));
+  expect(onVoiceShortcutRelease).toHaveBeenCalledTimes(3);
+});
