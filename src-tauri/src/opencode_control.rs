@@ -347,7 +347,7 @@ mod tests {
                 );
                 if request
                     .url()
-                    .starts_with("/session/ses_termflow_test/prompt_async")
+                    .starts_with("/session/ses_krosna_test/prompt_async")
                 {
                     let mut body = String::new();
                     request.as_reader().read_to_string(&mut body).unwrap();
@@ -365,10 +365,10 @@ mod tests {
                 let body = if request.url().starts_with("/global/health") {
                     r#"{"healthy":true,"version":"1.17.13"}"#.to_string()
                 } else if request.url().starts_with("/session?") {
-                    r#"{"id":"ses_termflow_test"}"#.to_string()
+                    r#"{"id":"ses_krosna_test"}"#.to_string()
                 } else if request
                     .url()
-                    .starts_with("/session/ses_termflow_test/message")
+                    .starts_with("/session/ses_krosna_test/message")
                 {
                     serde_json::to_string(&json!([{
                         "info": { "role": "user" },
@@ -405,8 +405,8 @@ mod tests {
             [
                 "/global/health",
                 "/session",
-                "/session/ses_termflow_test/prompt_async",
-                "/session/ses_termflow_test/message",
+                "/session/ses_krosna_test/prompt_async",
+                "/session/ses_krosna_test/message",
                 "/tui/select-session",
                 "/tui/select-session",
             ]

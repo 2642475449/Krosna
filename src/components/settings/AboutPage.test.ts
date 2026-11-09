@@ -9,11 +9,11 @@ import { AboutPage } from "./AboutPage";
 describe("AboutPage", () => {
   it("renders the hero banner with current version and branding", () => {
     const markup = renderToStaticMarkup(React.createElement(AboutPage));
-    expect(markup).toContain("Termflow");
+    expect(markup).toContain("Krosna");
     expect(markup).toContain(`v${packageJson.version}`);
-    expect(markup).toContain('alt="Termflow"');
+    expect(markup).toContain('alt="Krosna"');
     expect(markup).not.toContain("不是另一个智能体");
-    expect(markup).toContain("Termflow 是为本地 AI 编程智能体打造的统一工作台");
+    expect(markup).toContain("Krosna 是为本地 AI 编程智能体打造的统一工作台");
   });
 
   it("removes internal tech stack section completely", () => {
@@ -28,7 +28,7 @@ describe("AboutPage", () => {
     const markup = renderToStaticMarkup(React.createElement(AboutPage));
     expect(markup).toContain("MIT License");
     expect(markup).toContain("2026");
-    expect(markup).toContain("com.termflow.desktop");
+    expect(markup).toContain("com.krosna.desktop");
   });
 
   it("keeps the hero GitHub button and removes the legal section shortcuts", () => {

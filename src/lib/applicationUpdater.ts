@@ -17,7 +17,7 @@ import {
 
 const CHECK_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
-const PENDING_UPDATE_VERSION_KEY = "termflow.pending-update-version";
+const PENDING_UPDATE_VERSION_KEY = "krosna.pending-update-version";
 
 // 仍处于"已持有更新资源"状态的阶段；命中时直接复用 pendingUpdate，不再重新请求。
 const ACTIVE_UPDATE_PHASES: readonly ApplicationUpdatePhase[] = [
@@ -27,7 +27,7 @@ const ACTIVE_UPDATE_PHASES: readonly ApplicationUpdatePhase[] = [
   "installing",
 ];
 
-export const TERMFLOW_RELEASES_URL = "https://github.com/2642475449/Termflow/releases/latest";
+export const KROSNA_RELEASES_URL = "https://github.com/2642475449/Krosna/releases/latest";
 
 export type ApplicationUpdateCheckResult =
   | { status: "up-to-date"; currentVersion: string }

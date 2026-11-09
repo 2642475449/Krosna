@@ -42,8 +42,8 @@ mod tests {
     #[test]
     fn strips_windows_verbatim_drive_prefix() {
         assert_eq!(
-            normalize_windows_verbatim_path(r"\\?\D:\3.project\termflow".to_string()),
-            r"D:\3.project\termflow"
+            normalize_windows_verbatim_path(r"\\?\D:\3.project\krosna".to_string()),
+            r"D:\3.project\krosna"
         );
     }
 
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn keeps_normal_display_path_unchanged() {
-        let path = PathBuf::from("D:\\3.project\\termflow");
+        let path = PathBuf::from("D:\\3.project\\krosna");
         assert_eq!(display_path(&path), path.to_string_lossy());
     }
 

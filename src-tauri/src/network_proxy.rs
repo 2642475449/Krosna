@@ -106,7 +106,7 @@ pub fn apply_proxy_to_pty_command(
     command: &mut portable_pty::CommandBuilder,
     proxy: &ResolvedNetworkProxy,
 ) {
-    // portable-pty inherits Termflow's environment. Explicitly resolved proxy
+    // portable-pty inherits Krosna's environment. Explicitly resolved proxy
     // settings override inherited values in the child shell.
     if let Some(value) = proxy.http_proxy.as_deref() {
         command.env("HTTP_PROXY", value);

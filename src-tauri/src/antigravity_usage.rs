@@ -89,7 +89,7 @@ pub async fn get_antigravity_usage(
 fn snapshot_path() -> Result<PathBuf, String> {
     let home = dirs_next::home_dir().ok_or("无法读取用户主目录")?;
     Ok(home
-        .join(".termflow")
+        .join(".krosna")
         .join("agent-hooks")
         .join(SNAPSHOT_NAME))
 }

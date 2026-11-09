@@ -94,7 +94,7 @@ export const useProjectIconsStore = create<ProjectIconsState>()(persist((set, ge
     }
   },
 }), {
-  name: "termflow-project-icon-colors",
+  name: "krosna-project-icon-colors",
   // 图片和完整偏好由 SQLite 保存；localStorage 只缓存颜色，避免重复存储大图。
   partialize: (state) => ({ colors: state.colors }),
 }));

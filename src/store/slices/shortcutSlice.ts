@@ -45,7 +45,7 @@ export const useShortcutStore = create<ShortcutSettingsState>()(persist((set, ge
     }
   },
 }), {
-  name: "termflow-shortcuts",
+  name: "krosna-shortcuts",
   partialize: (state) => ({ overrides: state.overrides }),
   merge: (saved, current) => ({
     ...current,

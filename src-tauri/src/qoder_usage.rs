@@ -173,7 +173,7 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
     // https://docs.qoder.com/cli/sdk/cost-usage
     if let Err(error) = write_control_request(
         &mut stdin,
-        "termflow-initialize",
+        "krosna-initialize",
         initialize_control_request(),
     ) {
         return error_result(error, None);
@@ -207,7 +207,7 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
                     .and_then(Value::as_str)
                     .unwrap_or_default();
 
-                if request_id == "termflow-initialize" {
+                if request_id == "krosna-initialize" {
                     if let Some(error) = control_error_message(response) {
                         return error_result(error, account_label);
                     }
@@ -221,7 +221,7 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
                         usage_requested = true;
                         if let Err(error) = write_control_request(
                             &mut stdin,
-                            "termflow-usage",
+                            "krosna-usage",
                             json!({ "type": "get_usage_info" }),
                         ) {
                             return error_result(error, account_label);
@@ -230,7 +230,7 @@ fn fetch_via_control_protocol(executable: &str) -> QoderUsage {
                     continue;
                 }
 
-                if request_id == "termflow-usage" {
+                if request_id == "krosna-usage" {
                     let result = if let Some(error) = control_error_message(response) {
                         error_result(error, account_label)
                     } else {
@@ -272,7 +272,7 @@ fn initialize_control_request() -> Value {
 fn spawn_qoder_sdk_process(executable: &str) -> Result<Child, String> {
     // These flags mirror the official Agent SDK process transport. Disabling
     // persistence and setting sources keeps quota polling from creating local
-    // sessions or running Termflow's normal project/user hooks.
+    // sessions or running Krosna's normal project/user hooks.
     // https://docs.qoder.com/cli/sdk/overview
     // https://docs.qoder.com/cli/sdk/references-typescript
     let args = [

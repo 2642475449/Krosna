@@ -29,9 +29,9 @@ it("persists usage by project and restores it after a restart", async () => {
   await store.getState().setCommandUsed(path, "build");
   await store.getState().setCommandUsed("E:/other", "build");
   expect(recordQuickCommandUse).toHaveBeenCalledWith(path, "build", 100);
-  const saved = entries.get("termflow-quick-command-usage")!;
+  const saved = entries.get("krosna-quick-command-usage")!;
   store.setState({ usageByProject: {} });
-  entries.set("termflow-quick-command-usage", saved);
+  entries.set("krosna-quick-command-usage", saved);
   await store.persist.rehydrate();
   expect(store.getState().usageByProject).toEqual({ [path]: { build: 100 }, "E:/other": { build: 100 } });
 });
@@ -71,7 +71,7 @@ it("keeps local usage and logs storage failures without failing a launched comma
 });
 
 it("rejects malformed timestamps during hydration and accepts arbitrary command IDs", async () => {
-  entries.set("termflow-quick-command-usage", JSON.stringify({ state: { usageByProject: {
+  entries.set("krosna-quick-command-usage", JSON.stringify({ state: { usageByProject: {
     [path]: { valid: 100, negative: -1, fraction: 1.5, text: "200", zero: 0 }, bad: [],
   } }, version: 0 }));
   await store.persist.rehydrate();

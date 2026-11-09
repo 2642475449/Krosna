@@ -182,7 +182,7 @@ if let Some(existing_label) = registry.get_label_by_project(&project_path) {
 **机制描述**：根据窗口模式和项目名称生成窗口标题。
 
 **规则**：
-- Launcher 模式：显示 "Termflow"
+- Launcher 模式：显示 "Krosna"
 - Project 模式：显示 "{项目名称}"
 
 **代码位置**：`src-tauri/src/commands/window.rs:492-499`
@@ -193,7 +193,7 @@ fn window_title(context: &WindowProjectContext) -> String {
         Some(project_name) if context.mode == WindowMode::Project => {
             project_name.to_string()
         }
-        _ => "Termflow".to_string(),
+        _ => "Krosna".to_string(),
     }
 }
 ```

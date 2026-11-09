@@ -299,7 +299,7 @@ mod tests {
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
-        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         repo.commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
             .unwrap();
         drop(tree);

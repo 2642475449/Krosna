@@ -1,10 +1,10 @@
 # Qoder CLI 集成说明
 
-最后验证：2026-08-07，`@qodercn-ai/qoderclicn`（Qoder CN CLI）。Termflow 仅集成国内版，不检测或启动国际版 `qodercli`。
+最后验证：2026-08-07，`@qodercn-ai/qoderclicn`（Qoder CN CLI）。Krosna 仅集成国内版，不检测或启动国际版 `qodercli`。
 
 ### 集成边界
 
-| 能力 | Qoder CLI | Termflow 状态 | 说明 |
+| 能力 | Qoder CLI | Krosna 状态 | 说明 |
 | --- | --- | --- | --- |
 | PATH 检测与版本 | 原生支持 | 完整 | 命令为 `qoderclicn`，版本参数为 `--version` |
 | 交互终端 | 原生支持 | 完整 | 使用 PTY 启动 |
@@ -13,16 +13,16 @@
 | 会话恢复 | 原生支持 | 完整 | 优先 `--resume <session-id>`，无 ID 时使用 `--continue` |
 | 权限模式 | 原生支持 | 完整 | UI 覆盖官方权限文档中的模式；1.1.7 顶层帮助暂未列出但实际接受 `plan` |
 | 状态与权限等待 | 原生 Hooks | 部分 | 写入 Qoder `settings.json` 并保留用户配置；仍需真实模型生命周期验证 Stop-veto、compact 与 Notification 细节 |
-| 完成、错误与通知 | 原生 Hooks | 部分 | 已复用 Termflow 的统一状态、Attention 和通知链路，但尚未执行消耗 Credits 的端到端验证 |
+| 完成、错误与通知 | 原生 Hooks | 部分 | 已复用 Krosna 的统一状态、Attention 和通知链路，但尚未执行消耗 Credits 的端到端验证 |
 | Skills | 原生支持 | 部分 | 可管理项目 `.qoder/skills` 与用户 `~/.qoder/skills`；尚未覆盖内置 Skill 和 Qoder 原生 enable/disable override |
 | 项目指令 | 原生支持 | 部分 | UI 编辑项目 `AGENTS.md`；`AGENTS.local.md` 和用户级入口暂未开放 |
-| MCP | Qoder 原生支持 | 未集成管理 | Termflow 的 MCP 设置页当前仍是 Claude 专用，不声称已支持 |
+| MCP | Qoder 原生支持 | 未集成管理 | Krosna 的 MCP 设置页当前仍是 Claude 专用，不声称已支持 |
 | 用量/上下文遥测 | 无稳定本地接口 | 未支持 | 不展示猜测数据 |
 | ACP | Qoder 原生支持 | 预留 | 当前仍使用 PTY + 原生 Hooks |
 
 ## 状态映射
 
-| Qoder Hook | Termflow 状态 | 事件 |
+| Qoder Hook | Krosna 状态 | 事件 |
 | --- | --- | --- |
 | `SessionStart` | `waiting` | `session_start` |
 | `UserPromptSubmit` | `running` | `user_prompt_submit` |
@@ -34,13 +34,13 @@
 | `Stop` | `completed` | `assistant_complete` |
 | `StopFailure` | `error` | `process_error` |
 
-`SessionStart` 只用于建立会话关联，不触发“等待权限”通知。Hook 载荷不会把原始提示词或工具输入转发给 Termflow。
+`SessionStart` 只用于建立会话关联，不触发“等待权限”通知。Hook 载荷不会把原始提示词或工具输入转发给 Krosna。
 
 用户 Hooks 与 Skills 使用 Qoder CN 的 `~/.qoder-cn`；项目级 Hooks 与 Skills 使用 `.qoder`。国际版的环境变量配置根不适用于此集成。
 
 ## 可扩展结构
 
-Termflow 现在把稳定身份与展示能力集中到前端 `AGENT_DEFINITIONS`，把检测命令与版本参数集中到 Rust `AGENT_DEFINITIONS`。菜单、图标、颜色、缓存校验、默认智能体、通知诊断、Skills 和 Hooks 列表都从注册表派生；启动、无头调用、恢复和状态解析保留为 provider adapter。
+Krosna 现在把稳定身份与展示能力集中到前端 `AGENT_DEFINITIONS`，把检测命令与版本参数集中到 Rust `AGENT_DEFINITIONS`。菜单、图标、颜色、缓存校验、默认智能体、通知诊断、Skills 和 Hooks 列表都从注册表派生；启动、无头调用、恢复和状态解析保留为 provider adapter。
 
 增加下一个智能体时，应按以下顺序接入：
 

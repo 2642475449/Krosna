@@ -70,7 +70,7 @@ pub async fn test_network_proxy(
     let started = Instant::now();
     let response = client
         .get(&url)
-        .header(reqwest::header::USER_AGENT, "Termflow network diagnostics")
+        .header(reqwest::header::USER_AGENT, "Krosna network diagnostics")
         .send()
         .await;
     let latency_ms = started.elapsed().as_millis();

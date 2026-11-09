@@ -1,7 +1,9 @@
 <h1 align="center">
-  <img src="public/logo.png" width="56" alt="Termflow Logo" align="absmiddle">
-  Termflow
+  <img src="public/logo.png" width="56" alt="Krosna Logo" align="absmiddle">
+  Krosna
 </h1>
+
+> **Krosna** is the new name of **Termflow**. New builds update through GitHub Releases; the old update domain remains a compatibility bridge. First launch copies legacy app data and migrates browser storage keys and project configuration while preserving the originals. Close the old app before upgrading, and reopen a renamed project from its new path.
 
 <p align="center">
   <a href="README.md">简体中文</a> | English | <a href="README.ja-JP.md">日本語</a>
@@ -21,11 +23,11 @@
   <img src="https://img.shields.io/badge/v1.8.22-blue?style=flat-square" alt="Version">
 </p>
 
-![Termflow overview](.github/assets/termflow-overview.png)
+![Krosna overview](.github/assets/krosna-overview.png)
 
 ## Supported agents
 
-Termflow natively supports the following CLI agents:
+Krosna natively supports the following CLI agents:
 
 <p align="center">
   <code><img src="public/agents/claude.svg" width="16" alt="" align="absmiddle"> Claude Code</code>
@@ -40,7 +42,7 @@ Termflow natively supports the following CLI agents:
 
 ## Overview
 
-**Termflow** is a Tauri 2 desktop workspace for terminal-based CLI agents. It brings the command-line experience of multiple agents into one local graphical application, keeping projects, sessions, terminals, and Git work in the same context.
+**Krosna** is a Tauri 2 desktop workspace for terminal-based CLI agents. It brings the command-line experience of multiple agents into one local graphical application, keeping projects, sessions, terminals, and Git work in the same context.
 
 Key capabilities:
 
@@ -57,19 +59,19 @@ The baseline experience also includes dark, light, and system-following themes, 
 
 ## Why open source?
 
-Termflow started as an application built around the workflow I wanted to use every day. As its features and experience matured, it was open-sourced to offer another choice to people selecting an AI-assisted development tool.
+Krosna started as an application built around the workflow I wanted to use every day. As its features and experience matured, it was open-sourced to offer another choice to people selecting an AI-assisted development tool.
 
 ## Core features
 
 | Feature | What it provides |
 | :--- | :--- |
-| **Project and session workspace** | Automatically organize sessions from different agents by project directory, create and switch tasks quickly, and see the live state of every session.<br><br><img src=".github/assets/demos/multi-session-management.gif" alt="Termflow project and session workspace demo" width="240"> |
+| **Project and session workspace** | Automatically organize sessions from different agents by project directory, create and switch tasks quickly, and see the live state of every session.<br><br><img src=".github/assets/demos/multi-session-management.gif" alt="Krosna project and session workspace demo" width="240"> |
 | **Side tasks and auxiliary workspace** | When a terminal error or file issue appears, launch a side question from the selected terminal output, then inspect related files or run an independent task in the right-hand workspace without leaving the main session. |
-| **File and context collaboration** | Browse, search, and edit project files, preview Markdown, and drag files from the project tree into the active CLI input to give an agent context quickly.<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Termflow file and context collaboration demo" width="240"> |
+| **File and context collaboration** | Browse, search, and edit project files, preview Markdown, and drag files from the project tree into the active CLI input to give an agent context quickly.<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Krosna file and context collaboration demo" width="240"> |
 | **Git change workflow** | Review and stage changes, manage branches, commit, push, pull, and sync from one place, with optional AI-generated commit messages. |
 | **Checkpoint and diff review** | Record checkpoints for agent turns automatically, review file summaries and diffs, and return to any checkpoint. |
 | **Quick commands and voice input** | Run common actions through searchable, parameterized quick commands; use MiMo or DashScope ASR with a global shortcut and recording-status overlay. |
-| **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Termflow work status overview demo" width="240"> |
+| **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Krosna work status overview demo" width="240"> |
 
 Additional capabilities include persistent sessions, a custom title bar and borderless window controls, dark/light/system themes, and Simplified Chinese, English, and Japanese interfaces.
 
@@ -95,7 +97,7 @@ Additional capabilities include persistent sessions, a custom title bar and bord
 
 ## Acknowledgements
 
-Termflow is built with excellent open-source projects including [Tauri](https://tauri.app/), [React](https://react.dev/), [xterm.js](https://xtermjs.org/), [Ant Design](https://ant.design/), [Zustand](https://zustand-demo.pmnd.rs/), [Vite](https://vitejs.dev/), [i18next](https://www.i18next.com/), [Monaco Editor](https://microsoft.github.io/monaco-editor/), [Mermaid](https://mermaid.js.org/), [Geist Mono](https://vercel.com/font), and [reqwest](https://github.com/seanmonstar/reqwest).
+Krosna is built with excellent open-source projects including [Tauri](https://tauri.app/), [React](https://react.dev/), [xterm.js](https://xtermjs.org/), [Ant Design](https://ant.design/), [Zustand](https://zustand-demo.pmnd.rs/), [Vite](https://vitejs.dev/), [i18next](https://www.i18next.com/), [Monaco Editor](https://microsoft.github.io/monaco-editor/), [Mermaid](https://mermaid.js.org/), [Geist Mono](https://vercel.com/font), and [reqwest](https://github.com/seanmonstar/reqwest).
 
 ## License
 

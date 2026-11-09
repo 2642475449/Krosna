@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Termflow Linux 会话服务。仅使用 Python 3.8+ 标准库，由 SSH 部署。
+"""Krosna Linux 会话服务。仅使用 Python 3.8+ 标准库，由 SSH 部署。
 
 SSH 传输与 PTY 生命周期相互独立。服务仅监听回环，认证令牌不会传给智能体。
 协议为 POST /rpc {method, params}，输出用原始字节偏移和 base64 重放。
@@ -38,7 +38,7 @@ MAX_BODY = 1024 * 1024
 MAX_OUTPUT = 8 * 1024 * 1024
 MAX_READ = 256 * 1024
 MAX_SESSIONS = 64
-HOOK_MARKER = "TERMFLOW_REMOTE_HOOK=1"
+HOOK_MARKER = "KROSNA_REMOTE_HOOK=1"
 HOOK_EVENTS = ("UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop")
 
 
@@ -67,7 +67,7 @@ def rpc_descriptor(descriptor, method, params=None, timeout=5):
     request = urllib.request.Request(
         "http://127.0.0.1:%d/rpc" % descriptor["port"],
         data=json.dumps({"method": method, "params": params or {}}).encode(),
-        headers={"Content-Type": "application/json", "X-Termflow-Token": descriptor["token"]},
+        headers={"Content-Type": "application/json", "X-Krosna-Token": descriptor["token"]},
     )
     # 本机回调不继承远端 HTTP_PROXY，亦不向网络代理泄露令牌。
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -113,10 +113,10 @@ class RemoteSession:
         environment = service.environment.copy()
         environment.update({
             "TERM": "xterm-256color", "COLORTERM": "truecolor",
-            "TERMFLOW_REMOTE_SESSION": self.id,
-            "TERMFLOW_REMOTE_INSTANCE": self.instance_id,
-            "TERMFLOW_REMOTE_HOOK_TOKEN": self.hook_token,
-            "TERMFLOW_REMOTE_ROOT": str(service.root),
+            "KROSNA_REMOTE_SESSION": self.id,
+            "KROSNA_REMOTE_INSTANCE": self.instance_id,
+            "KROSNA_REMOTE_HOOK_TOKEN": self.hook_token,
+            "KROSNA_REMOTE_ROOT": str(service.root),
         })
         if self.agent_id == "shell":
             arguments = [shutil.which("bash", path=environment.get("PATH")) or "/bin/sh", "-il"]
@@ -382,7 +382,7 @@ class RemoteService:
         root = Path(self.environment.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
         path = root / "hooks.json"
         if path.is_symlink():
-            raise ValueError("Codex hooks.json is a symbolic link; configure the Termflow hook in its managed source")
+            raise ValueError("Codex hooks.json is a symbolic link; configure the Krosna hook in its managed source")
         lock_path = self.root / "hooks.lock"
         with open(str(lock_path), "a+") as lock:
             os.chmod(str(lock_path), 0o600)
@@ -391,7 +391,7 @@ class RemoteService:
             if not isinstance(config, dict) or not isinstance(config.get("hooks", {}), dict):
                 raise ValueError("Codex hooks.json must contain an object; existing configuration was preserved")
             hooks = config.setdefault("hooks", {})
-            # 仅替换 Termflow 拥有的 action；不删除混合定义中的用户 action。
+            # 仅替换 Krosna 拥有的 action；不删除混合定义中的用户 action。
             for event, definitions in list(hooks.items()):
                 if not isinstance(definitions, list):
                     raise ValueError("Codex hook event must be an array; configuration was preserved")
@@ -563,7 +563,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path not in ("/rpc", "/hook"):
             self.answer(404, {"error": "not found"})
             return
-        if self.path == "/rpc" and not hmac.compare_digest(self.headers.get("X-Termflow-Token", ""), service.token):
+        if self.path == "/rpc" and not hmac.compare_digest(self.headers.get("X-Krosna-Token", ""), service.token):
             self.answer(401, {"error": "unauthorized"})
             return
         try:
@@ -652,21 +652,21 @@ def start(root):
 
 
 def report_hook():
-    # 全局 Codex hook 在非 Termflow 会话中为空操作，且不更改 CLI 的信任记录。
-    if not os.environ.get("TERMFLOW_REMOTE_SESSION"):
+    # 全局 Codex hook 在非 Krosna 会话中为空操作，且不更改 CLI 的信任记录。
+    if not os.environ.get("KROSNA_REMOTE_SESSION"):
         print("{}")
         return
     try:
         payload = json.loads(sys.stdin.buffer.read(65536) or b"{}")
         if payload.get("agent_id") or payload.get("agent_type"):
             return  # 子智能体事件不能覆盖父会话的任务状态。
-        descriptor = read_json(Path(os.environ["TERMFLOW_REMOTE_ROOT"]) / "server.json")
+        descriptor = read_json(Path(os.environ["KROSNA_REMOTE_ROOT"]) / "server.json")
         request = urllib.request.Request(
             "http://127.0.0.1:%d/hook" % descriptor["port"],
             data=json.dumps({
-                "sessionId": os.environ["TERMFLOW_REMOTE_SESSION"],
-                "instanceId": os.environ["TERMFLOW_REMOTE_INSTANCE"],
-                "hookToken": os.environ["TERMFLOW_REMOTE_HOOK_TOKEN"],
+                "sessionId": os.environ["KROSNA_REMOTE_SESSION"],
+                "instanceId": os.environ["KROSNA_REMOTE_INSTANCE"],
+                "hookToken": os.environ["KROSNA_REMOTE_HOOK_TOKEN"],
                 "event": payload.get("hook_event_name"),
             }).encode(), headers={"Content-Type": "application/json"},
         )
@@ -681,10 +681,10 @@ def report_hook():
 
 def main():
     if sys.platform != "linux" or sys.version_info < (3, 8):
-        raise RuntimeError("Termflow remote helper requires Linux and Python 3.8+")
+        raise RuntimeError("Krosna remote helper requires Linux and Python 3.8+")
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("start", "daemon", "exec", "hook"))
-    parser.add_argument("--root", default=str(Path.home() / ".local/share/termflow/remote"))
+    parser.add_argument("--root", default=str(Path.home() / ".local/share/krosna/remote"))
     parser.add_argument("--cwd")
     # REMAINDER 放在 mode 后会吞掉 start/daemon 的 --root 和 exec 的 --cwd。
     # 仅 exec 允许在显式 -- 后携带子进程参数，其他模式拒绝未知参数。

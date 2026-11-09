@@ -1,8 +1,8 @@
 import { useAuxiliaryDockStore } from "@/store/auxiliaryDock";
 import type { AgentCliInfo } from "@/types";
 
-export const OPEN_AUXILIARY_FILE_EVENT = "termflow:open-auxiliary-file";
-export const OPEN_AUXILIARY_QUESTION_EVENT = "termflow:open-auxiliary-question";
+export const OPEN_AUXILIARY_FILE_EVENT = "krosna:open-auxiliary-file";
+export const OPEN_AUXILIARY_QUESTION_EVENT = "krosna:open-auxiliary-question";
 
 export interface OpenAuxiliaryFileDetail {
   projectPath: string;

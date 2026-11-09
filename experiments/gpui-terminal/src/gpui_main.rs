@@ -4,7 +4,7 @@ use std::{
     sync::{mpsc::Receiver, Arc},
     time::Instant,
 };
-use termflow_terminal_eval::{Backend, Config, Packet, COLS, ROWS, SCROLLBACK};
+use krosna_terminal_eval::{Backend, Config, Packet, COLS, ROWS, SCROLLBACK};
 
 struct TerminalView {
     backend: Arc<Backend>,
@@ -297,7 +297,7 @@ impl EntityInputHandler for TerminalView {
 }
 
 fn main() -> anyhow::Result<()> {
-    if termflow_terminal_eval::run_producer_if_requested() {
+    if krosna_terminal_eval::run_producer_if_requested() {
         return Ok(());
     }
     let config = Config::from_args("gpui");

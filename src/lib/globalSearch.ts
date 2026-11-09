@@ -1,4 +1,4 @@
-export const OPEN_GLOBAL_TEXT_SEARCH_EVENT = "termflow:open-global-text-search";
+export const OPEN_GLOBAL_TEXT_SEARCH_EVENT = "krosna:open-global-text-search";
 
 export interface OpenGlobalTextSearchDetail {
   scopePath?: string | null;

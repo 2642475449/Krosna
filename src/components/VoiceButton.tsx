@@ -336,11 +336,11 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
   return (
     <>
       <style>{`
-        @keyframes termflow-voice-capsule-enter {
+        @keyframes krosna-voice-capsule-enter {
           from { opacity: 0; transform: scale(0.97); }
           to   { opacity: 1; transform: scale(1); }
         }
-        @keyframes termflow-voice-shake {
+        @keyframes krosna-voice-shake {
           0%, 100% { transform: translateX(0); }
           25%      { transform: translateX(-3px); }
           75%      { transform: translateX(3px); }
@@ -384,8 +384,8 @@ export const VoiceStatusCapsule: React.FC<VoiceStatusCapsuleProps> = ({
             animation: prefersReducedMotion
               ? "none"
               : isError
-                ? "termflow-voice-shake 0.35s ease-in-out"
-                : "termflow-voice-capsule-enter 0.18s cubic-bezier(0.22, 1, 0.36, 1)",
+                ? "krosna-voice-shake 0.35s ease-in-out"
+                : "krosna-voice-capsule-enter 0.18s cubic-bezier(0.22, 1, 0.36, 1)",
             ...wrapperStyle,
           }}
         >

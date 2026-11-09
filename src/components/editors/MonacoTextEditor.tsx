@@ -53,7 +53,7 @@ function MonacoTextEditor({
   // The React wrapper reuses models by URI and disposes them on unmount,
   // so each editor must own a distinct model even for the same disk file.
   const modelPath = useMemo(() => monaco.Uri.file(filePath)
-    .with({ query: `termflow-editor=${encodeURIComponent(editorId)}` }).toString(), [filePath, editorId]);
+    .with({ query: `krosna-editor=${encodeURIComponent(editorId)}` }).toString(), [filePath, editorId]);
   useLayoutEffect(() => () => { editorRef.current = null; }, [modelPath]);
   const statusDisposables = useRef<monaco.IDisposable[]>([]);
   useEffect(() => () => {

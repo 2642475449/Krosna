@@ -1,4 +1,4 @@
-import { getHookCommandName, getHookSource, groupHooksBySource, isTermflowHook } from "@/lib/hookPresentation";
+import { getHookCommandName, getHookSource, groupHooksBySource, isKrosnaHook } from "@/lib/hookPresentation";
 import { SkillsSettingsPage } from "./settings/SkillsSettingsPage";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { BackgroundSettings } from "./settings/BackgroundSettings";
@@ -227,12 +227,12 @@ function ThemeCard({ opt, isActive, onClick, tabIndex, onKeyDown }: {
       className="app-settings-theme" onClick={onClick} onKeyDown={onKeyDown}>
       <div className="app-settings-theme__preview" aria-hidden="true" data-ui>
         <div className="app-settings-theme__window">
-          <div className="app-settings-theme__chrome"><span /><span /><span /><strong>termflow</strong></div>
+          <div className="app-settings-theme__chrome"><span /><span /><span /><strong>krosna</strong></div>
           <div className="app-settings-theme__body">
             <div className="app-settings-theme__sidebar"><FolderOpenOutlined /><CodeOutlined /><SettingOutlined /></div>
             <div className="app-settings-theme__editor">
               <div className="app-settings-theme__tab"><FileMarkdownOutlined />AGENTS.md</div>
-              <div className="app-settings-theme__source"># Termflow</div>
+              <div className="app-settings-theme__source"># Krosna</div>
               <div className="app-settings-theme__terminal"><span>&gt;</span> pnpm dev<span className="app-settings-theme__cursor" /></div>
             </div>
           </div>
@@ -2004,7 +2004,7 @@ function formatHookMatcher(matcher: string, t: (key: string) => string) {
 }
 
 function isDefaultHook(hook: HookInfo) {
-  return isTermflowHook(hook);
+  return isKrosnaHook(hook);
 }
 
 function buildHookEmptyState(params: {
@@ -2430,7 +2430,7 @@ function HooksAgentPage({ activeAgent, setActiveAgent, projectPath }: {
           <span className="ml-3 text-xs text-[var(--cs-text-secondary)]">{t("settings.hooks.registrationCount", { count: group.hooks.length })}</span>
         </summary>
         <div className="border-t border-[var(--cs-border)] px-4">
-          <p className="my-3 text-xs text-[var(--cs-text-secondary)]">{t(group.source === "termflow" ? "settings.hooks.managedSourceHint" : "settings.hooks.inferredSourceHint")}</p>
+          <p className="my-3 text-xs text-[var(--cs-text-secondary)]">{t(group.source === "krosna" ? "settings.hooks.managedSourceHint" : "settings.hooks.inferredSourceHint")}</p>
           {group.hooks.map((hook) => <HookRow key={hook.id} hook={hook} onOpen={() => void handleOpenDetail(hook)} />)}
         </div>
       </details>)}
@@ -3206,8 +3206,8 @@ const pageComponents: Record<SettingsPage, React.FC> = {
 /* ────────────── Main Settings Panel ────────────── */
 function SettingsPanel() {
   const { t } = useTranslation();
-  const [activePage, setActivePage] = useState<SettingsPage>(() => { const pending = sessionStorage.getItem("termflow.settings.pendingPage"); return pending === "agents" ? "agents" : "general"; });
-  useEffect(() => { const navigate = () => { if (sessionStorage.getItem("termflow.settings.pendingPage") === "agents") { sessionStorage.removeItem("termflow.settings.pendingPage"); setActivePage("agents"); } }; navigate(); window.addEventListener("settings:navigate", navigate); return () => window.removeEventListener("settings:navigate", navigate); }, []);
+  const [activePage, setActivePage] = useState<SettingsPage>(() => { const pending = sessionStorage.getItem("krosna.settings.pendingPage"); return pending === "agents" ? "agents" : "general"; });
+  useEffect(() => { const navigate = () => { if (sessionStorage.getItem("krosna.settings.pendingPage") === "agents") { sessionStorage.removeItem("krosna.settings.pendingPage"); setActivePage("agents"); } }; navigate(); window.addEventListener("settings:navigate", navigate); return () => window.removeEventListener("settings:navigate", navigate); }, []);
   const [menuSearch, setMenuSearch] = useState("");
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const PageComponent = pageComponents[activePage];

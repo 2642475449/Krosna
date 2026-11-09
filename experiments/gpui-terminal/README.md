@@ -1,17 +1,17 @@
-# Termflow GPUI 终端独立评估
+# Krosna GPUI 终端独立评估
 
 这是可删除的独立实验工程，不接入正式应用，不修改主工程依赖、数据库或项目配置。评估重点是 Windows 终端输入与输出流畅度。
 
 ## 两个原型
 
 - `gpui-terminal-eval`：已发布的 GPUI **0.2.2**、`vt100` 解析器、Rust ConPTY。活动终端按颜色片段绘制固定网格，非活动终端仍解析输出。
-- `webview-terminal-eval`：Tauri **2.11.0**、主仓库安装的 xterm.js 和 WebGL addon，相同 Rust ConPTY 与负载生成器。它是简化的技术栈对照，不是完整 Termflow。
+- `webview-terminal-eval`：Tauri **2.11.0**、主仓库安装的 xterm.js 和 WebGL addon，相同 Rust ConPTY 与负载生成器。它是简化的技术栈对照，不是完整 Krosna。
 - 两边都使用 100 列、28 行、1000 行解析器回滚缓冲；一个终端可见，其他会话后台解析。GPUI 原型尚未实现回滚浏览。
 - Cargo 锁文件以主工程现有版本为基础解析，避免 Tauri 2.11 与较新的 runtime/macros 不兼容。主工程锁文件不会被实验修改。
 
 ## 构建与运行
 
-从 Termflow 仓库根目录执行（需要现有 pnpm 依赖、Windows Rust/MSVC 工具链、WebView2）：
+从 Krosna 仓库根目录执行（需要现有 pnpm 依赖、Windows Rust/MSVC 工具链、WebView2）：
 
 ```powershell
 pnpm exec vite build --config experiments/gpui-terminal/vite.config.mjs
@@ -62,7 +62,7 @@ cargo test --locked --manifest-path experiments/gpui-terminal/Cargo.toml --no-de
 ## 可比性边界
 
 - 两套解析器、绘制实现、输入路径和统计回传路径不同，这是技术栈原型比较，不能单独归因于 GPUI 或 Rust。
-- 对照组没有复制完整 Termflow 的输出批处理、IME 门控、状态监测等机制。实验结果不能写成“正式 Termflow 提升了 X%”。
+- 对照组没有复制完整 Krosna 的输出批处理、IME 门控、状态监测等机制。实验结果不能写成“正式 Krosna 提升了 X%”。
 - GPUI 原型每帧重建可见行布局，尚未实现行缓存、自定义终端 Element、准确字体格宽测量或完整属性支持；它不是 Zed 终端的复用版。
 - 两边均包含冷启动阶段，没有独立预热样本；两轮样本量只适合初步筛查，不提供统计显著性结论。
 - 未使用真实 CLI 智能体或真实项目日志，避免泄露会话内容；负载是明确标记的合成回放。

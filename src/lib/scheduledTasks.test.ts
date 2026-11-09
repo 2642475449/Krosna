@@ -31,9 +31,9 @@ it("retains plain legacy output and stderr-only diagnostics", () => {
 });
 
 it("creates a safe default for a new scheduled task", () => {
-  const task = createScheduledTaskInput("D:/projects/termflow");
+  const task = createScheduledTaskInput("D:/projects/krosna");
 
-  expect(task.projectPath).toBe("D:/projects/termflow");
+  expect(task.projectPath).toBe("D:/projects/krosna");
   expect(task.agentId).toBe("codex");
   expect(task.schedule).toEqual({ kind: "daily", time: "09:00" });
   expect(task.timeoutMs).toBe(DEFAULT_SCHEDULED_TASK_TIMEOUT_MS);

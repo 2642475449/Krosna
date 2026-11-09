@@ -1427,7 +1427,7 @@ mod tests {
 
     #[test]
     fn resolve_project_link_accepts_existing_chinese_file_and_directory() {
-        let root = std::env::temp_dir().join(format!("termflow-link-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("krosna-link-{}", std::process::id()));
         let directory = root.join("资料");
         let file = directory.join("更新记录.md");
         fs::create_dir_all(&directory).unwrap();
@@ -1449,9 +1449,9 @@ mod tests {
 
     #[test]
     fn resolve_project_link_rejects_missing_or_outside_paths() {
-        let root = std::env::temp_dir().join(format!("termflow-link-root-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("krosna-link-root-{}", std::process::id()));
         let outside =
-            std::env::temp_dir().join(format!("termflow-link-outside-{}", std::process::id()));
+            std::env::temp_dir().join(format!("krosna-link-outside-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&outside).unwrap();
 
@@ -1499,7 +1499,7 @@ mod tests {
     #[test]
     fn move_entries_moves_files_and_directories_and_skips_selected_descendants() {
         let root = std::env::temp_dir().join(format!(
-            "termflow-move-{}-{}",
+            "krosna-move-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1542,7 +1542,7 @@ mod tests {
     #[test]
     fn move_entries_rejects_current_directory_and_descendant_destinations() {
         let root = std::env::temp_dir().join(format!(
-            "termflow-move-invalid-{}-{}",
+            "krosna-move-invalid-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1633,7 +1633,7 @@ mod tests {
     #[test]
     fn read_project_office_preview_returns_raw_bytes() {
         let directory =
-            std::env::temp_dir().join(format!("termflow-office-read-{}", std::process::id()));
+            std::env::temp_dir().join(format!("krosna-office-read-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let document_path = directory.join("sample.docx");
         let expected = b"PK\x03\x04minimal ooxml fixture";
@@ -1654,7 +1654,7 @@ mod tests {
     #[test]
     fn read_project_pdf_returns_an_optimized_raw_response() {
         let directory =
-            std::env::temp_dir().join(format!("termflow-pdf-read-{}", std::process::id()));
+            std::env::temp_dir().join(format!("krosna-pdf-read-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let pdf_path = directory.join("sample.pdf");
         let expected = b"%PDF-1.7\nminimal test payload";

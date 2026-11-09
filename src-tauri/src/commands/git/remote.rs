@@ -132,7 +132,7 @@ fn save_remote(project_path: &str, name: &str, url: &str, update: bool) -> Resul
         // 配置标记跨窗口和应用重启保留，只有成功获取新远程后才能恢复同步。
         repo.config()
             .map_err(|e| e.to_string())?
-            .set_bool(&format!("remote.{}.termflowNeedsFetch", name), true)
+            .set_bool(&format!("remote.{}.krosnaNeedsFetch", name), true)
             .map_err(|e| e.to_string())?;
         repo.remote_set_url(&name, &url)
             .map_err(|e| e.to_string())?;
@@ -166,7 +166,7 @@ pub(super) fn remote_requires_fetch(
         .filter(|n| name.is_none_or(|name| name == *n))
         .any(|n| {
             config
-                .get_bool(&format!("remote.{}.termflowNeedsFetch", n))
+                .get_bool(&format!("remote.{}.krosnaNeedsFetch", n))
                 .unwrap_or(false)
         }))
 }
@@ -180,7 +180,7 @@ fn mark_fetched(project_path: &str, remote_name: Option<&str>) -> Result<(), Str
         .flatten()
         .filter(|n| remote_name.is_none_or(|name| name == *n))
     {
-        let key = format!("remote.{}.termflowNeedsFetch", name);
+        let key = format!("remote.{}.krosnaNeedsFetch", name);
         if config.get_bool(&key).unwrap_or(false) {
             config.set_bool(&key, false).map_err(|e| e.to_string())?;
         }
@@ -597,7 +597,7 @@ fn pull_with_stash_sync(
             "push",
             "--include-untracked",
             "--message",
-            "Termflow safe pull",
+            "Krosna safe pull",
         ],
         "本地修改已安全保存",
         "保存本地修改失败",
@@ -909,8 +909,8 @@ mod tests {
     }
 
     fn configure_identity(path: &Path) {
-        run_git(path, &["config", "user.name", "Termflow Test"]);
-        run_git(path, &["config", "user.email", "termflow@example.com"]);
+        run_git(path, &["config", "user.name", "Krosna Test"]);
+        run_git(path, &["config", "user.email", "krosna@example.com"]);
     }
 
     fn create_remote_clones() -> (TempDir, PathBuf, PathBuf) {

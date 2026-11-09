@@ -1,5 +1,5 @@
 [package]
-name = "termflow-terminal-eval"
+name = "krosna-terminal-eval"
 version = "0.1.0"
 edition = "2021"
 publish = false

@@ -58,7 +58,7 @@ function formatBytes(value: number): string {
 const BYTES_PER_GIB = 1024 ** 3;
 
 function selectedCacheRoot(directory: string): string {
-  return `${directory.replace(/[\\/]+$/, "")}/Termflow Search Index`;
+  return `${directory.replace(/[\\/]+$/, "")}/Krosna Search Index`;
 }
 
 export function SearchIndexPage() {

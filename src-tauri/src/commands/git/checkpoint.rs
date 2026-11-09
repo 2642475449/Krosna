@@ -234,7 +234,7 @@ fn checkpoint_root_before_deadline(
     deadline: Option<Instant>,
 ) -> Result<PathBuf, String> {
     Ok(git_common_dir_before_deadline(project_path, deadline)?
-        .join("termflow")
+        .join("krosna")
         .join("checkpoints"))
 }
 
@@ -295,7 +295,7 @@ fn save_turn(turn: &AgentTurnReview) -> Result<(), String> {
 
 fn delete_turn_refs(project_path: &str, session_id: &str, turn_id: &str) -> Result<(), String> {
     let prefix = format!(
-        "refs/termflow/checkpoints/{}/{turn_id}/",
+        "refs/krosna/checkpoints/{}/{turn_id}/",
         hash_component(session_id)
     );
     let refs = run_git(
@@ -377,7 +377,7 @@ fn snapshot_ref(session_id: &str, turn_id: &str, phase: &str) -> String {
         })
         .collect::<String>();
     format!(
-        "refs/termflow/checkpoints/{}/{turn_id}/{safe_phase}",
+        "refs/krosna/checkpoints/{}/{turn_id}/{safe_phase}",
         hash_component(session_id)
     )
 }
@@ -430,10 +430,10 @@ fn create_snapshot_before_deadline(
             .args(args)
             .current_dir(&worktree)
             .env("GIT_INDEX_FILE", &index_path)
-            .env("GIT_AUTHOR_NAME", "Termflow Checkpoint")
-            .env("GIT_AUTHOR_EMAIL", "checkpoint@termflow.local")
-            .env("GIT_COMMITTER_NAME", "Termflow Checkpoint")
-            .env("GIT_COMMITTER_EMAIL", "checkpoint@termflow.local");
+            .env("GIT_AUTHOR_NAME", "Krosna Checkpoint")
+            .env("GIT_AUTHOR_EMAIL", "checkpoint@krosna.local")
+            .env("GIT_COMMITTER_NAME", "Krosna Checkpoint")
+            .env("GIT_COMMITTER_EMAIL", "checkpoint@krosna.local");
         let output = command_output_before_deadline(command, deadline)?;
         if !output.status.success() {
             return Err(command_error(&output, "Git checkpoint command failed"));
@@ -449,14 +449,14 @@ fn create_snapshot_before_deadline(
             run_with_index(&["read-tree", "--empty"])?;
         }
         // This intentionally respects .gitignore. Ignored caches and secrets must not be
-        // copied into Termflow-owned Git objects by default. Claude's nested worktrees are
+        // copied into Krosna-owned Git objects by default. Claude's nested worktrees are
         // runtime state rather than user-authored changes, so keep them out of checkpoints
         // without modifying the user's ignore configuration.
         let mut add_args = vec!["add", "-A", "--"];
         add_args.extend_from_slice(CHECKPOINT_ADD_PATHS);
         run_with_index(&add_args)?;
         let tree_oid = run_with_index(&["write-tree"])?;
-        let message = format!("Termflow checkpoint {turn_id} {phase}");
+        let message = format!("Krosna checkpoint {turn_id} {phase}");
         let mut owned_args = vec!["commit-tree".to_string(), tree_oid.clone()];
         if let Some(head) = head {
             owned_args.push("-p".to_string());
@@ -1391,7 +1391,7 @@ mod tests {
 
     fn temp_repo(name: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "termflow-checkpoint-{name}-{}-{}",
+            "krosna-checkpoint-{name}-{}-{}",
             std::process::id(),
             TURN_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));

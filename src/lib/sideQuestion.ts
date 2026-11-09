@@ -219,7 +219,7 @@ export function buildResourceSideQuestionPrompt(input: {
 
   return [
     `工作目录：${input.projectPath}`,
-    "以下是用户在 Termflow 文件浏览器中明确选择的项目资源。请根据问题按需读取；对于目录，不要无关地递归读取全部内容。",
+    "以下是用户在 Krosna 文件浏览器中明确选择的项目资源。请根据问题按需读取；对于目录，不要无关地递归读取全部内容。",
     "<project_resources>",
     serializedResources,
     "</project_resources>",

@@ -570,8 +570,8 @@ mod tests {
 
     #[test]
     fn validates_clone_directory_names() {
-        assert_eq!(validate_directory_name("termflow").unwrap(), "termflow");
-        assert!(validate_directory_name("../termflow").is_err());
+        assert_eq!(validate_directory_name("krosna").unwrap(), "krosna");
+        assert!(validate_directory_name("../krosna").is_err());
         assert!(validate_directory_name("term:flow").is_err());
         assert!(validate_directory_name("CON").is_err());
         assert!(validate_directory_name("repo.").is_err());

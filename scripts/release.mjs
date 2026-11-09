@@ -66,13 +66,13 @@ await replaceVersion(
 );
 await replaceVersion(
   cargoLockPath,
-  /(\[\[package\]\]\r?\nname = "termflow"\r?\nversion = ")[^"]+("\r?\n)/,
+  /(\[\[package\]\]\r?\nname = "krosna"\r?\nversion = ")[^"]+("\r?\n)/,
   "Cargo.lock",
 );
 
 git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"]);
 git(["commit", "-m", `release: prepare ${tag}`]);
-git(["tag", "-a", tag, "-m", `Termflow ${tag}`]);
+git(["tag", "-a", tag, "-m", `Krosna ${tag}`]);
 git(["push", "--atomic", "origin", "HEAD", tag]);
 
 console.log(`\n${tag} pushed. GitHub Actions is building and publishing the release.`);

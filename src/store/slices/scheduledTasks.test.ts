@@ -97,7 +97,7 @@ it("refreshes after a native scheduled-task change event", async () => {
   const stop = startScheduledTaskSync();
   await vi.waitFor(() => expect(listen).toHaveBeenCalledOnce());
   const handler = vi.mocked(listen).mock.calls[0][1];
-  handler({ event: "termflow:scheduled-tasks-changed", id: 1, payload: null });
+  handler({ event: "krosna:scheduled-tasks-changed", id: 1, payload: null });
   await vi.waitFor(() => expect(listScheduledTasks).toHaveBeenCalled());
 
   stop();

@@ -4,8 +4,8 @@ import { PROJECT_ICON_COLORS } from "./projectIcons";
 import { getContrastRatio, parseHexColor, readThemeVariables } from "./colorContrast";
 import themeCss from "@/styles/themes.css?raw";
 
-it("retains the old six-color assignment and distributes new projects across twelve colors", () => {
-  expect(getProjectIconColor("E:\\7.project\\test\\Termflow", 6)).toBe(0);
+it("uses a stable path hash and distributes projects across twelve colors", () => {
+  expect(getProjectIconColor("E:\\7.project\\test\\Krosna", 6)).toBe(2);
   const colors = new Set(Array.from({ length: 100 }, (_, n) => getProjectIconColor(`/project/${n}`)));
   expect(colors.size).toBe(12);
   expect(getProjectIconColor("/same")).toBe(getProjectIconColor("/same"));

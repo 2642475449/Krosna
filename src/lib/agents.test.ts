@@ -153,7 +153,7 @@ describe("getAgentStartupCommand", () => {
     expect(getAgentStartupCommand("codex", undefined, "019f1e67-8ab6-7b02-b0c2-275ca68979fa"))
       .toBe('codex --no-daemon resume "019f1e67-8ab6-7b02-b0c2-275ca68979fa"');
     expect(getAgentStartupCommand("codex", undefined, null, "Explain this"))
-      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; codex --no-daemon $__termflow_prompt");
+      .toBe("$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; codex --no-daemon $__krosna_prompt");
     expect(getAgentStartupCommand("codex", undefined, null, null, {
       yolo: true, approvalMode: "untrusted", sandboxMode: "workspace-write", effort: "inherit",
     })).toBe("codex --no-daemon --dangerously-bypass-approvals-and-sandbox");
@@ -171,17 +171,17 @@ describe("getAgentStartupCommand", () => {
     expect(getAgentStartupCommand("pi")).toBe("pi");
   });
 
-  it("passes quick-command prompts without reusing the Termflow session id", () => {
+  it("passes quick-command prompts without reusing the Krosna session id", () => {
     expect(getAgentStartupCommand("codex", undefined, null, "/release-publish"))
-      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; codex $__termflow_prompt");
+      .toBe("$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; codex $__krosna_prompt");
     expect(getAgentStartupCommand("antigravity", undefined, null, "/release-publish"))
-      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; agy -i $__termflow_prompt");
+      .toBe("$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; agy -i $__krosna_prompt");
     expect(getAgentStartupCommand("opencode", undefined, null, "/release-publish"))
       .toBe("opencode");
     expect(getAgentStartupCommand("qoder", undefined, null, "/release-publish"))
-      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; qoderclicn --prompt-interactive $__termflow_prompt");
+      .toBe("$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; qoderclicn --prompt-interactive $__krosna_prompt");
     expect(getAgentStartupCommand("pi", undefined, null, "/release-publish"))
-      .toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; pi -- $__termflow_prompt");
+      .toBe("$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; pi -- $__krosna_prompt");
   });
 
   it("defers an OpenCode side question to the authenticated session API", () => {
@@ -289,7 +289,7 @@ describe("getAgentStartupCommand", () => {
         "first\nsecond; echo unsafe",
       ),
     ).toBe(
-      '$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; pi --session-id "019f1e67-8ab6-7b02-b0c2-275ca68979fa" -- $__termflow_prompt',
+      '$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; pi --session-id "019f1e67-8ab6-7b02-b0c2-275ca68979fa" -- $__krosna_prompt',
     );
   });
 
@@ -301,7 +301,7 @@ describe("getAgentStartupCommand", () => {
         mode: "plan",
       }),
     ).toBe(
-      "$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; agy --dangerously-skip-permissions --sandbox --mode plan -i $__termflow_prompt",
+      "$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; agy --dangerously-skip-permissions --sandbox --mode plan -i $__krosna_prompt",
     );
   });
 
@@ -367,14 +367,14 @@ describe("getAgentStartupCommand", () => {
         sandboxMode: "read-only",
         effort: "inherit",
       }),
-    ).toBe("$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; codex --ask-for-approval never --sandbox read-only $__termflow_prompt");
+    ).toBe("$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; codex --ask-for-approval never --sandbox read-only $__krosna_prompt");
   });
 
   it("never embeds multiline prompt text in the PowerShell command", () => {
     const command = getAgentStartupCommand("codex", undefined, null, "first\nsecond; echo unsafe");
     expect(command).not.toContain("first");
     expect(command).not.toContain("\n");
-    expect(command).toContain("$env:TERMFLOW_INITIAL_PROMPT");
+    expect(command).toContain("$env:KROSNA_INITIAL_PROMPT");
   });
 });
 

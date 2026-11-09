@@ -9,7 +9,7 @@ use super::utils::{
     open_repo, resolve_worktree_file_path, with_git_repository_access, GitRepositoryAccess,
 };
 
-const BINARY_CONTENT_ERROR: &str = "__TERMFLOW_BINARY_GIT_CONTENT__";
+const BINARY_CONTENT_ERROR: &str = "__KROSNA_BINARY_GIT_CONTENT__";
 
 /// Read file content from HEAD.
 fn read_head_content(repo: &git2::Repository, file_path: &str) -> Result<Option<String>, String> {
@@ -816,7 +816,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "termflow-git-binary-diff-{label}-{}-{suffix}",
+            "krosna-git-binary-diff-{label}-{}-{suffix}",
             std::process::id()
         ));
         fs::create_dir_all(&path).unwrap();
@@ -838,7 +838,7 @@ mod tests {
         let mut index = repo.index().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
-        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         repo.commit(Some("HEAD"), &signature, &signature, "binary", &tree, &[])
             .unwrap();
     }
@@ -907,7 +907,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let parent = std::env::temp_dir().join(format!(
-            "termflow-git-diff-path-safety-{}-{suffix}",
+            "krosna-git-diff-path-safety-{}-{suffix}",
             std::process::id()
         ));
         let root = parent.join("project");

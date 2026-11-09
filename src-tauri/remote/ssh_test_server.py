@@ -35,7 +35,7 @@ class TestServer(paramiko.ServerInterface):
         return "password"
 
     def check_auth_password(self, username, password):
-        accepted = username == "tester" and password == "termflow-test-password"
+        accepted = username == "tester" and password == "krosna-test-password"
         print("test password accepted" if accepted else "test password rejected", flush=True)
         return paramiko.AUTH_SUCCESSFUL if accepted else paramiko.AUTH_FAILED
 

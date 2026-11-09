@@ -54,7 +54,7 @@ it("cleans up listeners that finish registering after unmount", async () => {
 
 it("sends close requests to the target project window", async () => {
   await requestTaskMonitorTabClose({ windowLabel: "project-b", tabId: "session-1" });
-  expect(emit).toHaveBeenCalledWith("termflow-task-monitor-close-request", {
+  expect(emit).toHaveBeenCalledWith("krosna-task-monitor-close-request", {
     windowLabel: "project-b", tabId: "session-1",
   });
 });
@@ -63,7 +63,7 @@ it("only opens the close dialog for the matching project and window", async () =
   vi.mocked(listen).mockResolvedValue(vi.fn());
   const stop = startTaskMonitorSync();
   await vi.waitFor(() => expect(emit).toHaveBeenCalled());
-  const handler = vi.mocked(listen).mock.calls.find(([event]) => event === "termflow-task-monitor-project-close-request")![1];
+  const handler = vi.mocked(listen).mock.calls.find(([event]) => event === "krosna-task-monitor-project-close-request")![1];
   const send = (windowLabel: string, projectPath: string) => handler({ event: "close", id: 1, payload: { windowLabel, projectPath } });
   send("project-b", "/a");
   send("project-a", "/old");

@@ -249,7 +249,7 @@ export async function getClaudeCliInfo(): Promise<ClaudeCliInfo> {
   return await invoke("get_claude_cli_info");
 }
 
-const AGENT_CLI_CACHE_KEY = "termflow.agent-cli-inspection.v2";
+const AGENT_CLI_CACHE_KEY = "krosna.agent-cli-inspection.v2";
 const AGENT_CLI_INSPECTION_MAX_AGE_MS = 5 * 60 * 60 * 1000;
 
 export async function checkAgentLatestVersion(agentId: AiAgentId): Promise<string> {
@@ -418,7 +418,7 @@ export async function getClaudeEffortInfo(
 }
 
 const AGENT_USAGE_OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
-export const AGENT_USAGE_HISTORY_CHANGED_EVENT = "termflow:agent-usage-history-changed";
+export const AGENT_USAGE_HISTORY_CHANGED_EVENT = "krosna:agent-usage-history-changed";
 
 let agentUsageOverviewCache:
   | { value: AgentUsageOverview; updatedAt: number }
@@ -1564,11 +1564,11 @@ export async function exitBackgroundApplication(): Promise<void> {
 }
 
 export async function onWorkspaceCloseRequested(handler: (exit: boolean) => void): Promise<UnlistenFn> {
-  return getCurrentWindow().listen<boolean>("termflow:workspace-close-requested", (event) => handler(event.payload));
+  return getCurrentWindow().listen<boolean>("krosna:workspace-close-requested", (event) => handler(event.payload));
 }
 
 export async function onBackgroundSettingsChanged(handler: (settings: BackgroundSettings) => void): Promise<UnlistenFn> {
-  return listen<BackgroundSettings>("termflow:background-settings-changed", (event) => handler(event.payload));
+  return listen<BackgroundSettings>("krosna:background-settings-changed", (event) => handler(event.payload));
 }
 
 export interface ClipboardCacheStatus {

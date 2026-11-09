@@ -93,7 +93,7 @@ mod tests {
         std::fs::write(&index, concat!(
             "{\"id\":\"one\",\"thread_name\":\"旧名称\"}\n",
             "{\"id\":\"other\",\"thread_name\":\"其他会话\"}\n",
-            "{\"id\":\"one\",\"thread_name\":\"  修复 Codex / Termflow 会话名称同步：保留完整原生标题与标点  \"}\n",
+            "{\"id\":\"one\",\"thread_name\":\"  修复 Codex / Krosna 会话名称同步：保留完整原生标题与标点  \"}\n",
             "{\"id\":\"one\",\"thread_name\":\"  \"}\n",
             "not json\n{\"id\":\"one\""
         )).expect("write index");
@@ -101,7 +101,7 @@ mod tests {
         assert_eq!(titles.len(), 1);
         assert_eq!(
             titles.get("one").map(String::as_str),
-            Some("修复 Codex / Termflow 会话名称同步：保留完整原生标题与标点")
+            Some("修复 Codex / Krosna 会话名称同步：保留完整原生标题与标点")
         );
     }
 

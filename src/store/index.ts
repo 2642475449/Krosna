@@ -934,14 +934,15 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
             };
           }
           const path = state.currentProject.path;
+          const observed = typeof document === "undefined" || (document.visibilityState === "visible" && document.hasFocus());
           const sessions = id
             ? state.sessions.map((session) =>
-                session.id === id ? { ...session, unreadCount: 0 } : session
+                observed && session.id === id ? { ...session, unreadCount: 0 } : session
               )
             : state.sessions;
           const sessionEvents = id
             ? state.sessionEvents.map((event) =>
-                event.sessionId === id ? { ...event, read: true } : event
+                observed && event.sessionId === id ? { ...event, read: true } : event
               )
             : state.sessionEvents;
           const unreadTotal = sessions.reduce((acc, session) => acc + (session.unreadCount ?? 0), 0);
@@ -952,11 +953,11 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
             sessionEvents,
             projectAttentionItems: {
               ...state.projectAttentionItems,
-              [path]: markAttentionForSessionViewed(
+              [path]: observed ? markAttentionForSessionViewed(
                 state.projectAttentionItems[path] ?? [],
                 id ?? "",
                 Date.now()
-              ),
+              ) : state.projectAttentionItems[path] ?? [],
             },
             unreadTotal,
           };
@@ -982,11 +983,12 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           }
 
           const path = state.currentProject.path;
+          const observed = typeof document === "undefined" || (document.visibilityState === "visible" && document.hasFocus());
           const sessions = state.sessions.map((session) =>
-            session.id === tabId ? { ...session, unreadCount: 0 } : session
+            observed && session.id === tabId ? { ...session, unreadCount: 0 } : session
           );
           const sessionEvents = state.sessionEvents.map((event) =>
-            event.sessionId === tabId ? { ...event, read: true } : event
+            observed && event.sessionId === tabId ? { ...event, read: true } : event
           );
           const unreadTotal = sessions.reduce((acc, session) => acc + (session.unreadCount ?? 0), 0);
           const currentWorkspace = state.projectWorkspaces[path] || createDefaultWorkspace();
@@ -996,11 +998,11 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
             sessionEvents,
             projectAttentionItems: {
               ...state.projectAttentionItems,
-              [path]: markAttentionForSessionViewed(
+              [path]: observed ? markAttentionForSessionViewed(
                 state.projectAttentionItems[path] ?? [],
                 tabId,
                 Date.now()
-              ),
+              ) : state.projectAttentionItems[path] ?? [],
             },
             unreadTotal,
           };
@@ -1901,7 +1903,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
 function createPersistOptions(storage?: StateStorage) {
   return {
-    name: "termflow-settings",
+    name: "krosna-settings",
     version: 5,
     storage: createJSONStorage(() => storage ?? getDefaultStateStorage()),
     migrate: (persistedState: unknown) =>

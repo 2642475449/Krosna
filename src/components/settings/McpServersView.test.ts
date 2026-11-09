@@ -12,7 +12,7 @@ function renderView(overrides: Partial<ComponentProps<typeof McpServersView>> = 
     scope: "workspace",
     servers: [],
     filteredServers: [],
-    projectName: "Termflow",
+    projectName: "Krosna",
     search: "",
     loading: false,
     refreshing: false,

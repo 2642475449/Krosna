@@ -1513,7 +1513,7 @@ function AppLayout() {
         normalized.sessionName ||
         (isTerminalCommandCompletion
           ? i18n.t("settings.notifications.terminalCompletion.defaultSession")
-          : "Termflow");
+          : "Krosna");
 
       if (isTerminalCommandCompletion) {
         const suppressionReason = getTerminalCompletionIngestSuppressionReason({
@@ -1785,7 +1785,7 @@ function AppLayout() {
         const agentLabel =
           session?.agentId && isAiAgentId(session.agentId)
             ? getAgentDisplayName(session.agentId)
-            : normalized.source || "Termflow";
+            : normalized.source || "Krosna";
         const fields = [
           { label: i18n.t("settings.notifications.feishu.card.project"), value: projectFolder ?? normalized.projectPath },
           { label: i18n.t("settings.notifications.feishu.card.task"), value: sessionLabel },

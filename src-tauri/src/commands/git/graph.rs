@@ -442,9 +442,9 @@ mod tests {
 
     #[test]
     fn graph_file_diff_returns_preview_data_for_committed_images() {
-        let repo_path = test_repo_path("termflow-graph-image-preview");
+        let repo_path = test_repo_path("krosna-graph-image-preview");
         let repo = Repository::init(&repo_path).unwrap();
-        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         commit_binary_file(
             &repo,
             &signature,
@@ -485,9 +485,9 @@ mod tests {
 
     #[test]
     fn graph_history_includes_remote_tracking_commits() {
-        let repo_path = test_repo_path("termflow-graph-remote");
+        let repo_path = test_repo_path("krosna-graph-remote");
         let repo = Repository::init(&repo_path).unwrap();
-        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         let tree_oid = repo.index().unwrap().write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
         let local_oid = repo
@@ -536,9 +536,9 @@ mod tests {
 
     #[test]
     fn graph_history_can_be_filtered_to_one_file() {
-        let repo_path = test_repo_path("termflow-graph-file-history");
+        let repo_path = test_repo_path("krosna-graph-file-history");
         let repo = Repository::init(&repo_path).unwrap();
-        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         let target_created = commit_file(&repo, &signature, "target.txt", "one", "create target");
         let unrelated = commit_file(&repo, &signature, "other.txt", "other", "change other");
         let target_updated = commit_file(&repo, &signature, "target.txt", "two", "update target");

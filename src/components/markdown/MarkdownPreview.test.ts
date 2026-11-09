@@ -43,7 +43,7 @@ it("renders a saved scheduled-task report as a table, list and code block", () =
 
 describe("isLikelyMarkdownPath", () => {
   it("recognizes absolute and relative project paths", () => {
-    expect(isLikelyMarkdownPath(String.raw`D:\3.project\Termflow\src\locales`)).toBe(true);
+    expect(isLikelyMarkdownPath(String.raw`D:\3.project\Krosna\src\locales`)).toBe(true);
     expect(isLikelyMarkdownPath("src/components/")).toBe(true);
     expect(isLikelyMarkdownPath("../package.json")).toBe(true);
     expect(isLikelyMarkdownPath(".")).toBe(true);
@@ -75,10 +75,10 @@ describe("isLikelyMarkdownPath", () => {
 describe("Markdown rendering", () => {
   it("renders common inline emphasis", () => {
     const markup = renderToStaticMarkup(
-      renderInlineMarkdown("**Termflow** is *fast* and ~~old~~", { keyPrefix: "inline" }),
+      renderInlineMarkdown("**Krosna** is *fast* and ~~old~~", { keyPrefix: "inline" }),
     );
 
-    expect(markup).toContain("<strong><span>Termflow</span></strong>");
+    expect(markup).toContain("<strong><span>Krosna</span></strong>");
     expect(markup).toContain("<em>fast</em>");
     expect(markup).toContain("<del");
   });
@@ -240,8 +240,8 @@ describe("Markdown rendering", () => {
       createElement(MarkdownPreview, {
         content: [
           '<h1 align="center">',
-          '  <img src="public/logo.png" width="56" alt="Termflow Logo">',
-          '  Termflow',
+          '  <img src="public/logo.png" width="56" alt="Krosna Logo">',
+          '  Krosna',
           '</h1>',
           '',
           '<p align="center">',
@@ -249,12 +249,12 @@ describe("Markdown rendering", () => {
           '</p>',
         ].join("\n"),
         emptyText: "empty",
-        filePath: "C:/projects/termflow/README.md",
-        projectPath: "C:/projects/termflow",
+        filePath: "C:/projects/krosna/README.md",
+        projectPath: "C:/projects/krosna",
       }),
     );
 
-    expect(markup).toMatch(/<h1[^>]*>[\s\S]*Termflow[\s\S]*<\/h1>/);
+    expect(markup).toMatch(/<h1[^>]*>[\s\S]*Krosna[\s\S]*<\/h1>/);
     expect(markup).toContain("<a href=");
     expect(markup).not.toContain("&lt;a href=");
   });
@@ -269,8 +269,8 @@ describe("Markdown rendering", () => {
           '</p>',
         ].join("\n"),
         emptyText: "empty",
-        filePath: "C:/projects/termflow/README.md",
-        projectPath: "C:/projects/termflow",
+        filePath: "C:/projects/krosna/README.md",
+        projectPath: "C:/projects/krosna",
       }),
     );
 
@@ -287,8 +287,8 @@ describe("Markdown rendering", () => {
           '| 文件协作 | 说明<br><br><a href="demo.mp4"><img src="demo.png" alt="演示" width="480"></a> |',
         ].join("\n"),
         emptyText: "empty",
-        filePath: "C:/projects/termflow/README.md",
-        projectPath: "C:/projects/termflow",
+        filePath: "C:/projects/krosna/README.md",
+        projectPath: "C:/projects/krosna",
       }),
     );
 

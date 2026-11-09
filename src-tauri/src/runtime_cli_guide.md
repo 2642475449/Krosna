@@ -1,23 +1,23 @@
-# Termflow Runtime CLI v1
+# Krosna Runtime CLI v1
 
-Termflow 桌面应用自带 CLI。它连接运行中的本机应用，支持查询项目、终端及日志。
-无需 Node.js、Python、MCP 或额外安装包。`termflow --help` 提供完整命令。
+Krosna 桌面应用自带 CLI。它连接运行中的本机应用，支持查询项目、终端及日志。
+无需 Node.js、Python、MCP 或额外安装包。`krosna --help` 提供完整命令。
 
-## 在 Termflow 终端中
+## 在 Krosna 终端中
 
 ```powershell
-termflow status --json
-termflow project list --json
-termflow terminal list --json
-termflow terminal list --project 'E:\projects\app' --json
-termflow terminal read --terminal '<id>' --tail 200 --json
-termflow terminal read --terminal '<id>' --cursor '<nextCursor>' --json
+krosna status --json
+krosna project list --json
+krosna terminal list --json
+krosna terminal list --project 'E:\projects\app' --json
+krosna terminal read --terminal '<id>' --tail 200 --json
+krosna terminal read --terminal '<id>' --cursor '<nextCursor>' --json
 ```
 
-若 PATH 被 Shell 配置覆盖，PowerShell 使用 `& $env:TERMFLOW_CLI status --json`；
-POSIX Shell 使用 `"$TERMFLOW_CLI" status --json`。
-环境变量 `TERMFLOW_CLI_GUIDE` 指向本指南，`TERMFLOW_RUNTIME_FILE` 指向连接描述文件。
-也可直接调用应用：`termflow.exe cli status --json`。
+若 PATH 被 Shell 配置覆盖，PowerShell 使用 `& $env:KROSNA_CLI status --json`；
+POSIX Shell 使用 `"$KROSNA_CLI" status --json`。
+环境变量 `KROSNA_CLI_GUIDE` 指向本指南，`KROSNA_RUNTIME_FILE` 指向连接描述文件。
+也可直接调用应用：`krosna.exe cli status --json`。
 
 ## AI 如何自动发现
 
@@ -29,30 +29,30 @@ OpenCode 既有插件入口提供任务信息和调用说明，由 AI 使用 CLI
 原生扩展被用户停用时遵循该选择；Qoder、Antigravity 目前通过技能发现能力。
 集成不启动模型，不新增守护进程；日志读取发生在收到请求时，不是后台持续监控。
 
-新版本启动时会自动生成 CLI 和内置的 `termflow-runtime` 技能，并为已配置的智能体安装该技能。
+新版本启动时会自动生成 CLI 和内置的 `krosna-runtime` 技能，并为已配置的智能体安装该技能。
 创建或恢复 AI 会话时会再次检查安装，确保安装发生在智能体进程启动之前。
 技能通过各智能体原生技能目录被发现，说明何时读取运行日志、如何选择目标运行、如何分页和获取新增输出。
-例如 Codex/Pi 共用 `~/.agents/skills/termflow-runtime/SKILL.md`，Claude 使用其配置目录下的
-`skills/termflow-runtime/SKILL.md`；其他智能体沿用 Termflow 技能管理器的目录规则。
+例如 Codex/Pi 共用 `~/.agents/skills/krosna-runtime/SKILL.md`，Claude 使用其配置目录下的
+`skills/krosna-runtime/SKILL.md`；其他智能体沿用 Krosna 技能管理器的目录规则。
 无需在项目中修改 AGENTS.md 或 CLAUDE.md，也无需另行安装 MCP。
 
 应用只自动更新内容仍与上次安装哈希一致的自有技能；同名用户技能、用户修改和
-`skills-disabled/termflow-runtime` 中的停用记录都会保留。`termflow status --json` 的
+`skills-disabled/krosna-runtime` 中的停用记录都会保留。`krosna status --json` 的
 `data.agentSkills` 可查看各智能体的 installed、not_installed、disabled、modified、conflict 或 unavailable 状态。
-应用数据目录中的内置副本还通过 `TERMFLOW_CLI_SKILL` 暴露路径，供显式读取说明时使用。
+应用数据目录中的内置副本还通过 `KROSNA_CLI_SKILL` 暴露路径，供显式读取说明时使用。
 技能保留完整分页及排障说明；若已有 AI 会话没有加载新版扩展或环境，重新创建或恢复会话。
 
 ## 在外部脚本或服务中
 
 启动桌面应用后，CLI 启动脚本位于当前用户本地数据目录：
 
-- Windows：`%LOCALAPPDATA%\com.termflow.desktop\cli\termflow.cmd`
-- Linux：`$XDG_DATA_HOME/com.termflow.desktop/cli/termflow`，默认 `~/.local/share/com.termflow.desktop/cli/termflow`
-- macOS：`~/Library/Application Support/com.termflow.desktop/cli/termflow`
+- Windows：`%LOCALAPPDATA%\com.krosna.desktop\cli\krosna.cmd`
+- Linux：`$XDG_DATA_HOME/com.krosna.desktop/cli/krosna`，默认 `~/.local/share/com.krosna.desktop/cli/krosna`
+- macOS：`~/Library/Application Support/com.krosna.desktop/cli/krosna`
 
 应用只为自己创建的终端添加 PATH，不修改系统或用户的永久 PATH。
 外部脚本可使用绝对路径；`<应用可执行文件> cli path --json` 可查询准确路径。
-`<应用可执行文件> cli install --json` 可刷新启动脚本，既有脚本不属于 Termflow 时会拒绝覆盖。
+`<应用可执行文件> cli install --json` 可刷新启动脚本，既有脚本不属于 Krosna 时会拒绝覆盖。
 启动脚本随桌面应用更新，不需要另行分发一个原生可执行文件。
 
 ## AI 排障流程
@@ -102,7 +102,7 @@ CLI 复用应用已有的回环 HTTP 服务，通过 `POST /api/v1/runtime` 发�
 选择顺序为下方选中的 runner、当前项目最近的 runner、最近的普通终端；不包含智能体会话正文。
 运行时连接描述文件是本地数据目录下的 `runtime-v1.json`，含 `protocolVersion`、
 `port`、`token`、`pid`。服务必须位于 `127.0.0.1`，请求头必须提供
-`x-termflow-token`。不要把描述文件、令牌或原始日志提交到版本库。
+`x-krosna-token`。不要把描述文件、令牌或原始日志提交到版本库。
 服务拒绝带 Origin 的浏览器请求，限制请求和日志响应大小，不开放 CORS。
 CLI 不使用代理、不跟随重定向，连接失败不会自动启动桌面窗口。
 描述文件可能在退出后留存，只有成功调用 `status` 才能确认运行时在线。

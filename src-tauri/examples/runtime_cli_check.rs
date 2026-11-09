@@ -3,5 +3,5 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 fn main() {
-    std::process::exit(termflow_lib::runtime_cli::try_run().unwrap_or(2));
+    std::process::exit(krosna_lib::runtime_cli::try_run().unwrap_or(2));
 }

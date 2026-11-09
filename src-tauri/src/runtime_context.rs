@@ -129,7 +129,7 @@ mod tests {
     use crate::runtime_output::RuntimeTerminalMetadata;
 
     #[test]
-    fn automatically_fetches_logs_for_natural_requests_and_stays_inert_outside_termflow() {
+    fn automatically_fetches_logs_for_natural_requests_and_stays_inert_outside_krosna() {
         check_native_integration("helper", "");
     }
 

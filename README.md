@@ -1,7 +1,9 @@
 <h1 align="center">
-  <img src="public/logo.png" width="56" alt="Termflow Logo" align="absmiddle">
-  Termflow
+  <img src="public/logo.png" width="56" alt="Krosna Logo" align="absmiddle">
+  Krosna
 </h1>
+
+> 项目已由 **Termflow** 更名为 **Krosna**。新版使用 GitHub Releases 自动更新；旧更新域名仅作为兼容入口。首次启动会复制旧版应用数据、迁移前端缓存键和旧项目配置，保留原始数据供回退。升级前请关闭旧版应用；本地项目目录更名后，请从新路径重新打开项目。
 
 <p align="center">
   简体中文 | <a href="README.en-US.md">English</a> | <a href="README.ja-JP.md">日本語</a>
@@ -22,12 +24,12 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/termflow-overview.png" alt="Termflow 界面预览" width="100%">
+  <img src=".github/assets/krosna-overview.png" alt="Krosna 界面预览" width="100%">
 </p>
 
 ## 支持的智能体
 
-Termflow 原生支持以下 CLI 智能体：
+Krosna 原生支持以下 CLI 智能体：
 
 <p align="center">
   <code><img src="public/agents/claude.svg" width="16" alt="" align="absmiddle"> Claude Code</code>
@@ -42,7 +44,7 @@ Termflow 原生支持以下 CLI 智能体：
 
 ## 简介
 
-**Termflow** 是一款基于 Tauri 2 构建、面向终端的 CLI 智能体工作台。它将多种 CLI 智能体的命令行体验组织到统一的本地图形界面中，让项目、会话、终端与 Git 工作流保持在同一个上下文里。
+**Krosna** 是一款基于 Tauri 2 构建、面向终端的 CLI 智能体工作台。它将多种 CLI 智能体的命令行体验组织到统一的本地图形界面中，让项目、会话、终端与 Git 工作流保持在同一个上下文里。
 
 核心特性：
 - 🤖 **多智能体与多会话**：按项目组织不同智能体的多个会话
@@ -59,13 +61,13 @@ Termflow 原生支持以下 CLI 智能体：
 
 ## 项目快捷命令
 
-项目级快捷命令保存在项目根目录的 `.termflow/quick-commands.json`，终端命令和智能体提示都使用这个文件。首次打开项目时，已有的本机项目命令会自动迁移；全局命令仍保存在本机。
+项目级快捷命令保存在项目根目录的 `.krosna/quick-commands.json`，终端命令和智能体提示都使用这个文件。首次打开项目时，已有的本机项目命令会自动迁移；全局命令仍保存在本机。
 
 将该文件随项目一起复制到其他电脑，或提交到 Git，即可恢复项目快捷命令，无需保持相同的项目路径。终端命令以当前项目目录为工作目录，建议使用相对路径。打开项目或重新聚焦窗口时会读取配置；编辑、删除命令也会更新文件。
 
 ## 项目启动组合
 
-标题栏的“项目启动组合”支持编辑、保存和运行 `.termflow/launchers.json`，一次打开多个普通终端。先选择组合查看目录与命令，再点击运行；打开项目或保存配置不会执行命令。终端使用本机默认 Shell，配置里的命令需与该 Shell 兼容。
+标题栏的“项目启动组合”支持编辑、保存和运行 `.krosna/launchers.json`，一次打开多个普通终端。先选择组合查看目录与命令，再点击运行；打开项目或保存配置不会执行命令。终端使用本机默认 Shell，配置里的命令需与该 Shell 兼容。
 
 ```json
 {
@@ -85,23 +87,23 @@ Termflow 原生支持以下 CLI 智能体：
 
 `directory` 必须是项目内已存在的相对目录，根目录用 `.`；`command` 留空则只打开终端。配置版本为 1，最多 40 个组合，每组 1–12 个终端，组合 ID 必须唯一。运行前会检查整组目录；启动失败时会关闭本次创建的终端，已执行命令的外部效果无法回滚。
 
-`.termflow/quick-commands.json` 与 `.termflow/launchers.json` 可以提交 Git；个人本机文件约定放在 `.termflow/local/` 并加入各项目的 `.gitignore`（本仓库已配置）。标签页与分屏状态继续保存在本机，不提供 `workspaces.json`，也不在这里配置项目默认智能体或智能体启动参数。`AGENTS.md`、`CLAUDE.md` 保留原位置。
+`.krosna/quick-commands.json` 与 `.krosna/launchers.json` 可以提交 Git；个人本机文件约定放在 `.krosna/local/` 并加入各项目的 `.gitignore`（本仓库已配置）。标签页与分屏状态继续保存在本机，不提供 `workspaces.json`，也不在这里配置项目默认智能体或智能体启动参数。`AGENTS.md`、`CLAUDE.md` 保留原位置。
 
 ## 为什么开源
 
-Termflow 最初是为了做一款符合自己使用习惯的应用。在功能与使用体验逐渐完善后，我将它开源，也希望为大家选择工具时提供另一种选择。
+Krosna 最初是为了做一款符合自己使用习惯的应用。在功能与使用体验逐渐完善后，我将它开源，也希望为大家选择工具时提供另一种选择。
 
 ## 核心功能
 
 | 功能说明 | 界面预览 |
 | :--- | :--- |
-| **项目与会话工作区**：按项目目录自动组织不同智能体的会话，快速创建和切换任务，并实时掌握每个会话的运行状态。 | <img src=".github/assets/demos/multi-session-management.gif" alt="Termflow 项目与会话工作区演示" width="240"> |
-| **旁路任务与辅助工作区**：遇到终端报错或文件问题时，可从终端选区发起侧边提问，并在右侧同时查看相关文件或运行独立任务；主会话保持原位，排查完成后随时返回。 | <img src=".github/assets/demos/side-task-workspace.gif" alt="Termflow 旁路任务与辅助工作区演示" width="240"> |
-| **文件与上下文协作**：浏览、搜索和编辑项目文件，预览 Markdown，并将文件从项目树拖放到当前 CLI 输入框，为智能体快速补充上下文。 | <img src=".github/assets/demos/file-context-collaboration.gif" alt="Termflow 文件与上下文协作演示" width="240"> |
-| **Git 变更工作流**：集中完成变更查看、暂存、分支管理、提交、推送、拉取和同步，并可使用 AI 生成提交信息。 | <a href=".github/assets/demos/git-change-workflow.mp4"><img src=".github/assets/termflow-overview.png" alt="Termflow Git 变更工作流" width="240"></a> |
-| **检查点与差异审阅**：自动记录 Agent 回合检查点，集中查看文件摘要和变更差异，并可回到任意检查点。 | <img src=".github/assets/termflow-overview.png" alt="Termflow 检查点与差异审阅" width="240"> |
-| **快捷命令与语音输入**：通过可搜索、可参数化的快捷命令执行常用操作；支持 MiMo 与 DashScope ASR、全局快捷键和录音状态悬浮窗。 | <img src=".github/assets/termflow-overview.png" alt="Termflow 快捷命令与语音输入" width="240"> |
-| **工作状态概览**：汇总会话活动、Token 使用和工作节奏，通过注意力中心与智能通知提示需要处理的任务。 | <img src=".github/assets/demos/work-status-overview.gif" alt="Termflow 工作状态概览演示" width="240"> |
+| **项目与会话工作区**：按项目目录自动组织不同智能体的会话，快速创建和切换任务，并实时掌握每个会话的运行状态。 | <img src=".github/assets/demos/multi-session-management.gif" alt="Krosna 项目与会话工作区演示" width="240"> |
+| **旁路任务与辅助工作区**：遇到终端报错或文件问题时，可从终端选区发起侧边提问，并在右侧同时查看相关文件或运行独立任务；主会话保持原位，排查完成后随时返回。 | <img src=".github/assets/demos/side-task-workspace.gif" alt="Krosna 旁路任务与辅助工作区演示" width="240"> |
+| **文件与上下文协作**：浏览、搜索和编辑项目文件，预览 Markdown，并将文件从项目树拖放到当前 CLI 输入框，为智能体快速补充上下文。 | <img src=".github/assets/demos/file-context-collaboration.gif" alt="Krosna 文件与上下文协作演示" width="240"> |
+| **Git 变更工作流**：集中完成变更查看、暂存、分支管理、提交、推送、拉取和同步，并可使用 AI 生成提交信息。 | <a href=".github/assets/demos/git-change-workflow.mp4"><img src=".github/assets/krosna-overview.png" alt="Krosna Git 变更工作流" width="240"></a> |
+| **检查点与差异审阅**：自动记录 Agent 回合检查点，集中查看文件摘要和变更差异，并可回到任意检查点。 | <img src=".github/assets/krosna-overview.png" alt="Krosna 检查点与差异审阅" width="240"> |
+| **快捷命令与语音输入**：通过可搜索、可参数化的快捷命令执行常用操作；支持 MiMo 与 DashScope ASR、全局快捷键和录音状态悬浮窗。 | <img src=".github/assets/krosna-overview.png" alt="Krosna 快捷命令与语音输入" width="240"> |
+| **工作状态概览**：汇总会话活动、Token 使用和工作节奏，通过注意力中心与智能通知提示需要处理的任务。 | <img src=".github/assets/demos/work-status-overview.gif" alt="Krosna 工作状态概览演示" width="240"> |
 
 其他基础能力包括会话持久化、自定义标题栏与无边框窗口控制、深色/浅色/跟随系统主题，以及简体中文、英文和日语界面。
 
@@ -127,7 +129,7 @@ Termflow 最初是为了做一款符合自己使用习惯的应用。在功能�
 
 ## 致谢
 
-Termflow 使用了以下优秀的开源项目：
+Krosna 使用了以下优秀的开源项目：
 
 - [Tauri](https://tauri.app/) - 跨平台桌面应用框架
 - [React](https://react.dev/) - UI 渲染库

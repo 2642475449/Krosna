@@ -9,7 +9,7 @@ import { useAppStore, type ThemeCategory, type ThemeMode } from "./store";
 
 declare global {
   interface Window {
-    __TERMFLOW_STARTUP_THEME__?: {
+    __KROSNA_STARTUP_THEME__?: {
       lightTheme: ThemeMode;
       darkTheme: ThemeMode;
       themeCategory: ThemeCategory;
@@ -18,7 +18,7 @@ declare global {
   }
 }
 
-const startupTheme = window.__TERMFLOW_STARTUP_THEME__;
+const startupTheme = window.__KROSNA_STARTUP_THEME__;
 if (startupTheme) {
   useAppStore.setState(startupTheme);
 }

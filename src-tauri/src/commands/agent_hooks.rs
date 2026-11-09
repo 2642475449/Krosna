@@ -1,4 +1,5 @@
 use crate::qoder_config::qoder_user_config_root;
+use crate::brand_migration::is_managed_name;
 use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -6,15 +7,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-const MANAGED_SCRIPT_NAME: &str = "termflow-agent-hook.cjs";
-pub(crate) const PI_EXTENSION_SCRIPT_NAME: &str = "termflow-agent-status.js";
-const ANTIGRAVITY_STATUSLINE_SCRIPT_NAME: &str = "termflow-antigravity-statusline.cjs";
-const ANTIGRAVITY_STATUSLINE_MARKER: &str = "termflow-antigravity-statusline.cjs";
+const MANAGED_SCRIPT_NAME: &str = "krosna-agent-hook.cjs";
+pub(crate) const PI_EXTENSION_SCRIPT_NAME: &str = "krosna-agent-status.js";
+const ANTIGRAVITY_STATUSLINE_SCRIPT_NAME: &str = "krosna-antigravity-statusline.cjs";
+const ANTIGRAVITY_STATUSLINE_MARKER: &str = "krosna-antigravity-statusline.cjs";
 const ANTIGRAVITY_ORIGINAL_STATUSLINE_NAME: &str = "antigravity-statusline-original.json";
-const OWNED_MARKER: &str = "termflow-agent-hook.cjs";
-const ANTIGRAVITY_HOOK_GROUP: &str = "termflow-agent-status";
-const TRUST_BEGIN: &str = "# BEGIN TERMFLOW AGENT STATUS HOOKS";
-const TRUST_END: &str = "# END TERMFLOW AGENT STATUS HOOKS";
+const OWNED_MARKER: &str = "krosna-agent-hook.cjs";
+const ANTIGRAVITY_HOOK_GROUP: &str = "krosna-agent-status";
+const TRUST_BEGIN: &str = "# BEGIN KROSNA AGENT STATUS HOOKS";
+const TRUST_END: &str = "# END KROSNA AGENT STATUS HOOKS";
 const QODER_HOOK_EVENTS: [&str; 11] = [
     "SessionStart",
     "UserPromptSubmit",
@@ -116,7 +117,7 @@ pub fn ensure_agent_status_hook_blocking(agent_id: String) -> Result<AgentHookSt
 fn managed_script_path() -> Result<PathBuf, String> {
     let home = dirs_next::home_dir().ok_or("无法读取用户主目录")?;
     Ok(home
-        .join(".termflow")
+        .join(".krosna")
         .join("agent-hooks")
         .join(MANAGED_SCRIPT_NAME))
 }
@@ -208,7 +209,7 @@ fn install_antigravity_hook() -> Result<AgentHookStatus, String> {
 }
 
 fn install_antigravity_statusline(home: &Path) -> Result<(), String> {
-    let managed_root = home.join(".termflow").join("agent-hooks");
+    let managed_root = home.join(".krosna").join("agent-hooks");
     let script_path = managed_root.join(ANTIGRAVITY_STATUSLINE_SCRIPT_NAME);
     let original_path = managed_root.join(ANTIGRAVITY_ORIGINAL_STATUSLINE_NAME);
     let settings_path = home
@@ -234,7 +235,7 @@ fn install_antigravity_statusline_config(
         let is_owned = existing
             .get("command")
             .and_then(Value::as_str)
-            .is_some_and(|value| value.contains(ANTIGRAVITY_STATUSLINE_MARKER));
+            .is_some_and(|value| is_managed_name(value, ANTIGRAVITY_STATUSLINE_MARKER));
         if !is_owned {
             write_json(original_path, existing)?;
         }
@@ -323,6 +324,10 @@ fn install_antigravity_hook_group(
     let root = config
         .as_object_mut()
         .ok_or("Antigravity hooks.json 的根节点必须是对象")?;
+    let legacy_group = ANTIGRAVITY_HOOK_GROUP.replace("krosna", "termflow");
+    if root.get(&legacy_group).is_some_and(value_contains_owned_command) {
+        root.remove(&legacy_group);
+    }
     if let Some(existing) = root.get(ANTIGRAVITY_HOOK_GROUP) {
         if !value_contains_owned_command(existing) {
             return Err(format!(
@@ -370,7 +375,7 @@ fn remove_legacy_gemini_hook() -> Result<(), String> {
 
 fn install_opencode_plugin() -> Result<AgentHookStatus, String> {
     let config_root = opencode_config_root()?;
-    let plugin_path = config_root.join("plugins").join("termflow-status.js");
+    let plugin_path = config_root.join("plugins").join("krosna-status.js");
     if let Some(parent) = plugin_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("创建 OpenCode 插件目录失败: {error}"))?;
@@ -398,7 +403,7 @@ fn install_pi_extension() -> Result<AgentHookStatus, String> {
 
 fn install_pi_extension_at(extension_path: &Path) -> Result<AgentHookStatus, String> {
     if let Ok(existing) = fs::read_to_string(extension_path) {
-        if !existing.starts_with("// Termflow managed Pi status extension") {
+        if !existing.starts_with("// Krosna managed Pi status extension") {
             return Err(format!(
                 "Pi 扩展路径已被其他文件占用: {}",
                 extension_path.display()
@@ -416,28 +421,28 @@ fn install_pi_extension_at(extension_path: &Path) -> Result<AgentHookStatus, Str
 }
 
 fn pi_extension_source() -> &'static str {
-    r#"// Termflow managed Pi status extension
+    r#"// Krosna managed Pi status extension
 import { createRequire } from 'node:module';
 const requireRuntime = createRequire(import.meta.url);
 let sequence = 0;
 let outcome = 'completed';
 
 async function post(state, eventType, ctx) {
-  const port = process.env.TERMFLOW_INGEST_PORT;
-  const token = process.env.TERMFLOW_INGEST_TOKEN;
-  const sessionId = process.env.TERMFLOW_SESSION_ID;
+  const port = process.env.KROSNA_INGEST_PORT;
+  const token = process.env.KROSNA_INGEST_TOKEN;
+  const sessionId = process.env.KROSNA_SESSION_ID;
   if (!port || !token || !sessionId) return;
   const createdAt = Date.now();
   sequence += 1;
   try {
     await fetch(`http://127.0.0.1:${port}/internal/session-events`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-termflow-token': token },
+      headers: { 'content-type': 'application/json', 'x-krosna-token': token },
       body: JSON.stringify({
         agent: 'pi', state, event_type: eventType,
         event_id: `pi:${sessionId}:${eventType}:${createdAt}:${sequence}`,
         session_id: sessionId,
-        project_path: process.env.TERMFLOW_PROJECT_PATH || process.cwd(),
+        project_path: process.env.KROSNA_PROJECT_PATH || process.cwd(),
         provider_session_id: ctx.sessionManager.getSessionId(),
         source: 'pi', created_at: createdAt,
       }),
@@ -448,9 +453,9 @@ async function post(state, eventType, ctx) {
 
 export default function (pi) {
   pi.on('before_agent_start', async (event) => {
-    if (!process.env.TERMFLOW_RUNTIME_HELPER || event.messageType === 'custom') return;
+    if (!process.env.KROSNA_RUNTIME_HELPER || event.messageType === 'custom') return;
     try {
-      const context = await requireRuntime(process.env.TERMFLOW_RUNTIME_HELPER).getContext({ prompt: event.prompt });
+      const context = await requireRuntime(process.env.KROSNA_RUNTIME_HELPER).getContext({ prompt: event.prompt });
       if (!context) return;
       let systemPrompt;
       if (event.systemPromptOptions) {
@@ -461,7 +466,7 @@ export default function (pi) {
       }
       return {
         ...(systemPrompt ? { systemPrompt } : {}),
-        message: { customType: 'termflow-runtime-context', content: context.text, display: false },
+        message: { customType: 'krosna-runtime-context', content: context.text, display: false },
       };
     } catch {}
   });
@@ -493,7 +498,7 @@ fn remove_legacy_opencode_plugin(active_plugin_path: &Path) {
     let Some(legacy_path) = dirs_next::config_dir().map(|path| {
         path.join("opencode")
             .join("plugins")
-            .join("termflow-status.js")
+            .join("krosna-status.js")
     }) else {
         return;
     };
@@ -575,7 +580,7 @@ fn remove_owned_json_hook_actions(definitions: &mut Vec<Value>) {
 fn hook_action_contains_owned_command(hook: &Value) -> bool {
     hook.get("command")
         .and_then(Value::as_str)
-        .map(|command| command.replace('\\', "/").contains(OWNED_MARKER))
+        .map(|command| is_managed_name(&command.replace('\\', "/"), OWNED_MARKER))
         .unwrap_or(false)
 }
 
@@ -594,7 +599,7 @@ fn value_contains_owned_command(value: &Value) -> bool {
             (key == "command"
                 && value
                     .as_str()
-                    .is_some_and(|command| command.replace('\\', "/").contains(OWNED_MARKER)))
+                    .is_some_and(|command| is_managed_name(&command.replace('\\', "/"), OWNED_MARKER)))
                 || value_contains_owned_command(value)
         }),
         Value::Array(values) => values.iter().any(value_contains_owned_command),
@@ -603,24 +608,21 @@ fn value_contains_owned_command(value: &Value) -> bool {
 }
 
 fn remove_legacy_codex_trust(toml_path: &Path) -> Result<(), String> {
-    let Ok(mut content) = fs::read_to_string(toml_path) else {
-        return Ok(());
-    };
-    let Some(start) = content.find(TRUST_BEGIN) else {
-        return Ok(());
-    };
-    let Some(relative_end) = content[start..].find(TRUST_END) else {
-        return Ok(());
-    };
-    let mut end = start + relative_end + TRUST_END.len();
-    if content.as_bytes().get(end) == Some(&b'\r') {
-        end += 1;
+    let Ok(mut content) = fs::read_to_string(toml_path) else { return Ok(()); };
+    let original = content.clone();
+    for (begin, finish) in [(TRUST_BEGIN.to_string(), TRUST_END.to_string()),
+        (TRUST_BEGIN.replace("KROSNA", "TERMFLOW"), TRUST_END.replace("KROSNA", "TERMFLOW"))] {
+        if let Some(start) = content.find(&begin) {
+            if let Some(relative_end) = content[start..].find(&finish) {
+                let mut end = start + relative_end + finish.len();
+                if content.as_bytes().get(end) == Some(&b'\r') { end += 1; }
+                if content.as_bytes().get(end) == Some(&b'\n') { end += 1; }
+                content.replace_range(start..end, "");
+            }
+        }
     }
-    if content.as_bytes().get(end) == Some(&b'\n') {
-        end += 1;
-    }
-    content.replace_range(start..end, "");
-    write_if_changed(toml_path, content.as_bytes())
+    if content != original { write_if_changed(toml_path, content.as_bytes())?; }
+    Ok(())
 }
 
 fn read_json_object(path: &Path) -> Result<Value, String> {
@@ -734,10 +736,10 @@ if (agent === 'antigravity' && normalizedEvent === 'stop') {
 if (agent === 'antigravity') {
   process.stdout.write(normalizedEvent === 'stop' ? '{"decision":""}\n' : '{"injectSteps":[]}\n');
 }
-const port = process.env.TERMFLOW_INGEST_PORT;
-const token = process.env.TERMFLOW_INGEST_TOKEN;
-if (!state || !port || !token || !process.env.TERMFLOW_SESSION_ID) process.exit(0);
-/* TERMFLOW_RUNTIME_CONTEXT */
+const port = process.env.KROSNA_INGEST_PORT;
+const token = process.env.KROSNA_INGEST_TOKEN;
+if (!state || !port || !token || !process.env.KROSNA_SESSION_ID) process.exit(0);
+/* KROSNA_RUNTIME_CONTEXT */
 const stable = (value) => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -768,20 +770,20 @@ const payload = JSON.stringify({
   agent,
   state,
   event_type: eventType,
-  event_id: `${agent}:${process.env.TERMFLOW_SESSION_ID}:${eventName}:${createdAt}`,
-  session_id: process.env.TERMFLOW_SESSION_ID,
-  project_path: process.env.TERMFLOW_PROJECT_PATH || process.cwd(),
+  event_id: `${agent}:${process.env.KROSNA_SESSION_ID}:${eventName}:${createdAt}`,
+  session_id: process.env.KROSNA_SESSION_ID,
+  project_path: process.env.KROSNA_PROJECT_PATH || process.cwd(),
   source: agent,
   created_at: createdAt,
   provider_session_id: providerSessionId,
   payload: correlationPayload,
 });
-const req = http.request({ hostname: '127.0.0.1', port: Number(port), path: '/internal/session-events', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'X-TERMFLOW-TOKEN': token }, timeout: 1200 }, finishTermflowHook);
-req.on('error', finishTermflowHook);
-req.on('timeout', () => { req.destroy(); finishTermflowHook(); });
+const req = http.request({ hostname: '127.0.0.1', port: Number(port), path: '/internal/session-events', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'X-KROSNA-TOKEN': token }, timeout: 1200 }, finishKrosnaHook);
+req.on('error', finishKrosnaHook);
+req.on('timeout', () => { req.destroy(); finishKrosnaHook(); });
 req.end(payload);
 "#
-    .replace("/* TERMFLOW_RUNTIME_CONTEXT */", crate::runtime_context::hook_bridge())
+    .replace("/* KROSNA_RUNTIME_CONTEXT */", crate::runtime_context::hook_bridge())
     }).as_str()
 }
 
@@ -800,7 +802,7 @@ const stable = (value) => {
 const firstString = (...values) => values.find((value) => typeof value === 'string' && value.length > 0) || '';
 const safeId = (value) => /^[a-zA-Z0-9._:-]{1,256}$/.test(value) ? value : undefined;
 function digest(value) {
-  const token = process.env.TERMFLOW_INGEST_TOKEN;
+  const token = process.env.KROSNA_INGEST_TOKEN;
   return token ? createHmac('sha256', token).update(stable(value)).digest('hex') : '';
 }
 function correlation({ sessionID, callID, tool, args, permissionID } = {}) {
@@ -816,17 +818,17 @@ function correlation({ sessionID, callID, tool, args, permissionID } = {}) {
   };
 }
 async function post(state, eventType, safePayload = {}) {
-  const port = process.env.TERMFLOW_INGEST_PORT;
-  const token = process.env.TERMFLOW_INGEST_TOKEN;
-  const sessionId = process.env.TERMFLOW_SESSION_ID;
+  const port = process.env.KROSNA_INGEST_PORT;
+  const token = process.env.KROSNA_INGEST_TOKEN;
+  const sessionId = process.env.KROSNA_SESSION_ID;
   if (!port || !token || !sessionId) return;
   const createdAt = Date.now();
   eventSequence += 1;
   try {
     await fetch(`http://127.0.0.1:${port}/internal/session-events`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-termflow-token': token },
-      body: JSON.stringify({ agent: 'opencode', state, event_type: eventType, event_id: `opencode:${sessionId}:${eventType}:${createdAt}:${eventSequence}`, session_id: sessionId, project_path: process.env.TERMFLOW_PROJECT_PATH || process.cwd(), source: 'opencode', created_at: createdAt, payload: safePayload }),
+      headers: { 'content-type': 'application/json', 'x-krosna-token': token },
+      body: JSON.stringify({ agent: 'opencode', state, event_type: eventType, event_id: `opencode:${sessionId}:${eventType}:${createdAt}:${eventSequence}`, session_id: sessionId, project_path: process.env.KROSNA_PROJECT_PATH || process.cwd(), source: 'opencode', created_at: createdAt, payload: safePayload }),
       signal: AbortSignal.timeout(1200),
     });
   } catch {}
@@ -837,11 +839,11 @@ async function setState(state, eventType, safePayload = {}, force = false) {
   lastEventType = eventType;
   await post(state, eventType, safePayload);
 }
-export const TermflowStatusPlugin = async () => ({
+export const KrosnaStatusPlugin = async () => ({
   'experimental.chat.system.transform': async (_input, output) => {
-    if (!process.env.TERMFLOW_RUNTIME_HELPER) return;
+    if (!process.env.KROSNA_RUNTIME_HELPER) return;
     try {
-      const context = await requireRuntime(process.env.TERMFLOW_RUNTIME_HELPER).getContext({ includeOutput: false });
+      const context = await requireRuntime(process.env.KROSNA_RUNTIME_HELPER).getContext({ includeOutput: false });
       if (context && Array.isArray(output.system)) {
         if (output.system.length) output.system[0] += `\n\n${context.text}`;
         else output.system.push(context.text);
@@ -889,6 +891,23 @@ export const TermflowStatusPlugin = async () => ({
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn replaces_legacy_brand_hooks_without_removing_neighboring_user_actions() {
+        let mut config = serde_json::json!({"hooks": {"Stop": [{"hooks": [
+            {"command": "node C:/hooks/termflow-agent-hook.cjs codex"},
+            {"command": "node user-hook.js"}
+        ]}]}});
+        super::install_json_hooks(&mut config, &["Stop"], "node krosna-agent-hook.cjs codex", 10, "").unwrap();
+        let serialized = config.to_string();
+        assert!(!serialized.contains("termflow-agent-hook.cjs"));
+        assert!(serialized.contains("user-hook.js"));
+        assert!(serialized.contains("krosna-agent-hook.cjs"));
+        let mut groups = serde_json::json!({"termflow-agent-status": {"Stop": [{"command": "node termflow-agent-hook.cjs antigravity Stop"}]}, "custom": {"keep": true}});
+        super::install_antigravity_hook_group(&mut groups, "node krosna-agent-hook.cjs antigravity PreInvocation", "node krosna-agent-hook.cjs antigravity Stop").unwrap();
+        assert!(groups.get("termflow-agent-status").is_none());
+        assert_eq!(groups["custom"]["keep"], true);
+    }
+
     #[test]
     fn codex_activation_checks_feature_flags_without_claiming_trust() {
         let hooks = serde_json::json!({"hooks": {}});
@@ -965,7 +984,7 @@ mod tests {
     #[cfg(windows)]
     fn antigravity_windows_hook_handles_literal_arguments_and_spaced_unicode_paths() {
         let directory = tempfile::tempdir().unwrap();
-        let script = directory.path().join("含 空格 termflow-agent-hook.cjs");
+        let script = directory.path().join("含 空格 krosna-agent-hook.cjs");
         std::fs::write(&script, managed_hook_script()).unwrap();
         for (event, expected) in [
             ("PreInvocation", "{\"injectSteps\":[]}"),
@@ -978,7 +997,7 @@ mod tests {
             let mut args = command.split_whitespace();
             let output = std::process::Command::new(args.next().unwrap())
                 .args(args)
-                .env_remove("TERMFLOW_INGEST_PORT")
+                .env_remove("KROSNA_INGEST_PORT")
                 .stdin(std::process::Stdio::null())
                 .output()
                 .unwrap();
@@ -1016,7 +1035,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), pi_extension_source());
         fs::write(
             &path,
-            "// Termflow managed Pi status extension\n// outdated",
+            "// Krosna managed Pi status extension\n// outdated",
         )
         .unwrap();
         install_pi_extension_at(&path).unwrap();
@@ -1029,9 +1048,9 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_only_termflow_owned_definitions() {
+    fn recognizes_only_krosna_owned_definitions() {
         assert!(definition_contains_owned_command(&json!({
-            "hooks": [{"command": "node C:\\\\x\\\\termflow-agent-hook.cjs codex"}]
+            "hooks": [{"command": "node C:\\\\x\\\\krosna-agent-hook.cjs codex"}]
         })));
         assert!(!definition_contains_owned_command(&json!({
             "hooks": [{"command": "node user-hook.js"}]
@@ -1050,8 +1069,8 @@ mod tests {
         });
         install_antigravity_hook_group(
             &mut config,
-            "node termflow-agent-hook.cjs antigravity PreInvocation",
-            "node termflow-agent-hook.cjs antigravity Stop",
+            "node krosna-agent-hook.cjs antigravity PreInvocation",
+            "node krosna-agent-hook.cjs antigravity Stop",
         )
         .unwrap();
 
@@ -1071,8 +1090,8 @@ mod tests {
         });
         assert!(install_antigravity_hook_group(
             &mut config,
-            "node termflow-agent-hook.cjs antigravity PreInvocation",
-            "node termflow-agent-hook.cjs antigravity Stop",
+            "node krosna-agent-hook.cjs antigravity PreInvocation",
+            "node krosna-agent-hook.cjs antigravity Stop",
         )
         .is_err());
     }
@@ -1087,7 +1106,7 @@ mod tests {
         });
         install_antigravity_statusline_config(
             &mut settings,
-            "node termflow-antigravity-statusline.cjs",
+            "node krosna-antigravity-statusline.cjs",
             &original_path,
         )
         .unwrap();
@@ -1115,20 +1134,20 @@ mod tests {
     }
 
     #[test]
-    fn removes_only_the_legacy_termflow_codex_trust_block() {
+    fn removes_only_the_legacy_krosna_codex_trust_block() {
         let path = std::env::temp_dir().join(format!(
-            "termflow-codex-trust-migration-{}.toml",
+            "krosna-codex-trust-migration-{}.toml",
             std::process::id()
         ));
         let content = concat!(
             "model = \"gpt-5\"\n\n",
             "[hooks.state.\"user-owned\"]\n",
             "enabled = true\n\n",
-            "# BEGIN TERMFLOW AGENT STATUS HOOKS\n",
+            "# BEGIN KROSNA AGENT STATUS HOOKS\n",
             "[hooks.state.\"managed\"]\n",
             "enabled = true\n",
             "trusted_hash = \"sha256:stale\"\n",
-            "# END TERMFLOW AGENT STATUS HOOKS\n\n",
+            "# END KROSNA AGENT STATUS HOOKS\n\n",
             "[projects.\"C:/project\"]\n",
             "trust_level = \"trusted\"\n"
         );
@@ -1139,7 +1158,7 @@ mod tests {
         let migrated = std::fs::read_to_string(&path).unwrap();
         assert!(migrated.contains("[hooks.state.\"user-owned\"]"));
         assert!(migrated.contains("[projects.\"C:/project\"]"));
-        assert!(!migrated.contains("TERMFLOW AGENT STATUS HOOKS"));
+        assert!(!migrated.contains("KROSNA AGENT STATUS HOOKS"));
         assert!(!migrated.contains("[hooks.state.\"managed\"]"));
         let _ = std::fs::remove_file(path);
     }
@@ -1192,7 +1211,7 @@ mod tests {
                 }]
             }
         });
-        let command = "node C:\\termflow-agent-hook.cjs qoder";
+        let command = "node C:\\krosna-agent-hook.cjs qoder";
 
         install_json_hooks(&mut config, &QODER_HOOK_EVENTS, command, 10, "*").unwrap();
         install_json_hooks(&mut config, &QODER_HOOK_EVENTS, command, 10, "*").unwrap();
@@ -1223,7 +1242,7 @@ mod tests {
 
     #[test]
     fn reinstalling_hooks_preserves_user_actions_in_a_mixed_definition() {
-        let command = "node C:\\termflow-agent-hook.cjs qoder";
+        let command = "node C:\\krosna-agent-hook.cjs qoder";
         let mut config = json!({
             "hooks": {
                 "PermissionRequest": [{
@@ -1306,7 +1325,7 @@ mod tests {
         let mut config = json!({
             "hooks": {
                 "SessionStart": [
-                    {"hooks": [{"command": "node termflow-agent-hook.cjs codex"}]},
+                    {"hooks": [{"command": "node krosna-agent-hook.cjs codex"}]},
                     {"hooks": [{"command": "node user-hook.js"}]}
                 ]
             }

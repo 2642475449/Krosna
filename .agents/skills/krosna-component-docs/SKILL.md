@@ -1,9 +1,9 @@
 ---
-name: termflow-component-docs
-description: Create or update reusable implementation documentation for Termflow system components, including source-backed mechanisms, data flows, screenshots, official links, code indexes, limitations, and maintenance guidance. Use when documenting a completed component or integration; do not use for general README edits or product marketing copy.
+name: krosna-component-docs
+description: Create or update reusable implementation documentation for Krosna system components, including source-backed mechanisms, data flows, screenshots, official links, code indexes, limitations, and maintenance guidance. Use when documenting a completed component or integration; do not use for general README edits or product marketing copy.
 ---
 
-# Termflow Component Docs
+# Krosna Component Docs
 
 Create a self-contained local documentation package for the component under `docs/<component-slug>/`:
 

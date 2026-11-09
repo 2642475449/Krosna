@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const HELPER_SOURCE: &str = include_str!("../remote/termflow_remote.py");
+const HELPER_SOURCE: &str = include_str!("../remote/krosna_remote.py");
 const AUTH_OUTPUT_LIMIT: usize = 32 * 1024;
 const MAX_RPC_BYTES: usize = 2 * 1024 * 1024;
 const AUTH_TIMEOUT: Duration = Duration::from_secs(600);
@@ -384,7 +384,7 @@ impl RemoteSshManager {
         };
         let response = client
             .post(format!("http://127.0.0.1:{}/rpc", server.port))
-            .header("X-Termflow-Token", &server.token)
+            .header("X-Krosna-Token", &server.token)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .timeout(Duration::from_secs(timeout))
             .body(body)
@@ -466,7 +466,7 @@ fn ssh_args(host: &RemoteHost, local_port: u16, bootstrap: &str) -> Vec<String> 
     ];
     // 集成测试使用隔离 config/known_hosts，生产构建不会读取这个覆盖项。
     #[cfg(test)]
-    if let Some(config) = std::env::var_os("TERMFLOW_SSH_TEST_CONFIG") {
+    if let Some(config) = std::env::var_os("KROSNA_SSH_TEST_CONFIG") {
         args.extend(["-F".into(), config.to_string_lossy().into_owned()]);
     }
     if let Some(port) = host.port {
@@ -495,7 +495,7 @@ def emit(kind,data=''):
 try:
  if sys.platform!='linux': raise RuntimeError('remote_linux_required')
  if sys.version_info<(3,8): raise RuntimeError('remote_python_version')
- root=os.path.join(os.path.expanduser('~'),'.local','share','termflow','remote')
+ root=os.path.join(os.path.expanduser('~'),'.local','share','krosna','remote')
  os.makedirs(root,mode=0o700,exist_ok=True)
  if os.path.islink(root) or os.stat(root).st_uid!=os.getuid(): raise RuntimeError('remote_unsafe_install_directory')
  os.chmod(root,0o700)
@@ -715,7 +715,7 @@ fn verify_forwarding(client: &Client, server: &ServerDescriptor) -> Result<(), S
     // SSH 登录成功不代表 sshd 允许 TCP 转发；收到 hello 后才能显示 connected。
     let response = client
         .post(format!("http://127.0.0.1:{}/rpc", server.port))
-        .header("X-Termflow-Token", &server.token)
+        .header("X-Krosna-Token", &server.token)
         .json(&json!({"method":"hello", "params":{}}))
         .timeout(Duration::from_secs(10))
         .send()
@@ -1012,7 +1012,7 @@ mod tests {
             &gate.push(&upload[upload.len() - 1..])[..],
             [GateAction::Upload]
         ));
-        let secret = json!({"port":40123,"token":"secret-token-1234567890","version":1,"pid":123,"root":"/home/user/.local/share/termflow/remote","protocol":1});
+        let secret = json!({"port":40123,"token":"secret-token-1234567890","version":1,"pid":123,"root":"/home/user/.local/share/krosna/remote","protocol":1});
         let ready = format!(
             "echoed upload contents\r\n__TF_REMOTE_nonce_READY__{}__TF_REMOTE_END__",
             STANDARD.encode(secret.to_string())
@@ -1196,7 +1196,7 @@ mod tests {
             assert!(headers.starts_with("POST /rpc HTTP/1.1\r\n"));
             assert!(headers
                 .to_ascii_lowercase()
-                .contains("x-termflow-token: secret-token-1234567890\r\n"));
+                .contains("x-krosna-token: secret-token-1234567890\r\n"));
             assert_eq!(body, json!({"method":"sessions.list","params":{}}));
             let body = r#"{"result":{"sessions":[]}}"#;
             let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
@@ -1256,7 +1256,7 @@ mod tests {
                 }
                 if !sent_password && output.contains("password:") {
                     manager
-                        .auth_input(&host.id, "termflow-test-password\r")
+                        .auth_input(&host.id, "krosna-test-password\r")
                         .expect("test password");
                     sent_password = true;
                 }
@@ -1264,12 +1264,12 @@ mod tests {
                 thread::sleep(Duration::from_millis(40));
             }
         }
-        let port = std::env::var("TERMFLOW_SSH_TEST_PORT")
+        let port = std::env::var("KROSNA_SSH_TEST_PORT")
             .expect("test SSH port")
             .parse::<u16>()
             .expect("port");
         assert!(
-            std::env::var_os("TERMFLOW_SSH_TEST_CONFIG").is_some(),
+            std::env::var_os("KROSNA_SSH_TEST_CONFIG").is_some(),
             "isolated SSH config required"
         );
         let host = RemoteHost {
@@ -1283,7 +1283,7 @@ mod tests {
         let manager = RemoteSshManager::new();
         let first = authenticate(&manager, &host);
         assert!(
-            !first.auth_output.contains("termflow-test-password"),
+            !first.auth_output.contains("krosna-test-password"),
             "password must not be echoed"
         );
         assert_eq!(

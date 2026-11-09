@@ -2094,21 +2094,57 @@ html, body, #root {
 }
 
 /* 标签页关闭按钮 hover 显示 */
-.tab-item .tab-close-btn {
+.tab-item > .tab-close-btn {
   opacity: 0;
   transition: opacity 0.15s;
 }
-.tab-item:hover .tab-close-btn {
+.tab-item:hover > .tab-close-btn {
   opacity: 0.7 !important;
 }
-.tab-item:focus-within .tab-close-btn {
+.tab-item:focus-within > .tab-close-btn {
   opacity: 0.7 !important;
 }
-.tab-item .tab-close-btn:hover {
+.tab-item > .tab-close-btn:hover {
   opacity: 1 !important;
 }
-.tab-item .tab-close-btn:focus-visible {
+.tab-item > .tab-close-btn:focus-visible {
   opacity: 1 !important;
+}
+
+/* The tab's trailing slot swaps status for close without shifting the title. */
+.app-tabbar-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+}
+
+.app-tabbar-action-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-tabbar-action > .tab-close-btn {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-tabbar-action:hover > .app-tabbar-action-status,
+.app-tabbar-action:focus-within > .app-tabbar-action-status {
+  visibility: hidden;
+}
+
+.app-tabbar-action:hover > .tab-close-btn,
+.app-tabbar-action:focus-within > .tab-close-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .app-tabbar-new-button {
@@ -2248,128 +2284,27 @@ html, body, #root {
 }
 
 /* Agent activity uses a restrained brand-colored breath instead of a spinner. */
-.agent-activity-icon {
-  position: relative;
-  isolation: isolate;
-  overflow: visible;
+/* State feedback uses Ant Design icons; brand logos never animate. */
+.app-agent-session-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  font-size: 13px;
+  color: var(--cs-text-tertiary);
 }
-
-.agent-activity-icon::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset: -5px;
-  border-radius: 999px;
-  pointer-events: none;
-  opacity: 0;
-  transform: scale(0.72);
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--agent-glow) 34%, transparent) 0%,
-    color-mix(in srgb, var(--agent-glow) 13%, transparent) 42%,
-    transparent 72%
-  );
-}
-
-.agent-activity-icon > img {
-  position: relative;
-  z-index: 1;
-  transform-origin: center;
-}
-
-.agent-activity-icon[data-state="starting"]::before {
-  animation: agent-glow-breathe 1.5s ease-in-out infinite;
-}
-
-.agent-activity-icon[data-state="starting"] > img {
-  animation: agent-logo-breathe 1.5s ease-in-out infinite;
-}
-
-.agent-activity-icon[data-state="running"]::before {
-  animation: agent-glow-breathe 1.2s ease-in-out infinite;
-}
-
-.agent-activity-icon[data-state="running"] > img {
-  animation: agent-logo-breathe 1.2s ease-in-out infinite;
-}
-
-.agent-activity-icon[data-state="waiting"]::before {
-  opacity: 0.26;
-  transform: scale(0.96);
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--cs-warning, #faad14) 54%, transparent) 0%,
-    transparent 70%
-  );
-}
-
-.agent-activity-icon[data-state="waiting"]::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  right: -3px;
-  bottom: -2px;
-  width: 6px;
-  height: 6px;
-  border: 1px solid var(--cs-bg-container, #fff);
-  border-radius: 999px;
-  background: var(--cs-warning, #faad14);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--cs-warning, #faad14) 65%, transparent);
-}
-
-.agent-activity-icon[data-state="error"]::before {
-  opacity: 0.34;
-  transform: scale(0.96);
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--cs-error, #ff4d4f) 38%, transparent) 0%,
-    transparent 70%
-  );
-}
-
-.agent-activity-icon[data-state="error"] > img {
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--cs-error, #ff4d4f) 58%, transparent));
-}
-
-@keyframes agent-glow-breathe {
-  0%,
-  100% {
-    opacity: 0.08;
-    transform: scale(0.72);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.16);
-  }
-}
-
-@keyframes agent-logo-breathe {
-  0%,
-  100% {
-    opacity: 0.78;
-    transform: scale(0.96);
-    filter: brightness(0.96);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-    filter: brightness(1.16) drop-shadow(0 0 3px color-mix(in srgb, var(--agent-glow) 48%, transparent));
-  }
-}
-
+.app-agent-session-status[data-state="starting"],
+.app-agent-session-status[data-state="running"] { color: var(--cs-primary); }
+.app-agent-session-status[data-state="waiting"],
+.app-agent-session-status[data-state="permission"] { color: var(--cs-warning); }
+.app-agent-session-status[data-state="completed"] { color: var(--cs-success); }
+.app-agent-session-status[data-state="error"] { color: var(--cs-error); }
+.app-session-meta:empty { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  .agent-activity-icon[data-state="starting"]::before,
-  .agent-activity-icon[data-state="running"]::before {
-    animation: none;
-    opacity: 0.22;
-    transform: scale(0.94);
-  }
-
-  .agent-activity-icon[data-state="starting"] > img,
-  .agent-activity-icon[data-state="running"] > img {
-    animation: none;
-    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--agent-glow) 34%, transparent));
-  }
+  .app-agent-session-status .anticon-spin,
+  .app-agent-session-status .anticon-spin::before { animation: none !important; }
 }
 
 /* Global text search dialog */

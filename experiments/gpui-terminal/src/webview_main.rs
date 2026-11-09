@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
-use termflow_terminal_eval::{Backend, Config, Packet};
+use krosna_terminal_eval::{Backend, Config, Packet};
 
 struct State {
     backend: Mutex<Option<Arc<Backend>>>,
@@ -68,7 +68,7 @@ fn tick(gap_ms: f64, painted: u64, app: tauri::AppHandle, state: tauri::State<St
     }
 }
 fn main() {
-    if termflow_terminal_eval::run_producer_if_requested() {
+    if krosna_terminal_eval::run_producer_if_requested() {
         return;
     }
     tauri::Builder::default()

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
-  <title id="title">Termflow 智能体权限状态机工作流程</title>
+  <title id="title">Krosna 智能体权限状态机工作流程</title>
   <desc id="desc">四个 CLI 提供方的不同事件经过独立翻译器，转换成统一状态。权限等待后，提供方事件或通过版本校验的用户输入可恢复运行，子智能体事件保持隔离。</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
@@ -29,7 +29,7 @@
 
   <rect width="1440" height="760" rx="36" fill="url(#background)"/>
   <rect x="48" y="40" width="1344" height="100" rx="28" fill="url(#header)" filter="url(#shadow)"/>
-  <text x="92" y="88" fill="#ffffff" font-size="30" font-weight="750">不同 CLI 说不同“方言”，Termflow 负责翻译成同一套状态</text>
+  <text x="92" y="88" fill="#ffffff" font-size="30" font-weight="750">不同 CLI 说不同“方言”，Krosna 负责翻译成同一套状态</text>
   <text x="92" y="120" fill="#e9ebff" font-size="18">统一展示 · 提供方独立判断 · 子智能体隔离 · 用户输入兜底</text>
 
   <g filter="url(#shadow)">

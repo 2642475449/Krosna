@@ -27,7 +27,7 @@ vi.mock("@/components/editors/MonacoTextEditor", () => ({
 }));
 vi.mock("@/components/markdown/MarkdownPreview", () => ({ default: () => null }));
 
-const projectPath = "E:\\7.project\\test\\Termflow";
+const projectPath = "E:\\7.project\\test\\Krosna";
 const filePath = `${projectPath}\\AGENTS.md`;
 const document: AgentInstructionDocument = {
   exists: true, content: "# Existing project instructions", draft: "# Existing project instructions",
@@ -36,7 +36,7 @@ const document: AgentInstructionDocument = {
 
 beforeEach(() => {
   useAppStore.setState(useAppStore.getInitialState(), true);
-  useAppStore.getState().setCurrentProject({ name: "Termflow", path: projectPath });
+  useAppStore.getState().setCurrentProject({ name: "Krosna", path: projectPath });
   useAgentInstructionsStore.setState(useAgentInstructionsStore.getInitialState(), true);
 });
 

@@ -5,10 +5,10 @@ import { collectTaskMonitorTabs, type TaskMonitorSnapshot } from "@/lib/taskMoni
 import { closeTabRuntime } from "@/lib/tabClose";
 import { requestWorkspaceClose } from "./background";
 
-const SNAPSHOT_EVENT = "termflow-task-monitor-snapshot";
-const REQUEST_EVENT = "termflow-task-monitor-request";
-const CLOSE_REQUEST_EVENT = "termflow-task-monitor-close-request";
-const PROJECT_CLOSE_REQUEST_EVENT = "termflow-task-monitor-project-close-request";
+const SNAPSHOT_EVENT = "krosna-task-monitor-snapshot";
+const REQUEST_EVENT = "krosna-task-monitor-request";
+const CLOSE_REQUEST_EVENT = "krosna-task-monitor-close-request";
+const PROJECT_CLOSE_REQUEST_EVENT = "krosna-task-monitor-project-close-request";
 
 export interface TaskMonitorCloseRequest {
   windowLabel: string;

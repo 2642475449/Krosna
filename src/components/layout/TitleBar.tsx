@@ -43,8 +43,8 @@ function TitleBar() {
 
   const titleText =
     windowMode === "project" && windowProject?.name
-      ? `Termflow | ${windowProject.name}`
-      : "Termflow";
+      ? `Krosna | ${windowProject.name}`
+      : "Krosna";
 
   const syncMaximizedState = useCallback(async () => {
     try {
@@ -119,14 +119,14 @@ function TitleBar() {
         <div className="flex shrink-0 items-center gap-2 px-2">
           <img
             src="/logo.png"
-            alt="Termflow"
+            alt="Krosna"
             className="h-4 w-4 shrink-0 rounded-[4px]"
             draggable={false}
           />
           <span
             className="app-titlebar-brand text-[12px] font-semibold tracking-[0.01em]"
           >
-            Termflow
+            Krosna
           </span>
         </div>
         <div

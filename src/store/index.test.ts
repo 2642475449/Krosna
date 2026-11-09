@@ -39,6 +39,31 @@ function createProjectContext(
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+it.each(["openTab", "setActiveSession"] as const)("%s preserves unread completion when the window is not foreground", action => {
+  const store = createAppStore();
+  const projectPath = "D:/workspace/demo";
+  const session = createSession("background", "Background", projectPath, { status: "completed", agentId: "codex" });
+  store.setState({
+    currentProject: { path: projectPath, name: "demo" },
+    projectSessions: { [projectPath]: [session] },
+    projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+    sessions: [session],
+  });
+  store.getState().pushSessionEvent({
+    id: "background-complete", sessionId: session.id, projectPath,
+    sessionName: session.name, eventType: "assistant_complete", title: "Complete", body: "",
+    severity: "success", source: "codex", requiresAttention: true, actionable: true, createdAt: 500,
+  });
+  vi.stubGlobal("document", { visibilityState: "visible", hasFocus: () => false });
+  store.getState()[action](session.id);
+  expect(store.getState().projectAttentionItems[projectPath][0].disposition).toBe("open");
+  expect(store.getState().sessions[0].unreadCount).toBeGreaterThan(0);
+  expect(store.getState().sessionEvents[0].read).not.toBe(true);
+  store.getState().markSessionRead(session.id);
+  expect(store.getState().projectAttentionItems[projectPath][0].disposition).toBe("resolved");
 });
 
 it("persists the preferred recognition language through the real store action", () => {
@@ -55,7 +80,7 @@ it("persists the preferred recognition language through the real store action", 
     expect(createAppStore(storage).getState().asrLanguage).toBe(language);
   }
   for (const state of [{}, { asrLanguage: "invalid" }]) {
-    values.set("termflow-settings", JSON.stringify({ version: 5, state }));
+    values.set("krosna-settings", JSON.stringify({ version: 5, state }));
     expect(createAppStore(storage).getState().asrLanguage).toBe("auto");
   }
 });
@@ -1508,7 +1533,7 @@ it("migrates the four former styles from v4 while preserving cleanup credentials
     ["faithful", "continuous"], ["clear", "paragraphs"],
     ["academic", "paragraphs"], ["casual", "paragraphs"],
   ]) {
-    const values = new Map<string, string>([["termflow-settings", JSON.stringify({
+    const values = new Map<string, string>([["krosna-settings", JSON.stringify({
       version: 4,
       state: { voicePolishStyle: previous, voicePolishApiKey: "test-only-credential" },
     })]]);
@@ -1519,12 +1544,12 @@ it("migrates the four former styles from v4 while preserving cleanup credentials
     });
     expect(store.getState().voicePolishStyle).toBe(expected);
     expect(store.getState().voicePolishApiKey).toBe("test-only-credential");
-    expect(JSON.parse(values.get("termflow-settings") ?? "{}").version).toBe(5);
+    expect(JSON.parse(values.get("krosna-settings") ?? "{}").version).toBe(5);
   }
 });
 
 it("retires saved custom voice prompts when migrating local settings", () => {
-  const values = new Map<string, string>([["termflow-settings", JSON.stringify({
+  const values = new Map<string, string>([["krosna-settings", JSON.stringify({
     state: { voicePolishStyle: "custom", voicePolishCustomPrompt: "obsolete instructions" },
     version: 3,
   })]]);
@@ -1536,7 +1561,7 @@ it("retires saved custom voice prompts when migrating local settings", () => {
   const restored = createAppStore(storage).getState();
   expect(restored.voicePolishStyle).toBe("paragraphs");
   expect(restored.voicePolishInstructions).toBe("");
-  const persisted = JSON.parse(values.get("termflow-settings") ?? "{}") as {
+  const persisted = JSON.parse(values.get("krosna-settings") ?? "{}") as {
     version?: number;
     state?: { voicePolishCustomPrompt?: string };
   };

@@ -1,9 +1,9 @@
 ---
-name: termflow-ui-interactions
-description: Implement and debug Termflow React, Ant Design, and Tauri desktop interactions involving Popover, Dropdown, Modal, Drawer, project switching, async click handlers, or multiple overlay transitions. Use when an action closes one overlay and must open another, when a click visibly fires but nothing follows, or when UI behavior works in a browser/build check but fails in the packaged WebView application.
+name: krosna-ui-interactions
+description: Implement and debug Krosna React, Ant Design, and Tauri desktop interactions involving Popover, Dropdown, Modal, Drawer, project switching, async click handlers, or multiple overlay transitions. Use when an action closes one overlay and must open another, when a click visibly fires but nothing follows, or when UI behavior works in a browser/build check but fails in the packaged WebView application.
 ---
 
-# Termflow UI Interactions
+# Krosna UI Interactions
 
 Build overlay transitions as explicit React state, especially in the custom title bar.
 

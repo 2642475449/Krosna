@@ -5,10 +5,10 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const NAME: &str = "termflow-runtime";
-const OWNER: &str = "com.termflow.desktop/runtime-skill";
-const MANIFEST: &str = ".termflow-managed.json";
-const CONTENT: &str = include_str!("../skills/termflow-runtime/SKILL.md");
+const NAME: &str = "krosna-runtime";
+const OWNER: &str = "com.krosna.desktop/runtime-skill";
+const MANIFEST: &str = ".krosna-managed.json";
+const CONTENT: &str = include_str!("../skills/krosna-runtime/SKILL.md");
 const AGENTS: [&str; 6] = ["codex", "claude", "qoder", "antigravity", "opencode", "pi"];
 static INSTALL_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
@@ -78,6 +78,7 @@ fn inspect(directory: &Path, disabled: &Path) -> SkillState {
 }
 
 fn install_at(enabled: &Path, disabled: &Path, content: &str) -> Result<SkillState, String> {
+    migrate_previous_skill(enabled, disabled)?;
     let directory = enabled.join(NAME);
     let state = inspect(&directory, disabled);
     if !matches!(state, SkillState::NotInstalled | SkillState::Installed) {
@@ -97,7 +98,7 @@ fn install_at(enabled: &Path, disabled: &Path, content: &str) -> Result<SkillSta
     if state == SkillState::NotInstalled {
         fs::create_dir_all(enabled).map_err(|error| error.to_string())?;
         let staging = tempfile::Builder::new()
-            .prefix(".termflow-runtime-")
+            .prefix(".krosna-runtime-")
             .tempdir_in(enabled)
             .map_err(|error| error.to_string())?;
         fs::write(staging.path().join("SKILL.md"), content).map_err(|error| error.to_string())?;
@@ -109,6 +110,37 @@ fn install_at(enabled: &Path, disabled: &Path, content: &str) -> Result<SkillSta
         crate::runtime_cli::write_atomic(&directory.join(MANIFEST), &manifest, false)?;
     }
     Ok(SkillState::Installed)
+}
+
+fn migrate_previous_skill(enabled: &Path, disabled: &Path) -> Result<(), String> {
+    let old_name = "termflow-runtime";
+    if fs::symlink_metadata(disabled.join(old_name)).is_ok()
+        && fs::symlink_metadata(disabled.join(NAME)).is_err()
+    {
+        // A user's previous opt-out remains authoritative after the rename.
+        fs::rename(disabled.join(old_name), disabled.join(NAME)).map_err(|error| error.to_string())?;
+    }
+    let old = enabled.join(old_name);
+    let new = enabled.join(NAME);
+    if new.exists() || !old.is_dir() || fs::symlink_metadata(&old).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        return Ok(());
+    }
+    let old_manifest = old.join(".termflow-managed.json");
+    let manifest = fs::read(&old_manifest).ok()
+        .and_then(|bytes| serde_json::from_slice::<ManagedSkill>(&bytes).ok());
+    let Some(mut manifest) = manifest.filter(|manifest| manifest.owner == "com.termflow.desktop/runtime-skill") else {
+        return Ok(());
+    };
+    if fs::read(old.join("SKILL.md")).map_or(true, |content| content_hash(&content) != manifest.content_hash) {
+        // A modified legacy skill must also block an automatic second installation.
+        return Err("旧版运行时技能已被修改，保留原文件；请手动迁移为 krosna-runtime".into());
+    }
+    manifest.owner = OWNER.into();
+    let bytes = serde_json::to_vec(&manifest).map_err(|error| error.to_string())?;
+    fs::rename(&old, &new).map_err(|error| error.to_string())?;
+    crate::runtime_cli::write_atomic(&new.join(MANIFEST), &bytes, false)?;
+    fs::remove_file(new.join(".termflow-managed.json")).map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 pub(crate) fn install_bundled(cli_directory: &Path) -> Result<(), String> {
@@ -140,7 +172,7 @@ pub(crate) fn ensure_agent(agent: Option<&str>) -> Result<(), String> {
         SkillState::Conflict | SkillState::Modified | SkillState::Unavailable
     ) {
         log::warn!(
-            "Termflow runtime skill was preserved without modification: {:?} ({state:?})",
+            "Krosna runtime skill was preserved without modification: {:?} ({state:?})",
             enabled.join(NAME)
         );
     }
@@ -153,7 +185,7 @@ pub(crate) fn ensure_existing_agents() {
         if let Ok(Some((enabled, _))) = runtime_skill_roots(agent) {
             if enabled.parent().is_some_and(Path::is_dir) {
                 if let Err(error) = ensure_agent(Some(agent)) {
-                    log::warn!("Failed to install Termflow runtime skill for {agent}: {error}");
+                    log::warn!("Failed to install Krosna runtime skill for {agent}: {error}");
                 }
             }
         }
@@ -183,6 +215,28 @@ pub(crate) fn installation_status() -> Vec<RuntimeSkillStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migrates_legacy_owned_skill_and_retains_disabled_state() {
+        let root = tempfile::tempdir().unwrap();
+        let enabled = root.path().join("skills");
+        let disabled = root.path().join("skills-disabled");
+        let old = enabled.join("termflow-runtime");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("SKILL.md"), "old content").unwrap();
+        fs::write(old.join(".termflow-managed.json"), serde_json::to_vec(&ManagedSkill {
+            owner: "com.termflow.desktop/runtime-skill".into(),
+            content_hash: content_hash(b"old content"),
+        }).unwrap()).unwrap();
+        assert_eq!(install_at(&enabled, &disabled, "new content").unwrap(), SkillState::Installed);
+        assert!(!old.exists());
+        assert_eq!(fs::read_to_string(enabled.join(NAME).join("SKILL.md")).unwrap(), "new content");
+        fs::create_dir_all(&disabled).unwrap();
+        fs::rename(enabled.join(NAME), disabled.join("termflow-runtime")).unwrap();
+        assert_eq!(install_at(&enabled, &disabled, "later content").unwrap(), SkillState::Disabled);
+        assert!(!enabled.join(NAME).exists());
+        assert!(disabled.join(NAME).is_dir());
+    }
 
     #[test]
     fn installs_and_upgrades_owned_skills_without_touching_neighbors() {
@@ -263,7 +317,7 @@ mod tests {
             fs::read_to_string(root.path().join("skills").join(NAME).join("SKILL.md")).unwrap();
         let (name, description) = crate::commands::skills::parse_skill_frontmatter(&content);
         assert_eq!(name, NAME);
-        assert!(description.contains("Termflow"));
+        assert!(description.contains("Krosna"));
         assert_eq!(content, CONTENT);
     }
 }

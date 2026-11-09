@@ -3,19 +3,19 @@ import { collectTaskMonitorProjects, collectTaskMonitorTabs } from "./taskMonito
 import type { Session, WindowProjectContext } from "@/types";
 
 const projectWindows: WindowProjectContext[] = [
-  { windowLabel: "termflow", mode: "project", projectPath: "E:/Termflow", projectName: "Termflow" },
+  { windowLabel: "krosna", mode: "project", projectPath: "E:/Krosna", projectName: "Krosna" },
   { windowLabel: "renmin", mode: "project", projectPath: "E:/renmin", projectName: "renmin" },
   { windowLabel: "phospherus", mode: "project", projectPath: "E:/Phospherus", projectName: "Phospherus" },
 ];
 
 it("keeps the same project order when switching windows or refreshing window enumeration", () => {
-  const expected = ["Phospherus", "renmin", "Termflow"];
+  const expected = ["Krosna", "Phospherus", "renmin"];
   for (const window of projectWindows) {
     const current = { path: window.projectPath!, name: window.projectName! };
     expect(collectTaskMonitorProjects(projectWindows, current).map((project) => project.name)).toEqual(expected);
     expect(collectTaskMonitorProjects([...projectWindows].reverse(), current).map((project) => project.name)).toEqual(expected);
   }
-  expect(projectWindows.map((window) => window.windowLabel)).toEqual(["termflow", "renmin", "phospherus"]);
+  expect(projectWindows.map((window) => window.windowLabel)).toEqual(["krosna", "renmin", "phospherus"]);
 });
 
 it("sorts project names without case priority and breaks name ties by full path", () => {
@@ -39,7 +39,7 @@ it("uses shared window metadata and deduplicates alternate current project path 
 it("includes an unsynced current project in sorted order and removes closed projects", () => {
   const current = { path: "E:/another", name: "Another" };
   expect(collectTaskMonitorProjects(projectWindows, current).map((project) => project.name))
-    .toEqual(["Another", "Phospherus", "renmin", "Termflow"]);
+    .toEqual(["Another", "Krosna", "Phospherus", "renmin"]);
   expect(collectTaskMonitorProjects([], current)).toEqual([current]);
   expect(collectTaskMonitorProjects([], null)).toEqual([]);
 });

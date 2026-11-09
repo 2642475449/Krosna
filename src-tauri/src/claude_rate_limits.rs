@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn maps_official_status_line_windows_to_termflow_windows() {
+    fn maps_official_status_line_windows_to_krosna_windows() {
         let window = map_window(
             ClaudeStatusLineWindow {
                 used_percent: 41.2,

@@ -43,8 +43,8 @@ pub fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         quit,
         language: parking_lot::Mutex::new(language),
     });
-    let mut builder = TrayIconBuilder::with_id("termflow-background")
-        .tooltip("Termflow")
+    let mut builder = TrayIconBuilder::with_id("krosna-background")
+        .tooltip("Krosna")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -102,7 +102,7 @@ fn tray_labels(language: &str) -> (String, String) {
     let label = |key: &str| {
         value["background"][key]
             .as_str()
-            .unwrap_or("Termflow")
+            .unwrap_or("Krosna")
             .to_string()
     };
     (label("trayShow"), label("trayQuit"))
@@ -147,7 +147,7 @@ pub fn complete_workspace_close(window: WebviewWindow, background: bool) -> Resu
     if background {
         if window
             .app_handle()
-            .tray_by_id("termflow-background")
+            .tray_by_id("krosna-background")
             .is_none()
         {
             return Err("System tray is unavailable".into());

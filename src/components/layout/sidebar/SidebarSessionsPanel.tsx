@@ -15,12 +15,9 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
 import type { Session } from "@/types";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
+import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import { useTranslation } from "react-i18next";
-import {
-  indexOpenAttentionItemsBySession,
-  type AttentionItem,
-  type AttentionKind,
-} from "@/lib/attention";
+import type { AttentionItem } from "@/lib/attention";
 
 dayjs.extend(relativeTime);
 
@@ -51,7 +48,6 @@ interface SidebarSessionsPanelProps {
 function SidebarSessionsPanel({
   currentProject,
   sessions,
-  attentionItems,
   activeSessionId,
   locale,
   noProjectText,
@@ -92,33 +88,12 @@ function SidebarSessionsPanel({
     );
   }
 
-  const attentionBySession = indexOpenAttentionItemsBySession(attentionItems);
   const pinnedSessions = sessions.filter((session) => session.pinned);
   const normalSessions = sessions.filter((session) => !session.pinned);
-
-  function attentionTone(kind: AttentionKind) {
-    if (kind === "permission" || kind === "input") {
-      return { color: "#b97800", halo: "color-mix(in srgb, #d99b2b 18%, transparent)" };
-    }
-    if (kind === "failure") {
-      return { color: "#c94e4e", halo: "color-mix(in srgb, #e06060 18%, transparent)" };
-    }
-    return {
-      color: "color-mix(in srgb, var(--cs-primary) 78%, #365a9a 22%)",
-      halo: "color-mix(in srgb, var(--cs-primary) 16%, transparent)",
-    };
-  }
 
   function renderSessionItem(session: Session) {
     const isActive = activeSessionId === session.id;
     const titleColor = isActive ? "var(--cs-text-primary)" : "var(--cs-text-secondary)";
-    const currentAttentionItem = attentionBySession.get(session.id);
-    // Failures remain available to the notification/diagnostics flows, but a
-    // historical execution error should not occupy the persistent session-row
-    // status in the sidebar.
-    const attentionItem =
-      currentAttentionItem?.kind === "failure" ? undefined : currentAttentionItem;
-    const tone = attentionItem ? attentionTone(attentionItem.kind) : null;
     const hasPendingCheckpoint = (session.checkpointPendingTurns ?? 0) > 0;
     const timestamp = session.lastEventAt ?? session.createdAt;
     const relative = dayjs(timestamp)
@@ -144,6 +119,7 @@ function SidebarSessionsPanel({
               size={17}
             />
           </span>
+          <AgentSessionStatus session={session} />
           <div className="flex-1 min-w-0">
             <div
               className="flex min-w-0 items-center text-[13px] font-medium"
@@ -153,7 +129,7 @@ function SidebarSessionsPanel({
                 <span className="min-w-0 flex-1 truncate">{session.name}</span>
               </Tooltip>
             </div>
-            {(hasPendingCheckpoint || attentionItem) && (
+            {hasPendingCheckpoint && (
               <div className="app-session-meta mt-0.5 flex min-w-0 items-center gap-1.5">
                 {hasPendingCheckpoint && (
                   <Tooltip
@@ -180,31 +156,6 @@ function SidebarSessionsPanel({
                         })}
                       </span>
                     </button>
-                  </Tooltip>
-                )}
-                {hasPendingCheckpoint && attentionItem && (
-                  <span aria-hidden="true" className="text-[var(--cs-text-tertiary)]">·</span>
-                )}
-                {attentionItem && tone && (
-                  <Tooltip
-                    title={t(`sidebar.attentionKind.${attentionItem.kind}`)}
-                    mouseEnterDelay={0.4}
-                  >
-                    <span
-                      className="inline-flex min-w-0 items-center gap-1.5 truncate font-medium"
-                      style={{ color: tone.color }}
-                    >
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{
-                          background: tone.color,
-                          boxShadow: `0 0 0 2px ${tone.halo}`,
-                        }}
-                      />
-                      <span className="truncate">
-                        {t(`sidebar.sessionAttention.${attentionItem.kind}`)}
-                      </span>
-                    </span>
                   </Tooltip>
                 )}
               </div>

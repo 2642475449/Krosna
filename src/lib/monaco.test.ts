@@ -38,7 +38,7 @@ it("inherits base token colors when theme CSS is missing or incomplete", () => {
   vi.stubGlobal("getComputedStyle", () => ({
     getPropertyValue: (key: string) => key === "--cs-code-keyword" ? "#123456" : "",
   }));
-  expect(getMonacoThemeName(false)).toBe("termflow-light");
+  expect(getMonacoThemeName(false)).toBe("krosna-light");
   const definition = vi.mocked(monaco.editor.defineTheme).mock.calls[0][1];
   expect(definition.rules).toEqual([
     { token: "keyword", foreground: "123456" },
@@ -88,7 +88,7 @@ it("refreshes Monaco after the CSS theme changes within the same color category"
   refresh();
   const updated = vi.mocked(monaco.editor.defineTheme).mock.calls[1][1].colors["editor.background"];
   expect(updated).not.toBe(initial);
-  expect(monaco.editor.setTheme).toHaveBeenLastCalledWith("termflow-light");
+  expect(monaco.editor.setTheme).toHaveBeenLastCalledWith("krosna-light");
   expect(observe).toHaveBeenCalledWith(expect.any(Object), { attributes: true, attributeFilter: ["data-theme"] });
   subscription.dispose();
   expect(disconnect).toHaveBeenCalledOnce();

@@ -27,7 +27,7 @@ export const useBackgroundStore = create<BackgroundState>()(persist((set) => ({
   setRemember: (remember) => set({ remember }),
   setPromptOpen: (promptOpen) => set({ promptOpen }),
 }), {
-  name: "termflow-background-settings",
+  name: "krosna-background-settings",
   partialize: ({ settings }) => ({ settings }),
 }));
 

@@ -3,7 +3,7 @@ if (import.meta.env.DEV && import.meta.hot) {
   const report = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
-    import.meta.hot?.send("termflow:runtime-error", { message, stack });
+    import.meta.hot?.send("krosna:runtime-error", { message, stack });
     if (!window.location.search && !document.querySelector(".app-shell")) {
       const existing = document.querySelector(".app-dev-runtime-error");
       const display = existing ?? document.createElement("pre");

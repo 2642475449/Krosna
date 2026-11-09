@@ -436,8 +436,8 @@ mod tests {
     #[test]
     fn infers_project_directory_name_like_claude() {
         assert_eq!(
-            claude_project_dir_name(r"D:\3.project\Termflow"),
-            "D--3-project-Termflow"
+            claude_project_dir_name(r"D:\3.project\Krosna"),
+            "D--3-project-Krosna"
         );
     }
 

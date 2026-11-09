@@ -2,19 +2,19 @@
 //!
 //! The installer registers these verbs for the current user. This module owns
 //! runtime changes made from Settings, including safely removing only entries
-//! that are explicitly marked as belonging to Termflow or legacy entries that
+//! that are explicitly marked as belonging to Krosna or legacy entries that
 //! still point at the currently running executable.
 
 use std::path::Path;
 
-const FOLDER_MENU_KEY: &str = r"Software\Classes\Directory\shell\Termflow.OpenFolder";
+const FOLDER_MENU_KEY: &str = r"Software\Classes\Directory\shell\Krosna.OpenFolder";
 const BACKGROUND_MENU_KEY: &str =
-    r"Software\Classes\Directory\Background\shell\Termflow.OpenFolder";
-const INSTALLER_PREFERENCES_KEY: &str = r"Software\Termflow";
+    r"Software\Classes\Directory\Background\shell\Krosna.OpenFolder";
+const INSTALLER_PREFERENCES_KEY: &str = r"Software\Krosna";
 const INSTALLER_CONTEXT_MENU_ENABLED_VALUE: &str = "ExplorerContextMenuEnabled";
-const OWNER_VALUE_NAME: &str = "TermflowOwner";
-const OWNER_MARKER: &str = "com.termflow.desktop";
-const MENU_LABEL: &str = "Open with Termflow";
+const OWNER_VALUE_NAME: &str = "KrosnaOwner";
+const OWNER_MARKER: &str = "com.krosna.desktop";
+const MENU_LABEL: &str = "Open with Krosna";
 
 #[derive(Clone, Copy)]
 enum ExplorerVerbTarget {
@@ -97,7 +97,7 @@ fn parse_installer_preference(value: &str) -> Result<bool, String> {
 #[cfg(target_os = "windows")]
 pub fn set_explorer_context_menu_enabled(enabled: bool) -> Result<(), String> {
     let executable = std::env::current_exe()
-        .map_err(|error| format!("无法确定 Termflow 可执行文件路径: {error}"))?;
+        .map_err(|error| format!("无法确定 Krosna 可执行文件路径: {error}"))?;
     let previous_preference = read_installer_preference()?;
 
     // Write this first. If an update/reinstall begins before this process has
@@ -161,7 +161,7 @@ fn register_context_menu(executable: &Path) -> Result<(), String> {
             .map_err(|error| format!("创建资源管理器右键菜单注册项失败: {error}"))?;
         // Mark ownership before writing the remaining values. If a later
         // write fails, a rollback can still identify and clean this partial
-        // Termflow entry without depending on the executable path.
+        // Krosna entry without depending on the executable path.
         menu_key
             .set_string(OWNER_VALUE_NAME, OWNER_MARKER)
             .map_err(|error| format!("写入资源管理器右键菜单所有者标记失败: {error}"))?;
@@ -253,7 +253,7 @@ fn write_installer_preference(enabled: bool) -> Result<(), String> {
 
     let preferences = CURRENT_USER
         .create(INSTALLER_PREFERENCES_KEY)
-        .map_err(|error| format!("创建 Termflow 安装偏好注册项失败: {error}"))?;
+        .map_err(|error| format!("创建 Krosna 安装偏好注册项失败: {error}"))?;
     preferences
         .set_string(
             INSTALLER_CONTEXT_MENU_ENABLED_VALUE,
@@ -342,25 +342,25 @@ mod tests {
 
     #[test]
     fn builds_quoted_commands_for_both_explorer_targets() {
-        let executable = Path::new(r"C:\Program Files\Termflow\Termflow.exe");
+        let executable = Path::new(r"C:\Program Files\Krosna\Krosna.exe");
 
         assert_eq!(
             command_for_executable(executable, ExplorerVerbTarget::Folder),
-            r#""C:\Program Files\Termflow\Termflow.exe" "%1""#
+            r#""C:\Program Files\Krosna\Krosna.exe" "%1""#
         );
         assert_eq!(
             command_for_executable(executable, ExplorerVerbTarget::FolderBackground),
-            r#""C:\Program Files\Termflow\Termflow.exe" "%V""#
+            r#""C:\Program Files\Krosna\Krosna.exe" "%V""#
         );
         assert_eq!(
             icon_for_executable(executable),
-            r#""C:\Program Files\Termflow\Termflow.exe",0"#
+            r#""C:\Program Files\Krosna\Krosna.exe",0"#
         );
     }
 
     #[test]
     fn ownership_requires_the_exact_expected_legacy_command() {
-        let executable = Path::new(r"C:\Program Files\Termflow\Termflow.exe");
+        let executable = Path::new(r"C:\Program Files\Krosna\Krosna.exe");
         let expected = command_for_executable(executable, ExplorerVerbTarget::Folder);
 
         assert!(is_owned_command(
@@ -374,7 +374,7 @@ mod tests {
             ExplorerVerbTarget::Folder
         ));
         assert!(!is_owned_command(
-            r#""C:\Program Files\Termflow\Termflow.exe" "%V""#,
+            r#""C:\Program Files\Krosna\Krosna.exe" "%V""#,
             executable,
             ExplorerVerbTarget::Folder
         ));
@@ -382,8 +382,8 @@ mod tests {
 
     #[test]
     fn stable_owner_marker_handles_stale_paths_but_never_claims_other_owners() {
-        let executable = Path::new(r"C:\Program Files\Termflow\Termflow.exe");
-        let stale_command = r#""D:\Old Termflow\Termflow.exe" "%1""#;
+        let executable = Path::new(r"C:\Program Files\Krosna\Krosna.exe");
+        let stale_command = r#""D:\Old Krosna\Krosna.exe" "%1""#;
         let legacy_command = command_for_executable(executable, ExplorerVerbTarget::Folder);
 
         assert!(should_remove_menu(

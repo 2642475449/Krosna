@@ -42,7 +42,7 @@ import {
   ANTD_TEXT_LIGHT_SOLID,
 } from "./lib/antdTheme";
 
-const STARTUP_THEME_STORAGE_KEY = "termflow-startup-theme";
+const STARTUP_THEME_STORAGE_KEY = "krosna-startup-theme";
 const PERSISTENT_NETWORK_PROXY_UPDATED_EVENT = "persistent-network-proxy-updated";
 const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT =
   "persistent-explorer-context-menu-updated";

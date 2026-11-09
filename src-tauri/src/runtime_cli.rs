@@ -80,7 +80,7 @@ fn failure(code: &str) -> Value {
 
 pub(crate) fn data_dir() -> Result<PathBuf, String> {
     dirs_next::data_local_dir()
-        .map(|path| path.join("com.termflow.desktop"))
+        .map(|path| path.join("com.krosna.desktop"))
         .ok_or_else(|| "data_dir_unavailable".into())
 }
 
@@ -90,9 +90,9 @@ pub(crate) fn descriptor_path() -> Result<PathBuf, String> {
 
 pub(crate) fn shim_path() -> Result<PathBuf, String> {
     Ok(data_dir()?.join("cli").join(if cfg!(windows) {
-        "termflow.cmd"
+        "krosna.cmd"
     } else {
-        "termflow"
+        "krosna"
     }))
 }
 
@@ -150,10 +150,10 @@ pub(crate) fn install_shim() -> Result<PathBuf, String> {
 fn install_shim_at(path: &Path, executable: &str) -> Result<(), String> {
     let script = if cfg!(windows) {
         // 批处理会等待 GUI 子进程；关闭延迟展开以保留安装目录中的 !。
-        format!("@echo off\r\nrem Termflow CLI shim v1\r\nsetlocal DisableDelayedExpansion\r\n\"{}\" cli %*\r\nexit /b %errorlevel%\r\n", executable.replace('%', "%%"))
+        format!("@echo off\r\nrem Krosna CLI shim v1\r\nsetlocal DisableDelayedExpansion\r\n\"{}\" cli %*\r\nexit /b %errorlevel%\r\n", executable.replace('%', "%%"))
     } else {
         format!(
-            "#!/bin/sh\n# Termflow CLI shim v1\nexec '{}' cli \"$@\"\n",
+            "#!/bin/sh\n# Krosna CLI shim v1\nexec '{}' cli \"$@\"\n",
             executable.replace('\'', "'\\''")
         )
     };
@@ -164,7 +164,7 @@ fn install_shim_at(path: &Path, executable: &str) -> Result<(), String> {
         if !existing
             .lines()
             .take(2)
-            .any(|line| line.contains("Termflow CLI shim v1"))
+            .any(|line| line.contains("Krosna CLI shim v1"))
         {
             return Err("shim_path_occupied".into());
         }
@@ -181,28 +181,28 @@ fn install_shim_at(path: &Path, executable: &str) -> Result<(), String> {
 
 pub(crate) fn configure_pty_command(command: &mut portable_pty::CommandBuilder) {
     if let Ok(descriptor) = descriptor_path() {
-        command.env("TERMFLOW_RUNTIME_FILE", descriptor);
+        command.env("KROSNA_RUNTIME_FILE", descriptor);
     }
     if let Ok(shim) = shim_path() {
         if !shim.is_file() {
             return;
         }
-        command.env("TERMFLOW_CLI", &shim);
+        command.env("KROSNA_CLI", &shim);
         command.env(
-            "TERMFLOW_RUNTIME_HELPER",
+            "KROSNA_RUNTIME_HELPER",
             data_dir()
                 .unwrap_or_default()
                 .join("cli")
                 .join("runtime-context.cjs"),
         );
         if let Ok(skill) = crate::runtime_skill::bundled_path() {
-            command.env("TERMFLOW_CLI_SKILL", skill);
+            command.env("KROSNA_CLI_SKILL", skill);
         }
         command.env(
-            "TERMFLOW_CLI_GUIDE",
+            "KROSNA_CLI_GUIDE",
             data_dir().unwrap_or_default().join("cli").join("README.md"),
         );
-        command.env("TERM_PROGRAM", "termflow");
+        command.env("TERM_PROGRAM", "krosna");
         command.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
         if let Some(directory) = shim.parent() {
             let inherited = std::env::var_os("PATH").unwrap_or_default();
@@ -280,7 +280,7 @@ fn parse_http_request(
     let authorized = request
         .headers()
         .iter()
-        .any(|header| header.field.equiv("x-termflow-token") && header.value.as_str() == token);
+        .any(|header| header.field.equiv("x-krosna-token") && header.value.as_str() == token);
     if !authorized {
         return Err((401, "unauthorized"));
     }
@@ -459,7 +459,7 @@ fn request_runtime(request: &RuntimeRequest, path: &Path) -> Result<Value, Strin
         .map_err(|_| "runtime_unavailable")?;
     let response = client
         .post(format!("http://127.0.0.1:{}{API_PATH}", descriptor.port))
-        .header("x-termflow-token", descriptor.token)
+        .header("x-krosna-token", descriptor.token)
         .json(request)
         .send()
         .map_err(|_| "runtime_unavailable")?;
@@ -481,7 +481,7 @@ fn request_runtime(request: &RuntimeRequest, path: &Path) -> Result<Value, Strin
 fn messages(language: Option<&str>) -> Value {
     let language = language
         .map(String::from)
-        .or_else(|| std::env::var("TERMFLOW_CLI_LANGUAGE").ok())
+        .or_else(|| std::env::var("KROSNA_CLI_LANGUAGE").ok())
         .or_else(|| std::env::var("LANG").ok())
         .unwrap_or_else(|| "en-US".into());
     let source = if language.starts_with("zh") {
@@ -497,7 +497,7 @@ fn messages(language: Option<&str>) -> Value {
 
 fn help(messages: &Value) -> String {
     let text = |key: &str| messages[key].as_str().unwrap_or(key).to_string();
-    format!("Termflow CLI {}\n{}\n\n{}\n  termflow status [--json]\n  termflow project list [--json]\n  termflow terminal list [--project PATH] [--json]\n  termflow terminal read --terminal ID [--tail 200 | --cursor CURSOR] [--limit 65536] [--json]\n  termflow path [--json]\n  termflow install [--json]\n\n{}\n  --runtime-file PATH\n  --lang zh-CN|en-US\n  --help\n\n{}\n", env!("CARGO_PKG_VERSION"), text("description"), text("usage"), text("options"), text("retention"))
+    format!("Krosna CLI {}\n{}\n\n{}\n  krosna status [--json]\n  krosna project list [--json]\n  krosna terminal list [--project PATH] [--json]\n  krosna terminal read --terminal ID [--tail 200 | --cursor CURSOR] [--limit 65536] [--json]\n  krosna path [--json]\n  krosna install [--json]\n\n{}\n  --runtime-file PATH\n  --lang zh-CN|en-US\n  --help\n\n{}\n", env!("CARGO_PKG_VERSION"), text("description"), text("usage"), text("options"), text("retention"))
 }
 
 fn print_output(value: &Value, json_mode: bool, read: bool) -> Result<(), std::io::Error> {
@@ -573,7 +573,7 @@ pub fn try_run() -> Option<i32> {
                 let path = options
                     .runtime_file
                     .clone()
-                    .or_else(|| std::env::var_os("TERMFLOW_RUNTIME_FILE").map(PathBuf::from))
+                    .or_else(|| std::env::var_os("KROSNA_RUNTIME_FILE").map(PathBuf::from))
                     .map(Ok)
                     .unwrap_or_else(descriptor_path)?;
                 request_runtime(&request, &path)
@@ -688,15 +688,15 @@ mod tests {
     fn shims_quote_install_paths_and_do_not_overwrite_foreign_scripts() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(if cfg!(windows) {
-            "termflow.cmd"
+            "krosna.cmd"
         } else {
-            "termflow"
+            "krosna"
         });
-        install_shim_at(&path, "C:/a b/100%/termflow.exe").unwrap();
+        install_shim_at(&path, "C:/a b/100%/krosna.exe").unwrap();
         let script = fs::read_to_string(&path).unwrap();
-        assert!(script.contains("Termflow CLI shim v1"));
+        assert!(script.contains("Krosna CLI shim v1"));
         assert!(script.contains(" cli "));
-        install_shim_at(&path, "C:/updated/termflow.exe").unwrap();
+        install_shim_at(&path, "C:/updated/krosna.exe").unwrap();
         fs::write(&path, "my own script").unwrap();
         assert_eq!(
             install_shim_at(&path, "other"),
@@ -760,7 +760,7 @@ mod tests {
             assert!(request
                 .headers()
                 .iter()
-                .any(|header| header.field.equiv("x-termflow-token")
+                .any(|header| header.field.equiv("x-krosna-token")
                     && header.value.as_str() == "fixture-token-long-enough"));
             let mut body = String::new();
             request.as_reader().read_to_string(&mut body).unwrap();
@@ -902,7 +902,7 @@ mod tests {
         assert_eq!(
             client
                 .post(&address)
-                .header("x-termflow-token", "fixture")
+                .header("x-krosna-token", "fixture")
                 .header("Origin", "http://example.invalid")
                 .body("{}")
                 .send()
@@ -914,7 +914,7 @@ mod tests {
         assert_eq!(
             client
                 .post(&address)
-                .header("x-termflow-token", "fixture")
+                .header("x-krosna-token", "fixture")
                 .body("x".repeat(MAX_REQUEST_BYTES + 1))
                 .send()
                 .unwrap()
@@ -925,7 +925,7 @@ mod tests {
         assert_eq!(
             client
                 .post(&address)
-                .header("x-termflow-token", "fixture")
+                .header("x-krosna-token", "fixture")
                 .body("invalid")
                 .send()
                 .unwrap()
@@ -936,7 +936,7 @@ mod tests {
         assert_eq!(
             client
                 .post(&address)
-                .header("x-termflow-token", "fixture")
+                .header("x-krosna-token", "fixture")
                 .json(&json!({ "method": "status" }))
                 .send()
                 .unwrap()

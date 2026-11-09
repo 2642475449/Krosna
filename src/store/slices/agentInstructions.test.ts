@@ -3,7 +3,7 @@ import * as api from "@/lib/api";
 import type { ProjectFileContent } from "@/types";
 import { loadAgentInstructionFile, saveAgentInstructionFile, useAgentInstructionsStore } from "./agentInstructions";
 
-const projectPath = "E:\\7.project\\test\\Termflow";
+const projectPath = "E:\\7.project\\test\\Krosna";
 const filePath = `${projectPath}\\AGENTS.md`;
 
 function file(path: string, content = "# 项目协作规范"): ProjectFileContent {

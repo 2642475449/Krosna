@@ -95,17 +95,18 @@ fn project_file(project_path: &str) -> Result<PathBuf, String> {
     if !root.is_dir() {
         return Err("项目路径不是目录".into());
     }
-    let directory = root.join(".termflow");
+    crate::brand_migration::migrate_project_file(&root, FILE_NAME)?;
+    let directory = root.join(".krosna");
     let file = directory.join(FILE_NAME);
     // 不沿用指向项目外部的配置目录或文件。
     for path in [&directory, &file] {
         if path.exists() {
             let resolved = fs::canonicalize(path).map_err(|error| error.to_string())?;
             if !resolved.starts_with(&root) {
-                return Err(".termflow 配置路径必须位于项目目录内".into());
+                return Err(".krosna 配置路径必须位于项目目录内".into());
             }
         } else if fs::symlink_metadata(path).is_ok() {
-            return Err(".termflow 配置路径包含无效链接".into());
+            return Err(".krosna 配置路径包含无效链接".into());
         }
     }
     Ok(file)
@@ -171,7 +172,7 @@ fn legacy_commands(
 fn write_file(path: &Path, commands: &[CommandDefinition]) -> Result<(), String> {
     validate(commands)?;
     let directory = path.parent().ok_or("配置文件路径无效")?;
-    fs::create_dir_all(directory).map_err(|error| format!("无法创建 .termflow 目录: {error}"))?;
+    fs::create_dir_all(directory).map_err(|error| format!("无法创建 .krosna 目录: {error}"))?;
     let temporary = directory.join(format!(
         ".quick-commands-{}-{}.tmp",
         std::process::id(),
@@ -554,7 +555,7 @@ mod tests {
         .unwrap();
         let loaded = load_commands(&db, Some(root.path().to_str().unwrap())).unwrap();
         assert_eq!(loaded.len(), 1);
-        let file = fs::read_to_string(root.path().join(".termflow").join(FILE_NAME)).unwrap();
+        let file = fs::read_to_string(root.path().join(".krosna").join(FILE_NAME)).unwrap();
         assert!(!file.contains("repositoryId"));
         assert!(!file.contains("scope"));
         assert!(!file.contains(root.path().to_str().unwrap()));
@@ -575,10 +576,10 @@ mod tests {
         let root = TempDir::new().unwrap();
         let copied = TempDir::new().unwrap();
         upsert(&db, command("preview", scope(&root)), None).unwrap();
-        fs::create_dir(copied.path().join(".termflow")).unwrap();
+        fs::create_dir(copied.path().join(".krosna")).unwrap();
         fs::copy(
-            root.path().join(".termflow").join(FILE_NAME),
-            copied.path().join(".termflow").join(FILE_NAME),
+            root.path().join(".krosna").join(FILE_NAME),
+            copied.path().join(".krosna").join(FILE_NAME),
         )
         .unwrap();
         let fresh_db = Database::open_in_memory();
@@ -635,7 +636,7 @@ mod tests {
         remove(&db, "a", &scope(&root)).unwrap();
         remove(&db, "b", &scope(&root)).unwrap();
         assert!(load_scope(&db, &scope(&root)).unwrap().is_empty());
-        assert!(root.path().join(".termflow").join(FILE_NAME).exists());
+        assert!(root.path().join(".krosna").join(FILE_NAME).exists());
     }
 
     #[test]
@@ -715,7 +716,7 @@ mod tests {
         let catalog = load_catalog(&db, &[]).unwrap();
         assert_eq!(catalog.commands.len(), 1);
         assert_eq!(catalog.commands[0].scope, scope(&root));
-        assert!(!root.path().join(".termflow").exists());
+        assert!(!root.path().join(".krosna").exists());
         assert_eq!(read_local(&db).unwrap().len(), 1);
     }
 
@@ -773,14 +774,14 @@ mod tests {
         let root = TempDir::new().unwrap();
         seed_project_commands(&db, &[command("legacy", scope(&root))]);
         fs::write(
-            root.path().join(".termflow"),
+            root.path().join(".krosna"),
             "occupied by an existing file",
         )
         .unwrap();
         assert!(load_scope(&db, &scope(&root)).is_err());
         assert_eq!(read_local(&db).unwrap()[0]["id"], "legacy");
         assert_eq!(
-            fs::read_to_string(root.path().join(".termflow")).unwrap(),
+            fs::read_to_string(root.path().join(".krosna")).unwrap(),
             "occupied by an existing file"
         );
     }

@@ -2,7 +2,7 @@
 
 ## 模块概述
 
-Git 集成模块负责在 Termflow 应用中提供完整的 Git 版本控制功能，包括仓库检测、状态监控、分支管理、差异对比、提交操作、远程同步以及图形化提交历史展示。该模块采用 Rust 后端（通过 `git2` 库和 `git` CLI）与 React 前端（通过 Tauri IPC）的分层架构。
+Git 集成模块负责在 Krosna 应用中提供完整的 Git 版本控制功能，包括仓库检测、状态监控、分支管理、差异对比、提交操作、远程同步以及图形化提交历史展示。该模块采用 Rust 后端（通过 `git2` 库和 `git` CLI）与 React 前端（通过 Tauri IPC）的分层架构。
 
 **相关代码位置**：
 - `src-tauri/src/commands/git/mod.rs` - Git 模块入口，导出所有子模块
@@ -120,7 +120,7 @@ Git 集成模块负责在 Termflow 应用中提供完整的 Git 版本控制功�
 1. 调用 `stage_paths()` 暂存指定文件（通过 `git add --all -- <files>`）
 2. 写入索引并生成树对象
 3. 获取父提交（HEAD），如果是初始提交则无父提交
-4. 使用 `repo.signature()` 获取签名，失败时回退到默认签名 `"Termflow <termflow@local>"`
+4. 使用 `repo.signature()` 获取签名，失败时回退到默认签名 `"Krosna <krosna@local>"`
 5. 调用 `repo.commit()` 创建提交并更新 HEAD
 
 **修订提交（`git_commit_amend`）**：

@@ -1,5 +1,5 @@
 (function () {
-  var storageKey = "termflow-startup-theme";
+  var storageKey = "krosna-startup-theme";
   var lightThemes = ["light-glass", "light-warm"];
   var darkThemes = ["dark-starry", "dark-mocha"];
   var categories = ["light", "dark", "system"];
@@ -35,5 +35,5 @@
     : startupTheme.lightTheme;
 
   document.documentElement.setAttribute("data-theme", activeTheme);
-  window.__TERMFLOW_STARTUP_THEME__ = startupTheme;
+  window.__KROSNA_STARTUP_THEME__ = startupTheme;
 })();

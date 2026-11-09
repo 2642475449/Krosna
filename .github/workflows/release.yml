@@ -1,15 +1,13 @@
-name: Release Termflow
+name: Release Krosna
 
 on:
   push:
     tags:
       - "v*"
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to sync to termflow.jianglan.online (for example, v1.8.26)"
+        description: "Existing release tag to mirror for legacy clients (for example, v1.8.35)"
         required: true
         type: string
 
@@ -60,7 +58,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: v__VERSION__
-          releaseName: Termflow v__VERSION__
+          releaseName: Krosna v__VERSION__
           generateReleaseNotes: true
           releaseDraft: true
           uploadUpdaterJson: true
@@ -82,124 +80,80 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" output/updates/latest.json --clobber
 
-      - name: Create update-server manifest
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          $manifestPath = "output/updates/latest.json"
-          $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
-          foreach ($platform in $manifest.platforms.PSObject.Properties) {
-            $platform.Value.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
-          }
-          $manifest | ConvertTo-Json -Depth 8 | Set-Content "output/updates/server-latest.json" -Encoding utf8
-
-      - name: Configure update-server SSH access
-        shell: pwsh
-        env:
-          UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
-        run: |
-          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
-          $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
-          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
-          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) {
-            throw "The UPDATE_DEPLOY_SSH_KEY repository secret is not configured."
-          }
-          [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
-          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
-
-      - name: Publish signed update to termflow.jianglan.online
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          $artifactName = "Termflow_${version}_x64-setup.exe"
-          $artifactPath = "src-tauri/target/release/bundle/nsis/${artifactName}"
-          $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
-          $knownHostsPath = Join-Path $env:RUNNER_TEMP "termflow-update-known-hosts"
-          $destination = "ubuntu@119.29.73.208"
-          $stagingDirectory = "/home/ubuntu/termflow-update-staging"
-          $sshOptions = @(
-            "-i", $keyPath,
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "UserKnownHostsFile=$knownHostsPath"
-          )
-
-          ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
-          scp @sshOptions $artifactPath "${artifactPath}.sig" output/updates/server-latest.json "${destination}:${stagingDirectory}/"
-          ssh @sshOptions $destination "mv ${stagingDirectory}/server-latest.json ${stagingDirectory}/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
-
       - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ github.ref_name }}" --notes-file "release-notes/${{ github.ref_name }}.md" --draft=false --latest
 
-  sync-update-server:
-    if: "${{ github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.event.head_commit.message == 'fix(release): repair server update sync') }}"
+  # Only old clients use this domain. New clients update directly from GitHub.
+  # Preserve the deployed server's legacy staging path, script and asset alias.
+  legacy-update-bridge:
+    needs: release-windows
+    if: ${{ always() && ((startsWith(github.ref, 'refs/tags/v') && needs.release-windows.result == 'success') || github.event_name == 'workflow_dispatch') }}
     runs-on: windows-latest
-
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Download release assets
+      - name: Download signed GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
         run: |
-          $tag = "${{ inputs.tag }}"
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = "v1.8.26"
-          }
-          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
-            throw "Invalid release tag: $tag"
-          }
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw "Invalid release tag" }
           $version = $tag -replace '^v', ''
-          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $assetDirectory = "release-assets"
-          New-Item -ItemType Directory -Force -Path $assetDirectory | Out-Null
-          gh release download $tag --repo "${{ github.repository }}" `
-            --pattern "Termflow_${version}_x64-setup.exe" `
-            --pattern "Termflow_${version}_x64-setup.exe.sig" `
-            --pattern "latest.json" `
-            --dir $assetDirectory
-          $manifestPath = Join-Path $assetDirectory "latest.json"
-          $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
-          if ([string]::IsNullOrWhiteSpace($manifest.platforms.'windows-x86_64'.signature)) {
-            throw "The release manifest has no Windows signature."
+          $assets = Join-Path $env:RUNNER_TEMP "krosna-legacy-assets"
+          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+          gh release download $tag --repo $env:RELEASE_REPOSITORY --pattern latest.json --dir $assets
+          if ($LASTEXITCODE -ne 0) { throw "Unable to download release manifest" }
+          $manifest = Get-Content -Raw (Join-Path $assets latest.json) | ConvertFrom-Json
+          $platform = $manifest.platforms.'windows-x86_64'
+          if ($manifest.version -ne $version -or [string]::IsNullOrWhiteSpace($platform.signature)) {
+            throw "Manifest version or Windows signature is invalid"
           }
-          foreach ($platform in $manifest.platforms.PSObject.Properties) {
-            $platform.Value.url = "https://termflow.jianglan.online/releases/Termflow_${version}_x64-setup.exe"
+          $artifactName = [uri]::UnescapeDataString(([uri]$platform.url).Segments[-1])
+          if ($artifactName -notmatch '^(Krosna|Termflow)_[0-9A-Za-z.+-]+_x64-setup\.exe$') { throw "Unexpected installer name" }
+          gh release download $tag --repo $env:RELEASE_REPOSITORY --pattern $artifactName --pattern "${artifactName}.sig" --dir $assets
+          if ($LASTEXITCODE -ne 0) { throw "Unable to download signed installer" }
+          $signature = (Get-Content -Raw (Join-Path $assets "${artifactName}.sig")).Trim()
+          if ($signature -ne $platform.signature.Trim()) { throw "Installer signature does not match manifest" }
+          $alias = "Termflow_${version}_x64-setup.exe"
+          if ($artifactName -ne $alias) {
+            Copy-Item -LiteralPath (Join-Path $assets $artifactName) -Destination (Join-Path $assets $alias)
+            Copy-Item -LiteralPath (Join-Path $assets "${artifactName}.sig") -Destination (Join-Path $assets "${alias}.sig")
           }
-          $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $assetDirectory "server-latest.json") -Encoding utf8
+          $platform.url = "https://termflow.jianglan.online/releases/$alias"
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $assets server-latest.json) -Encoding utf8
+          "LEGACY_ASSETS=$assets" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LEGACY_INSTALLER=$alias" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Configure update-server SSH access
+      - name: Configure legacy bridge SSH access
         shell: pwsh
         env:
           UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
         run: |
-          $sshDirectory = Join-Path $env:USERPROFILE ".ssh"
-          $keyPath = Join-Path $sshDirectory "termflow-update-deploy"
-          New-Item -ItemType Directory -Force -Path $sshDirectory | Out-Null
-          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) {
-            throw "The UPDATE_DEPLOY_SSH_KEY repository secret is not configured."
-          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_DEPLOY_SSH_KEY)) { throw "UPDATE_DEPLOY_SSH_KEY is not configured" }
+          $keyPath = Join-Path $env:RUNNER_TEMP "krosna-update-deploy"
           [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
           icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
 
-      - name: Sync signed update to termflow.jianglan.online
+      - name: Mirror release for legacy clients
         shell: pwsh
         run: |
-          $assetDirectory = "release-assets"
-          $artifactName = "Termflow_${env:RELEASE_VERSION}_x64-setup.exe"
-          $keyPath = Join-Path $env:USERPROFILE ".ssh/termflow-update-deploy"
-          $knownHostsPath = Join-Path $env:RUNNER_TEMP "termflow-update-known-hosts"
+          $keyPath = Join-Path $env:RUNNER_TEMP "krosna-update-deploy"
+          $knownHosts = Join-Path $env:RUNNER_TEMP "krosna-update-known-hosts"
           $destination = "ubuntu@119.29.73.208"
-          $stagingDirectory = "/home/ubuntu/termflow-update-staging"
-          $sshOptions = @(
-            "-i", $keyPath,
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "UserKnownHostsFile=$knownHostsPath"
-          )
+          $staging = "/home/ubuntu/termflow-update-staging"
+          $sshOptions = @("-i", $keyPath, "-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=$knownHosts")
+          ssh @sshOptions $destination "mkdir -p $staging && rm -f $staging/Termflow_*_x64-setup.exe $staging/Termflow_*_x64-setup.exe.sig $staging/latest.json $staging/server-latest.json"
+          if ($LASTEXITCODE -ne 0) { throw "Unable to prepare legacy staging directory" }
+          scp @sshOptions "$env:LEGACY_ASSETS/$env:LEGACY_INSTALLER" "$env:LEGACY_ASSETS/$env:LEGACY_INSTALLER.sig" "$env:LEGACY_ASSETS/server-latest.json" "${destination}:${staging}/"
+          if ($LASTEXITCODE -ne 0) { throw "Unable to upload legacy update" }
+          ssh @sshOptions $destination "mv $staging/server-latest.json $staging/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
+          if ($LASTEXITCODE -ne 0) { throw "Unable to deploy legacy update" }
 
-          ssh @sshOptions $destination "rm -rf $stagingDirectory && mkdir -p $stagingDirectory"
-          scp @sshOptions "$assetDirectory/$artifactName" "$assetDirectory/${artifactName}.sig" "$assetDirectory/server-latest.json" "${destination}:${stagingDirectory}/"
-          ssh @sshOptions $destination "mv ${stagingDirectory}/server-latest.json ${stagingDirectory}/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
+      - name: Remove temporary SSH key
+        if: always()
+        shell: pwsh
+        run: Remove-Item -LiteralPath (Join-Path $env:RUNNER_TEMP "krosna-update-deploy") -Force -ErrorAction SilentlyContinue

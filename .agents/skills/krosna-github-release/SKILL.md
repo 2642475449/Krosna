@@ -1,11 +1,11 @@
 ---
-name: termflow-github-release
-description: Prepare, publish, and verify Termflow releases with Tauri auto-update artifacts hosted entirely in GitHub Releases. Use when changing a release version, creating or repairing a Termflow GitHub Release, updating the updater manifest, investigating an update check, or modifying the release workflow.
+name: krosna-github-release
+description: Prepare, publish, and verify Krosna releases with Tauri auto-update artifacts hosted entirely in GitHub Releases. Use when changing a release version, creating or repairing a Krosna GitHub Release, updating the updater manifest, investigating an update check, or modifying the release workflow.
 ---
 
-# Termflow GitHub Release
+# Krosna GitHub Release
 
-Keep all updater artifacts in GitHub Releases. Do not add or depend on a self-hosted update server.
+Keep all updater artifacts in GitHub Releases. New clients must not depend on a self-hosted update server. The legacy-update-bridge job mirrors signed assets to the existing legacy endpoint only for previously installed clients; preserve its deployed script, staging path and legacy installer alias.
 
 ## Release contract
 
@@ -13,8 +13,8 @@ Keep all updater artifacts in GitHub Releases. Do not add or depend on a self-ho
 - Publish the signed Windows NSIS installer and its `.sig` file as assets of the matching `v<version>` GitHub Release.
 - Generate and upload `latest.json` to that same release.
 - Publish substantive, user-facing Release notes that explain what was added or upgraded and what was fixed. The automatically generated `Full Changelog` link alone is not an acceptable release description.
-- Keep the updater endpoint in `src-tauri/tauri.conf.json` as `https://github.com/2642475449/Termflow/releases/latest/download/latest.json`.
-- Ensure each manifest platform URL uses the immutable release tag: `https://github.com/2642475449/Termflow/releases/download/v<version>/Termflow_<version>_x64-setup.exe`.
+- Keep the updater endpoint in `src-tauri/tauri.conf.json` as `https://github.com/2642475449/Krosna/releases/latest/download/latest.json`.
+- Ensure each manifest platform URL uses the immutable release tag: `https://github.com/2642475449/Krosna/releases/download/v<version>/Krosna_<version>_x64-setup.exe`.
 
 ## Prepare a release
 
@@ -23,7 +23,7 @@ Keep all updater artifacts in GitHub Releases. Do not add or depend on a self-ho
 3. Update all three version files and confirm they match the planned `v<version>` tag.
 4. Run the relevant build and test checks, including the Windows packaging preflight below. A release build must have `TAURI_SIGNING_PRIVATE_KEY` configured so its installer has a fresh matching `.sig` file.
 5. Draft the Release notes from the complete diff and commit range between the previous published release tag and the planned tag. Verify important claims against the implementation; do not infer features from commit subjects alone.
-6. Run `pnpm update:manifest --notes "<concise user-facing summary>"`. Do not leave the updater notes as only `Termflow v<version>`. Confirm the generated `latest.json` has the intended version, a non-empty signature, the GitHub Release installer URL, and useful notes.
+6. Run `pnpm update:manifest --notes "<concise user-facing summary>"`. Do not leave the updater notes as only `Krosna v<version>`. Confirm the generated `latest.json` has the intended version, a non-empty signature, the GitHub Release installer URL, and useful notes.
 
 ## Release notes
 
@@ -46,7 +46,7 @@ Keep all updater artifacts in GitHub Releases. Do not add or depend on a self-ho
 ## Publish and verify
 
 1. Push the matching `v<version>` tag only when the user has explicitly authorized publication.
-2. The `Release Termflow` workflow must publish the installer, signature, generated `latest.json`, and curated Release notes, then mark the release as latest.
+2. The `Release Krosna` workflow must publish the installer, signature, generated `latest.json`, and curated Release notes, then mark the release as latest.
 3. After the workflow finishes, inspect the public Release page and confirm both `新增与升级` and `问题修复` are present with the intended content; reject a body containing only GitHub's generated changelog.
 4. Download `releases/latest/download/latest.json` and validate its JSON, version, signature, installer URL, and user-facing notes. Confirm the installer URL resolves.
 5. Test update detection from a previously installed lower version in a packaged Windows build. A source-only build is insufficient.

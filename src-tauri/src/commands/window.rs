@@ -195,7 +195,7 @@ pub fn resolve_project_path_from_launch_arguments(
     cwd: &str,
 ) -> Result<Option<String>, String> {
     if args.len() > 1 {
-        return Err("Termflow 只支持一个项目目录参数".to_string());
+        return Err("Krosna 只支持一个项目目录参数".to_string());
     }
 
     let Some(path_argument) = args.first() else {
@@ -276,7 +276,7 @@ pub fn create_voice_overlay_window(app: &tauri::AppHandle) -> Result<(), String>
         VOICE_OVERLAY_LABEL,
         WebviewUrl::App(VOICE_OVERLAY_ROUTE.into()),
     )
-    .title("Termflow Voice Overlay")
+    .title("Krosna Voice Overlay")
     .inner_size(VOICE_OVERLAY_WIDTH as f64, VOICE_OVERLAY_HEIGHT as f64)
     .resizable(false)
     .decorations(false)
@@ -304,7 +304,7 @@ pub fn create_voice_worker_window(app: &tauri::AppHandle) -> Result<(), String> 
         VOICE_WORKER_LABEL,
         WebviewUrl::App(VOICE_WORKER_ROUTE.into()),
     )
-    .title("Termflow Voice Worker")
+    .title("Krosna Voice Worker")
     .inner_size(320.0, 240.0)
     .resizable(false)
     .decorations(false)
@@ -327,7 +327,7 @@ pub fn restore_main_window_context_on_startup(
     launch_project_path: Option<&str>,
 ) -> Result<(), String> {
     // An explicit launch target must take precedence over the user's restored
-    // project. This is what makes `Termflow.exe <directory>` and Explorer's
+    // project. This is what makes `Krosna.exe <directory>` and Explorer's
     // context-menu verbs reliably open the requested project.
     let context = startup_main_window_context(registry, database, launch_project_path);
 
@@ -843,7 +843,7 @@ pub(crate) fn normalize_windows_verbatim_path(path: String) -> String {
 fn window_title(context: &WindowProjectContext) -> String {
     match context.project_name.as_deref() {
         Some(project_name) if context.mode == WindowMode::Project => project_name.to_string(),
-        _ => "Termflow".to_string(),
+        _ => "Krosna".to_string(),
     }
 }
 
@@ -884,22 +884,22 @@ mod tests {
 
     fn temporary_project(name: &str) -> std::path::PathBuf {
         let path =
-            std::env::temp_dir().join(format!("termflow-window-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("krosna-window-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&path).unwrap();
         path
     }
 
     #[test]
     fn project_name_from_path_uses_last_segment() {
-        assert_eq!(project_name_from_path(r"D:\3.project\termflow"), "termflow");
+        assert_eq!(project_name_from_path(r"D:\3.project\krosna"), "krosna");
         assert_eq!(project_name_from_path("/Users/test/MyPlan"), "MyPlan");
     }
 
     #[test]
     fn project_name_from_path_ignores_trailing_separator() {
         assert_eq!(
-            project_name_from_path(r"D:\3.project\termflow\"),
-            "termflow"
+            project_name_from_path(r"D:\3.project\krosna\"),
+            "krosna"
         );
         assert_eq!(project_name_from_path("/tmp/demo/"), "demo");
     }
@@ -908,8 +908,8 @@ mod tests {
     #[test]
     fn normalize_windows_verbatim_path_strips_drive_prefix() {
         assert_eq!(
-            normalize_windows_verbatim_path(r"\\?\D:\3.project\termflow".to_string()),
-            r"D:\3.project\termflow"
+            normalize_windows_verbatim_path(r"\\?\D:\3.project\krosna".to_string()),
+            r"D:\3.project\krosna"
         );
     }
 
@@ -927,11 +927,11 @@ mod tests {
         let context = WindowProjectContext {
             window_label: "project:1".to_string(),
             mode: WindowMode::Project,
-            project_path: Some(r"D:\3.project\termflow".to_string()),
-            project_name: Some("termflow".to_string()),
+            project_path: Some(r"D:\3.project\krosna".to_string()),
+            project_name: Some("krosna".to_string()),
         };
 
-        assert_eq!(window_title(&context), "termflow");
+        assert_eq!(window_title(&context), "krosna");
     }
 
     #[test]
@@ -943,7 +943,7 @@ mod tests {
             project_name: None,
         };
 
-        assert_eq!(window_title(&context), "Termflow");
+        assert_eq!(window_title(&context), "Krosna");
     }
 
     #[test]
@@ -1053,7 +1053,7 @@ mod tests {
         // Process argument lists include the executable as args[0], so callers
         // pass only the remaining positional arguments to the parser.
         let process_args = vec![
-            "Termflow.exe".to_string(),
+            "Krosna.exe".to_string(),
             project.to_string_lossy().into_owned(),
         ];
         assert_eq!(

@@ -37,7 +37,7 @@ export const useClipboardCacheStore = create<ClipboardCacheState>()(persist((set
   setStatus: (status) => set({ status, error: null }),
   setSyncError: (syncError) => set({ syncError }),
 }), {
-  name: "termflow-clipboard-cache",
+  name: "krosna-clipboard-cache",
   storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : {
     getItem: () => null, setItem: () => {}, removeItem: () => {},
   }),

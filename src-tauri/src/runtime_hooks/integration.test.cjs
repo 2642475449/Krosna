@@ -13,7 +13,7 @@ const server = http.createServer((req, res) => {
   req.setEncoding('utf8');
   req.on('data', (chunk) => { body += chunk; });
   req.on('end', () => {
-    assert.equal(req.headers['x-termflow-token'], 'test-runtime-token');
+    assert.equal(req.headers['x-krosna-token'], 'test-runtime-token');
     assert.ok(!body.includes(prompt), 'the raw user prompt must stay inside the agent');
     const value = JSON.parse(body);
     calls.push({ path: req.url, value });
@@ -38,9 +38,9 @@ const server = http.createServer((req, res) => {
 async function main() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   Object.assign(process.env, {
-    TERMFLOW_INGEST_PORT: String(server.address().port), TERMFLOW_INGEST_TOKEN: 'test-runtime-token',
-    TERMFLOW_PROJECT_PATH: 'E:/example/project', TERMFLOW_SESSION_ID: 'agent-session',
-    TERMFLOW_RUNTIME_HELPER: helperPath, TERMFLOW_CLI: 'E:/Termflow/termflow.cmd',
+    KROSNA_INGEST_PORT: String(server.address().port), KROSNA_INGEST_TOKEN: 'test-runtime-token',
+    KROSNA_PROJECT_PATH: 'E:/example/project', KROSNA_SESSION_ID: 'agent-session',
+    KROSNA_RUNTIME_HELPER: helperPath, KROSNA_CLI: 'E:/Krosna/krosna.cmd',
   });
   const helper = require(helperPath);
   if (mode === 'pi') {
@@ -63,7 +63,7 @@ async function main() {
     assert.equal(await events.get('before_agent_start')({ messageType: 'custom' }), undefined);
     assert.equal(calls.length, count, 'custom extension messages must not recursively fetch logs');
   } else if (mode === 'opencode') {
-    const plugin = await (await import(pathToFileURL(source).href)).TermflowStatusPlugin({});
+    const plugin = await (await import(pathToFileURL(source).href)).KrosnaStatusPlugin({});
     const output = { system: ['original system prompt'] };
     await plugin['experimental.chat.system.transform']({}, output);
     assert.equal(output.system.length, 1, 'preserve a single system message for compatible providers');
@@ -79,8 +79,8 @@ async function main() {
     const started = Date.now();
     assert.ok((await helper.getContext({ prompt })).text.includes('Live runtime context is unavailable'));
     assert.ok(Date.now() - started < 5000, 'an unavailable runtime must not hold up the request');
-    delete process.env.TERMFLOW_SESSION_ID;
-    assert.equal(await helper.getContext({ prompt }), null, 'inert outside a Termflow agent session');
+    delete process.env.KROSNA_SESSION_ID;
+    assert.equal(await helper.getContext({ prompt }), null, 'inert outside a Krosna agent session');
   } else {
     const args = mode === 'claude' ? ['UserPromptSubmit'] : [mode];
     const output = await new Promise((resolve, reject) => {

@@ -31,7 +31,7 @@ export function useResumeSession() {
         if (!agentSessionId) throw new CodexSessionRestoreError();
       } else if (session.agentId === "pi") {
         // Pi can create or resume an exact UUID with --session-id. Reuse the
-        // stable Termflow session ID so restoration never depends on recency.
+        // stable Krosna session ID so restoration never depends on recency.
         agentSessionId ??= sessionId;
       }
       const launchOptions: SessionLaunchOptions | undefined = session.agentId === "antigravity"

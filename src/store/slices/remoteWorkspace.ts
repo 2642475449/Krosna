@@ -66,7 +66,7 @@ export const useRemoteWorkspaceStore = create<RemoteWorkspaceState>()(persist((s
     };
   }),
 }), {
-  name: "termflow.remote-hosts.v1",
+  name: "krosna.remote-hosts.v1",
   storage: createJSONStorage(() => hostMirrorStorage),
   // SQLite 为权威，本地只镜像公开连接配置，不保存认证输入、输出或运行状态。
   partialize: (state) => ({ hosts: state.hosts.map(publicHost), selectedHostId: state.selectedHostId }),

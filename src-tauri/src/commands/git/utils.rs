@@ -553,7 +553,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let parent = std::env::temp_dir().join(format!("termflow-trash-safety-{suffix}"));
+        let parent = std::env::temp_dir().join(format!("krosna-trash-safety-{suffix}"));
         let root = parent.join("project");
         let outside = parent.join("outside.txt");
         fs::create_dir_all(&root).unwrap();

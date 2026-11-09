@@ -19,10 +19,10 @@ const OFFICE_ASSET_PATHS = new Map([
 export default defineConfig(async () => ({
   plugins: [
     {
-      name: "termflow-runtime-diagnostics",
+      name: "krosna-runtime-diagnostics",
       apply: "serve",
       configureServer(server) {
-        server.ws.on("termflow:runtime-error", (data: unknown) => {
+        server.ws.on("krosna:runtime-error", (data: unknown) => {
           if (!data || typeof data !== "object") return;
           const error = data as { message?: unknown; stack?: unknown };
           if (typeof error.message !== "string") return;
@@ -31,7 +31,7 @@ export default defineConfig(async () => ({
             message: error.message.slice(0, 2000),
             stack: typeof error.stack === "string" ? error.stack.slice(0, 12000) : undefined,
           };
-          appendFileSync(path.join(tmpdir(), "termflow-dev-runtime-errors.log"), `${JSON.stringify(entry)}\n`);
+          appendFileSync(path.join(tmpdir(), "krosna-dev-runtime-errors.log"), `${JSON.stringify(entry)}\n`);
         });
       },
     },

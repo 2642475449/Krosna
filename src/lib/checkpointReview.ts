@@ -1,7 +1,7 @@
 import type { AgentTurnReview, Session } from "@/types";
 
 const OPEN_REVIEW_STATUSES = new Set(["awaiting_review", "partially_reviewed"]);
-export const OPEN_CHECKPOINT_REVIEW_EVENT = "termflow:open-checkpoint-review";
+export const OPEN_CHECKPOINT_REVIEW_EVENT = "krosna:open-checkpoint-review";
 
 export type CheckpointSummaryTone =
   | "pending"

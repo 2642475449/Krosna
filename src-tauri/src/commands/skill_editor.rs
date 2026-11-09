@@ -140,7 +140,7 @@ pub fn save_skill_content(request: SkillSaveRequest) -> Result<SkillDetail, Stri
     let resolved = verify()?;
     // 写实际文件所在目录，保留目录链接和 SKILL.md 链接本身。
     let temporary =
-        resolved.with_file_name(format!(".termflow-skill-{}.tmp", rand::random::<u64>()));
+        resolved.with_file_name(format!(".krosna-skill-{}.tmp", rand::random::<u64>()));
     let result = (|| {
         let mut file = OpenOptions::new()
             .write(true)

@@ -94,7 +94,7 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
   },
   reset: () => set({ open: false, maximized: false, tabsByProject: {}, activeTabIdByProject: {} }),
 }), {
-  name: "termflow-bottom-runner-storage",
+  name: "krosna-bottom-runner-storage",
   storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : {
     getItem: () => null, setItem: () => {}, removeItem: () => {},
   }),

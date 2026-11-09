@@ -544,5 +544,5 @@ function quoteShellArg(arg: string): string {
 }
 
 function withPowerShellInitialPrompt(command: string): string {
-  return `$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; ${command} $__termflow_prompt`;
+  return `$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; ${command} $__krosna_prompt`;
 }

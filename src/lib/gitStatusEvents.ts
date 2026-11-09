@@ -1,7 +1,7 @@
 import type { GitBranchInfo, GitFileStatus } from "@/types";
 
-export const GIT_STATUS_SNAPSHOT_EVENT = "termflow:git-status-snapshot";
-export const GIT_REFRESH_EVENT = "termflow:git-refresh";
+export const GIT_STATUS_SNAPSHOT_EVENT = "krosna:git-status-snapshot";
+export const GIT_REFRESH_EVENT = "krosna:git-refresh";
 
 export interface GitStatusSnapshot {
   /** 同一项目内单调递增的快照版本，防止慢请求覆盖更新结果。 */

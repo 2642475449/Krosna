@@ -270,7 +270,7 @@ impl PtyManager {
     ) -> Result<Option<OpenCodePromptControl>, String> {
         // 在智能体读取技能目录之前完成安装；失败不影响原有终端启动。
         if let Err(error) = crate::runtime_skill::ensure_agent(agent_id.as_deref()) {
-            log::warn!("Failed to prepare Termflow CLI skill: {error}");
+            log::warn!("Failed to prepare Krosna CLI skill: {error}");
         }
         // A restored Session reuses its stable Session ID. Invalidate and stop
         // any older PTY before creating the replacement so its delayed reader
@@ -325,10 +325,10 @@ impl PtyManager {
         cmd.cwd(working_directory.as_deref().unwrap_or(&path));
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
-        cmd.env("TERMFLOW_SESSION_ID", &session_id);
-        cmd.env("TERMFLOW_PROJECT_PATH", &path);
-        cmd.env("TERMFLOW_INGEST_PORT", self.ingest_config.port.to_string());
-        cmd.env("TERMFLOW_INGEST_TOKEN", &self.ingest_config.token);
+        cmd.env("KROSNA_SESSION_ID", &session_id);
+        cmd.env("KROSNA_PROJECT_PATH", &path);
+        cmd.env("KROSNA_INGEST_PORT", self.ingest_config.port.to_string());
+        cmd.env("KROSNA_INGEST_TOKEN", &self.ingest_config.token);
         crate::runtime_cli::configure_pty_command(&mut cmd);
         if enable_powershell_completion_integration {
             cmd.env(
@@ -346,7 +346,7 @@ impl PtyManager {
             // Keep multiline/untrusted prompts out of the interactive shell input.
             // The one-line startup command copies this value and removes it before
             // launching the provider so the child process does not inherit it.
-            cmd.env("TERMFLOW_INITIAL_PROMPT", prompt);
+            cmd.env("KROSNA_INITIAL_PROMPT", prompt);
         }
 
         let child = pty
@@ -708,7 +708,7 @@ fn now_ms() -> i64 {
 
 fn is_claude_related_command_line(cmdline: &str) -> bool {
     let cmdline_lower = cmdline.to_lowercase();
-    ["claude", "@anthropic-ai", "claude-code", "termflow"]
+    ["claude", "@anthropic-ai", "claude-code", "krosna"]
         .iter()
         .any(|kw| cmdline_lower.contains(kw))
 }
@@ -1009,14 +1009,14 @@ fn build_claude_start_command(
 #[cfg(target_os = "windows")]
 fn with_initial_prompt(command: String) -> String {
     format!(
-        "$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; {command} $__termflow_prompt"
+        "$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; {command} $__krosna_prompt"
     )
 }
 
 #[cfg(not(target_os = "windows"))]
 fn with_initial_prompt(command: String) -> String {
     format!(
-        "__termflow_prompt=\"$TERMFLOW_INITIAL_PROMPT\"; unset TERMFLOW_INITIAL_PROMPT; {command} \"$__termflow_prompt\""
+        "__krosna_prompt=\"$KROSNA_INITIAL_PROMPT\"; unset KROSNA_INITIAL_PROMPT; {command} \"$__krosna_prompt\""
     )
 }
 
@@ -1425,7 +1425,7 @@ mod tests {
             r#"C:\Users\me\AppData\Roaming\npm\claude.cmd --resume abc"#
         ));
         assert!(is_claude_related_command_line(
-            r#"node app.js --client termflow"#
+            r#"node app.js --client krosna"#
         ));
     }
 
@@ -1442,7 +1442,7 @@ mod tests {
 
     #[test]
     fn test_first_existing_path_from_output_returns_first_real_path() {
-        let existing = std::env::temp_dir().join("termflow-claude-path-test.cmd");
+        let existing = std::env::temp_dir().join("krosna-claude-path-test.cmd");
         std::fs::write(&existing, "echo test").unwrap();
 
         let output = format!("C:\\missing\\claude.cmd\n{}\n", existing.to_string_lossy());
@@ -1473,7 +1473,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn test_select_windows_claude_path_prefers_cmd_over_bare_script() {
-        let dir = std::env::temp_dir().join(format!("termflow-{}", now_ms()));
+        let dir = std::env::temp_dir().join(format!("krosna-{}", now_ms()));
         std::fs::create_dir_all(&dir).unwrap();
 
         let bare = dir.join("claude");
@@ -1527,7 +1527,7 @@ mod tests {
                 None,
                 Some("review this; echo 'unsafe'"),
             ),
-            r#"$__termflow_prompt=$env:TERMFLOW_INITIAL_PROMPT; Remove-Item Env:TERMFLOW_INITIAL_PROMPT; claude --session-id "abc-123" $__termflow_prompt"#
+            r#"$__krosna_prompt=$env:KROSNA_INITIAL_PROMPT; Remove-Item Env:KROSNA_INITIAL_PROMPT; claude --session-id "abc-123" $__krosna_prompt"#
         );
     }
 
@@ -1543,7 +1543,7 @@ mod tests {
         );
         assert!(!command.contains("first line"));
         assert!(!command.contains('\n'));
-        assert!(command.contains("$env:TERMFLOW_INITIAL_PROMPT"));
+        assert!(command.contains("$env:KROSNA_INITIAL_PROMPT"));
     }
 
     #[test]

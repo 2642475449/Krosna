@@ -86,7 +86,7 @@ pub(super) fn preview_client() -> Result<Client, String> {
         .https_only(true)
         .dns_resolver(Arc::new(PublicResolver))
         .redirect(redirect_policy(false))
-        .user_agent("Termflow skill marketplace")
+        .user_agent("Krosna skill marketplace")
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
         .build()

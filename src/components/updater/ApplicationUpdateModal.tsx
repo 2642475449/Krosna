@@ -6,7 +6,7 @@ import {
   checkForApplicationUpdate,
   downloadPendingApplicationUpdate,
   installPendingApplicationUpdate,
-  TERMFLOW_RELEASES_URL,
+  KROSNA_RELEASES_URL,
 } from "@/lib/applicationUpdater";
 import { openExternalUrl } from "@/lib/api";
 import { formatUpdateBytes } from "@/lib/updateProgress";
@@ -159,7 +159,7 @@ export function ApplicationUpdateModal() {
           ) : null}
 
           {update.errorStage === "check" || update.errorStage === "download" ? (
-            <Button onClick={() => void openExternalUrl(TERMFLOW_RELEASES_URL)}>
+            <Button onClick={() => void openExternalUrl(KROSNA_RELEASES_URL)}>
               {t("updater.manualDownload")}
             </Button>
           ) : null}

@@ -3,8 +3,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 
-const FEISHU_CREDENTIAL_TARGET: &str = "Termflow/FeishuNotification";
-const FEISHU_CREDENTIAL_USER: &str = "Termflow";
+const FEISHU_CREDENTIAL_TARGET: &str = "Krosna/FeishuNotification";
+const FEISHU_CREDENTIAL_USER: &str = "Krosna";
 const FEISHU_WEBHOOK_PREFIX: &str = "/open-apis/bot/v2/hook/";
 const FEISHU_REQUEST_TIMEOUT_SECS: u64 = 5;
 
@@ -453,7 +453,7 @@ mod tests {
             title: "Task completed".into(),
             fields: vec![FeishuNotificationField {
                 label: "Project".into(),
-                value: "Termflow".into(),
+                value: "Krosna".into(),
             }],
         };
         let body = build_request_body(&credentials, &payload);

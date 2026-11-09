@@ -88,7 +88,7 @@ describe("terminalTitle", () => {
   it("rejects pure resource addresses as agent session titles", () => {
     expect(sanitizeSessionTitle("C:\\Users\\26424\\AppData\\Local\\Temp\\screenshot.png")).toBeNull();
     expect(sanitizeSessionTitle('"C:\\Users\\Some User\\My Project\\src\\App.tsx"')).toBeNull();
-    expect(sanitizeSessionTitle("https://github.com/example/Termflow")).toBeNull();
+    expect(sanitizeSessionTitle("https://github.com/example/Krosna")).toBeNull();
     expect(sanitizeSessionTitle("/var/log/syslog")).toBeNull();
     expect(sanitizeSessionTitle("\\\\server\\share\\report.pdf")).toBeNull();
     expect(sanitizeSessionTitle("./scripts/build.sh")).toBeNull();
@@ -98,8 +98,8 @@ describe("terminalTitle", () => {
     expect(sanitizeSessionTitle("修复 src/components/Terminal.tsx 的粘贴问题")).toBe(
       "修复 Terminal.tsx 的粘贴问题"
     );
-    expect(sanitizeSessionTitle("检查 https://github.com/example/Termflow 的构建配置")).toBe(
-      "检查 Termflow 的构建配置"
+    expect(sanitizeSessionTitle("检查 https://github.com/example/Krosna 的构建配置")).toBe(
+      "检查 Krosna 的构建配置"
     );
     expect(sanitizeSessionTitle('看看 "C:\\Users\\Some User\\proj\\App.tsx" 的问题')).toBe(
       "看看 App.tsx 的问题"

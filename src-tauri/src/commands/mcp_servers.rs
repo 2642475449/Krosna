@@ -1442,9 +1442,9 @@ mod tests {
     #[test]
     fn accepts_qoder_user_local_and_project_scopes() {
         assert!(validate_scope(QODER, "user", None).is_ok());
-        assert!(validate_scope(QODER, "local", Some(r"E:\\work\\Termflow")).is_ok());
-        assert!(validate_scope(QODER, "project", Some(r"E:\\work\\Termflow")).is_ok());
-        assert!(validate_scope(QODER, "workspace", Some(r"E:\\work\\Termflow")).is_err());
+        assert!(validate_scope(QODER, "local", Some(r"E:\\work\\Krosna")).is_ok());
+        assert!(validate_scope(QODER, "project", Some(r"E:\\work\\Krosna")).is_ok());
+        assert!(validate_scope(QODER, "workspace", Some(r"E:\\work\\Krosna")).is_err());
     }
 
     #[test]
@@ -1508,7 +1508,7 @@ mod tests {
         let state = r#"{
           "mcpServers": {},
           "projects": {
-            "E:/work/Termflow": {
+            "E:/work/Krosna": {
               "mcpServers": {
                 "tavily-remote-mcp": { "type": "http", "url": "https://mcp.tavily.com/mcp/" }
               }
@@ -1516,7 +1516,7 @@ mod tests {
           },
           "unrelated": "unterminated
         "#;
-        let servers = claude_servers_from_state(state, "local", Some(r"E:\work\Termflow")).unwrap();
+        let servers = claude_servers_from_state(state, "local", Some(r"E:\work\Krosna")).unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].0, "tavily-remote-mcp");
         assert_eq!(
@@ -1527,7 +1527,7 @@ mod tests {
 
     #[test]
     fn updates_only_the_local_mcp_object_in_claude_state() {
-        let state = r#"{"projects":{"E:/work/Termflow":{"mcpServers":{"old":{"command":"old"}}}},"opaque":"keep"}"#;
+        let state = r#"{"projects":{"E:/work/Krosna":{"mcpServers":{"old":{"command":"old"}}}},"opaque":"keep"}"#;
         let config = super::McpServerConfig {
             server_type: Some("http".to_string()),
             url: Some("https://example.test/mcp".to_string()),
@@ -1536,7 +1536,7 @@ mod tests {
         let updated = update_claude_state_mcp(
             state,
             "local",
-            Some(r"E:\work\Termflow"),
+            Some(r"E:\work\Krosna"),
             "fresh",
             &config,
             false,
@@ -1544,7 +1544,7 @@ mod tests {
         .unwrap();
         assert!(updated.contains("\"opaque\":\"keep\""));
         let servers =
-            claude_servers_from_state(&updated, "local", Some(r"E:\work\Termflow")).unwrap();
+            claude_servers_from_state(&updated, "local", Some(r"E:\work\Krosna")).unwrap();
         assert_eq!(servers.len(), 2);
         assert!(servers.iter().any(|(name, _)| name == "fresh"));
         assert!(!updated.contains("settings.json"));

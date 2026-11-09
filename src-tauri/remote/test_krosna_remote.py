@@ -18,7 +18,7 @@ import unittest
 import uuid
 
 
-HELPER = Path(__file__).with_name("termflow_remote.py")
+HELPER = Path(__file__).with_name("krosna_remote.py")
 
 FAKE_AGENT = r'''import os, sys
 agent = os.path.basename(sys.argv[0])
@@ -58,10 +58,10 @@ while True:
             import urllib.request, urllib.error
             bad = data.startswith(b"bad-hook:")
             event = data.split(b":", 1)[1].decode().strip()
-            with open(os.path.join(os.environ["TERMFLOW_REMOTE_ROOT"], "server.json")) as stream:
+            with open(os.path.join(os.environ["KROSNA_REMOTE_ROOT"], "server.json")) as stream:
                 descriptor = json.load(stream)
-            payload = {"sessionId": os.environ["TERMFLOW_REMOTE_SESSION"], "instanceId": os.environ["TERMFLOW_REMOTE_INSTANCE"],
-                       "hookToken": "wrong" if bad else os.environ["TERMFLOW_REMOTE_HOOK_TOKEN"], "event": event}
+            payload = {"sessionId": os.environ["KROSNA_REMOTE_SESSION"], "instanceId": os.environ["KROSNA_REMOTE_INSTANCE"],
+                       "hookToken": "wrong" if bad else os.environ["KROSNA_REMOTE_HOOK_TOKEN"], "event": event}
             request = urllib.request.Request("http://127.0.0.1:%s/hook" % descriptor["port"],
                                              data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -104,7 +104,7 @@ class RemoteHelperBlackBoxTests(unittest.TestCase):
     maxDiff = None
 
     def setUp(self):
-        self.sandbox = tempfile.TemporaryDirectory(prefix="termflow-remote-qa-")
+        self.sandbox = tempfile.TemporaryDirectory(prefix="krosna-remote-qa-")
         self.directory = Path(self.sandbox.name)
         self.home = self.directory / "home"
         self.home.mkdir()
@@ -177,7 +177,7 @@ class RemoteHelperBlackBoxTests(unittest.TestCase):
         connection = http.client.HTTPConnection("127.0.0.1", self.descriptor["port"], timeout=30)
         request_headers = {"Content-Type": "application/json"}
         if token is not False:
-            request_headers["X-Termflow-Token"] = self.descriptor["token"] if token is None else token
+            request_headers["X-Krosna-Token"] = self.descriptor["token"] if token is None else token
         request_headers.update(headers or {})
         payload = json.dumps({"method": method, "params": params or {}}).encode() if body is None else body
         try:
@@ -427,7 +427,7 @@ class RemoteHelperBlackBoxTests(unittest.TestCase):
             "custom": {"note": "保留"},
             "hooks": {"Stop": [{"matcher": "user-matcher", "hooks": [
                 {"type": "command", "command": "echo user-hook"},
-                {"type": "command", "command": "TERMFLOW_REMOTE_HOOK=1 obsolete-helper"},
+                {"type": "command", "command": "KROSNA_REMOTE_HOOK=1 obsolete-helper"},
             ]}]},
         }
         hooks_path.write_text(json.dumps(original), encoding="utf-8")
@@ -440,7 +440,7 @@ class RemoteHelperBlackBoxTests(unittest.TestCase):
         self.assertEqual(mixed["hooks"], [{"type": "command", "command": "echo user-hook"}])
         for definitions in merged["hooks"].values():
             commands = [action.get("command", "") for definition in definitions for action in definition.get("hooks", [])]
-            self.assertEqual(sum("TERMFLOW_REMOTE_HOOK=1" in command for command in commands), 1)
+            self.assertEqual(sum("KROSNA_REMOTE_HOOK=1" in command for command in commands), 1)
             self.assertFalse(any("obsolete-helper" in command for command in commands))
         self.assertEqual(hooks_path.stat().st_mode & 0o777, 0o600)
 
@@ -510,11 +510,11 @@ class RemoteHelperBlackBoxTests(unittest.TestCase):
         nvm_lib = self.directory / "nvm" / "lib"
         nvm_lib.mkdir()
         real_cli = nvm_lib / "fake-codex.py"
-        real_cli.write_text("#!/usr/bin/env termflow-fixture-runtime\n" + FAKE_AGENT, encoding="utf-8")
+        real_cli.write_text("#!/usr/bin/env krosna-fixture-runtime\n" + FAKE_AGENT, encoding="utf-8")
         real_cli.chmod(0o700)
         executable = nvm_bin / "codex"
         executable.symlink_to(real_cli)
-        runtime = nvm_bin / "termflow-fixture-runtime"
+        runtime = nvm_bin / "krosna-fixture-runtime"
         runtime.write_text("#!" + sys.executable + "\nimport os,sys\nos.execv(sys.executable,[sys.executable]+sys.argv[1:])\n", encoding="utf-8")
         runtime.chmod(0o700)
         bash = self.bin / "bash"
@@ -576,7 +576,7 @@ class RemoteHelperBlackBoxTests(unittest.TestCase):
         remaining = json.loads(hooks_path.read_text(encoding="utf-8"))
         commands = [action.get("command", "") for definitions in remaining["hooks"].values() for definition in definitions for action in definition.get("hooks", [])]
         self.assertIn("echo keep-user-hook", commands)
-        self.assertFalse(any("TERMFLOW_REMOTE_HOOK=1" in command for command in commands))
+        self.assertFalse(any("KROSNA_REMOTE_HOOK=1" in command for command in commands))
 
 
 if __name__ == "__main__":

@@ -1743,7 +1743,7 @@ mod tests {
     #[test]
     fn test_sanitize_fallback_rejects_pure_url() {
         assert!(
-            sanitize_fallback_session_title("https://github.com/example/Termflow", true).is_none()
+            sanitize_fallback_session_title("https://github.com/example/Krosna", true).is_none()
         );
     }
 
@@ -1766,10 +1766,10 @@ mod tests {
     fn test_sanitize_fallback_keeps_task_with_url() {
         assert_eq!(
             sanitize_fallback_session_title(
-                "检查 https://github.com/example/Termflow 的构建配置",
+                "检查 https://github.com/example/Krosna 的构建配置",
                 true
             ),
-            Some("检查 Termflow 的构建配置".to_string())
+            Some("检查 Krosna 的构建配置".to_string())
         );
     }
 

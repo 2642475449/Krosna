@@ -252,7 +252,7 @@ describe("terminal file path links", () => {
   });
 
   it("uses the destination for a Markdown installer link instead of guessing a filename from its versioned label", () => {
-    const path = "E:/7.project/test/Termflow/src-tauri/target/release/bundle/nsis/Termflow_1.8.35_x64-setup.exe";
+    const path = "E:/7.project/test/Krosna/src-tauri/target/release/bundle/nsis/Krosna_1.8.35_x64-setup.exe";
     const markdown = `[Windows x64 安装包（1.8.35，23.08 MB）](/${path})`;
     const line = `已生成 ${markdown}。`;
     expect(detectTerminalFilePaths(line)).toEqual([
@@ -302,7 +302,7 @@ describe("terminal file path links", () => {
 
   it("opens the installer destination when its Markdown label is clicked across real terminal wraps", async () => {
     const terminal = new Terminal({ cols: 44, rows: 15, allowProposedApi: true });
-    const path = "E:/7.project/test/Termflow/src-tauri/target/release/bundle/nsis/Termflow_1.8.35_x64-setup.exe";
+    const path = "E:/7.project/test/Krosna/src-tauri/target/release/bundle/nsis/Krosna_1.8.35_x64-setup.exe";
     const markdown = `[Windows x64 安装包（1.8.35，23.08 MB）](/${path})`;
     const activated: string[] = [];
     const validated: string[] = [];
@@ -398,7 +398,7 @@ describe("terminal file path links", () => {
       "package.json",
       "docs/guide.pdf:12",
       "assets/screenshot.webp",
-      String.raw`D:\3.project\Termflow\src\locales`,
+      String.raw`D:\3.project\Krosna\src\locales`,
       "src/components/",
     ];
     expect(cases.map((line) => detectTerminalFilePaths(line)[0]?.filePath)).toEqual([
@@ -408,7 +408,7 @@ describe("terminal file path links", () => {
       "package.json",
       "docs/guide.pdf",
       "assets/screenshot.webp",
-      String.raw`D:\3.project\Termflow\src\locales`,
+      String.raw`D:\3.project\Krosna\src\locales`,
       "src/components/",
     ]);
   });
@@ -443,11 +443,11 @@ describe("terminal file path links", () => {
   });
 
   it("detects a Windows directory inside terminal table output", () => {
-    const line = String.raw`│ D:\3.project\Termflow\src\locales │ 国际化资源目录 │`;
+    const line = String.raw`│ D:\3.project\Krosna\src\locales │ 国际化资源目录 │`;
     expect(detectTerminalFilePaths(line)).toEqual([
       expect.objectContaining({
-        text: String.raw`D:\3.project\Termflow\src\locales`,
-        filePath: String.raw`D:\3.project\Termflow\src\locales`,
+        text: String.raw`D:\3.project\Krosna\src\locales`,
+        filePath: String.raw`D:\3.project\Krosna\src\locales`,
       }),
     ]);
   });
@@ -718,8 +718,8 @@ describe("terminal file path links", () => {
 
   it("reassembles a file path split across soft-wrapped rows", () => {
     const rows = [
-      { isWrapped: false, text: String.raw`Finished 1 bundle at: D:\3.project\Termflow\src-tauri\target\release\bundle\nsis\Termf` },
-      { isWrapped: true, text: "low_1.8.8_x64-setup.exe" },
+      { isWrapped: false, text: String.raw`Finished 1 bundle at: D:\3.project\Krosna\src-tauri\target\release\bundle\nsis\Kros` },
+      { isWrapped: true, text: "na_1.8.8_x64-setup.exe" },
     ];
     const terminal = {
       cols: rows[0].text.length,
@@ -747,7 +747,7 @@ describe("terminal file path links", () => {
       secondRowLinks = links;
     });
 
-    const expectedPath = String.raw`D:\3.project\Termflow\src-tauri\target\release\bundle\nsis\Termflow_1.8.8_x64-setup.exe`;
+    const expectedPath = String.raw`D:\3.project\Krosna\src-tauri\target\release\bundle\nsis\Krosna_1.8.8_x64-setup.exe`;
     expect(firstRowLinks?.[0]?.text).toBe(expectedPath);
     expect(secondRowLinks?.[0]?.text).toBe(expectedPath);
     expect(firstRowLinks?.[0]?.range).toEqual({

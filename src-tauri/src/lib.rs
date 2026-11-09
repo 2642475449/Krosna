@@ -1,4 +1,5 @@
 mod agent_paths;
+mod brand_migration;
 mod antigravity_usage;
 mod claude_rate_limits;
 mod claude_usage;
@@ -43,6 +44,9 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager, WindowEvent};
 
 pub fn run() {
+    let context = tauri::generate_context!();
+    brand_migration::migrate_app_data(&context.config().identifier)
+        .expect("无法迁移旧版应用数据；原始数据未被修改");
     let startup_args = std::env::args().skip(1).collect::<Vec<_>>();
     let startup_cwd = std::env::current_dir()
         .map(|path| path.to_string_lossy().into_owned())
@@ -223,12 +227,12 @@ pub fn run() {
                 hook_status_runtime.clone(),
             );
             if let Err(error) = runtime_cli::install_shim() {
-                log::warn!("Failed to install Termflow CLI shim: {error}");
+                log::warn!("Failed to install Krosna CLI shim: {error}");
             } else {
                 runtime_skill::ensure_existing_agents();
             }
             if let Err(error) = runtime_cli::publish_descriptor(&ingest_config) {
-                log::warn!("Failed to publish Termflow runtime descriptor: {error}");
+                log::warn!("Failed to publish Krosna runtime descriptor: {error}");
             }
             commands::window::create_voice_overlay_window(&app.handle())?;
             commands::window::create_voice_worker_window(&app.handle())?;
@@ -463,6 +467,6 @@ pub fn run() {
             commands::git::git_watch_start,
             commands::git::git_watch_stop,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }

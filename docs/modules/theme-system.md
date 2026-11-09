@@ -2,7 +2,7 @@
 
 ## 模块概述
 
-主题系统是 Termflow 的视觉层基础设施，负责管理应用程序的色彩方案、明暗模式切换和用户偏好持久化。系统提供 4 套精心设计的主题，通过 CSS 变量（`--cs-` 前缀）驱动全局样式，并支持跟随操作系统主题自动切换。
+主题系统是 Krosna 的视觉层基础设施，负责管理应用程序的色彩方案、明暗模式切换和用户偏好持久化。系统提供 4 套精心设计的主题，通过 CSS 变量（`--cs-` 前缀）驱动全局样式，并支持跟随操作系统主题自动切换。
 
 **相关代码位置**：
 - `src/styles/themes.css` - 4 套主题的 CSS 变量定义
@@ -114,7 +114,7 @@ activeTheme: () => {
 **机制描述**：采用双层持久化策略 -- Zustand persist（localStorage）+ Tauri SQLite 后端。
 
 **Zustand persist 层**：
-- 存储键名：`termflow-settings`
+- 存储键名：`krosna-settings`
 - 版本号：`2`
 - 持久化字段（通过 `partialize` 选择）：`lastProject`, `recentProjects`, `sessionEvents`, `projectSessions`, `projectArchivedSessions`, `projectWorkspaces`, `sidebarCollapsed`, `sidebarWidth` 等
 - 主题设置不在此层持久化，而是通过 Tauri 后端

@@ -1440,10 +1440,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "manual performance fixture; set TERMFLOW_SEARCH_FIXTURE"]
+    #[ignore = "manual performance fixture; set KROSNA_SEARCH_FIXTURE"]
     fn benchmark_generated_search_fixture() {
-        let fixture = std::env::var("TERMFLOW_SEARCH_FIXTURE")
-            .expect("TERMFLOW_SEARCH_FIXTURE must point to a generated fixture");
+        let fixture = std::env::var("KROSNA_SEARCH_FIXTURE")
+            .expect("KROSNA_SEARCH_FIXTURE must point to a generated fixture");
         let mut search_request = request("updateWrapper.");
         search_request.project_path = fixture;
         let summary = run_content_search_core(

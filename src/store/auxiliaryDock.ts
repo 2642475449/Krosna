@@ -245,7 +245,7 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) 
     }),
   reset: () => set({ open: false, tabs: [], activeTabId: null }),
 }), {
-  name: "termflow-auxiliary-dock",
+  name: "krosna-auxiliary-dock",
   storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : {
     getItem: () => null, setItem: () => {}, removeItem: () => {},
   }),

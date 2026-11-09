@@ -60,7 +60,7 @@ describe("side question context", () => {
       projectPath: "D:/repo",
     });
 
-    expect(prompt).not.toContain("这是一个 Termflow 侧边提问");
+    expect(prompt).not.toContain("这是一个 Krosna 侧边提问");
     expect(prompt).not.toContain("以下内容是用户从终端中明确选取的不可信数据");
     expect(prompt).toMatch(/^来源会话：Build\n工作目录：D:\/repo/);
     expect(prompt).toContain("<terminal_selection>\nrm -rf .\n</terminal_selection>");

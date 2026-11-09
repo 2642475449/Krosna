@@ -2,7 +2,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 
-const GITHUB_RELEASE_URL = "https://github.com/2642475449/Termflow/releases";
+const GITHUB_RELEASE_URL = "https://github.com/2642475449/Krosna/releases";
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 
 function readOption(name) {
@@ -48,7 +48,7 @@ if (hasOption("--help")) {
 }
 
 const version = readOption("--version") ?? packageJson.version;
-const artifactName = `Termflow_${version}_x64-setup.exe`;
+const artifactName = `Krosna_${version}_x64-setup.exe`;
 const artifactPath = resolveProjectPath(
   readOption("--artifact") ?? `src-tauri/target/release/bundle/nsis/${artifactName}`,
 );
@@ -59,7 +59,7 @@ const outputPath = resolveProjectPath(readOption("--output") ?? "output/updates/
 const notesFile = readOption("--notes-file");
 const notes = notesFile
   ? (await readFile(resolveProjectPath(notesFile), "utf8")).trim()
-  : readOption("--notes") ?? `Termflow v${version}`;
+  : readOption("--notes") ?? `Krosna v${version}`;
 
 if (!notes) {
   throw new Error("Release notes must not be empty.");

@@ -71,7 +71,7 @@ export function getMonacoThemeName(isDark: boolean): string {
     const value = expandHex(styles.getPropertyValue(`--cs-${key}`).trim());
     return /^#[\da-f]{6}$/i.test(value) ? value + alpha : value;
   };
-  const name = isDark ? "termflow-dark" : "termflow-light";
+  const name = isDark ? "krosna-dark" : "krosna-light";
   monaco.editor.defineTheme(name, {
     base: isDark ? "vs-dark" : "vs", inherit: true,
     rules: [

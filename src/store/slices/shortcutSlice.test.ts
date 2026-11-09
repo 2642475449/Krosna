@@ -25,10 +25,10 @@ it("persists customized and disabled shortcuts without persisting recording stat
   store.getState().setShortcut("closeTab", "");
   await store.getState().setRecordingAction("nextTab");
   expect(configure).toHaveBeenCalledWith(null, false);
-  const saved = JSON.parse(values.get("termflow-shortcuts") ?? "{}");
+  const saved = JSON.parse(values.get("krosna-shortcuts") ?? "{}");
   expect(saved.state).toEqual({ overrides: { newSession: "Ctrl+Alt+N", closeTab: "" } });
   store.setState({ overrides: {} });
-  values.set("termflow-shortcuts", JSON.stringify(saved));
+  values.set("krosna-shortcuts", JSON.stringify(saved));
   await store.persist.rehydrate();
   expect(store.getState().overrides).toEqual(saved.state.overrides);
 });
@@ -86,7 +86,7 @@ it("persists restored defaults and ignores stale startup hydration while editing
   store.getState().setPersistedOverrides({ closeTab: "" });
   expect(store.getState().overrides).toEqual({ closeTab: "F8" });
   store.getState().setDefaultShortcut("closeTab");
-  const saved = values.get("termflow-shortcuts");
+  const saved = values.get("krosna-shortcuts");
   expect(saved).toBeDefined();
   vi.resetModules();
   const { useShortcutStore: reloaded } = await import("./shortcutSlice");

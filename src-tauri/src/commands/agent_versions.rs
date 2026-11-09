@@ -57,7 +57,7 @@ pub async fn check_agent_latest_version(
     let client = apply_proxy_to_client_builder(
         reqwest::Client::builder()
             .timeout(Duration::from_secs(12))
-            .user_agent("Termflow version check"),
+            .user_agent("Krosna version check"),
         &proxy,
     )?
     .build()

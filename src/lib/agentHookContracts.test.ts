@@ -7,7 +7,7 @@ import { expect, it } from "vitest";
 const rust = readFileSync(new URL("../../src-tauri/src/commands/claude_config.rs", import.meta.url), "utf8");
 const bridge = readFileSync(new URL("../../src-tauri/src/runtime_hooks/bridge.cjs", import.meta.url), "utf8");
 const script = rust.split("fn build_hook_script_content() -> String {")[1].split('r#"')[1].split('"#')[0]
-  .replace("/* TERMFLOW_RUNTIME_CONTEXT */", bridge);
+  .replace("/* KROSNA_RUNTIME_CONTEXT */", bridge);
 
 function replay(event: string, input: Record<string, unknown> = {}) {
   const payloads: Array<Record<string, unknown>> = [];
@@ -29,7 +29,7 @@ function replay(event: string, input: Record<string, unknown> = {}) {
       Buffer,
       process: {
         argv: ["node", "hook.cjs", event.toLowerCase()],
-        env: { TERMFLOW_INGEST_PORT: "12345", TERMFLOW_INGEST_TOKEN: "test-token", TERMFLOW_SESSION_ID: "test-session", TERMFLOW_PROJECT_PATH: "test-project" },
+        env: { KROSNA_INGEST_PORT: "12345", KROSNA_INGEST_TOKEN: "test-token", KROSNA_SESSION_ID: "test-session", KROSNA_PROJECT_PATH: "test-project" },
         cwd: () => "test-project",
         exit: () => { throw exited; },
       },

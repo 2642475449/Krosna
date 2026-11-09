@@ -1,11 +1,11 @@
 [package]
-name = "termflow"
+name = "krosna"
 version = "1.8.35"
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "termflow_lib"
+name = "krosna_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [profile.release]
@@ -51,7 +51,7 @@ log = "0.4"
 sha2 = "0.10"
 base64 = "0.22"
 tempfile = "3"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.31", features = ["bundled", "backup"] }
 notify = "7"
 notify-debouncer-mini = "0.5"
 regex = "1"

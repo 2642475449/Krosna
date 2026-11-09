@@ -69,7 +69,7 @@ export function ProjectLaunchersButton() {
       </> : <>
         <Button disabled={busy} onClick={() => projectPath && void loadLaunchers(projectPath)}>{t("projectLaunchers.reload")}</Button>
         {state.error && <Button onClick={() => {
-          if (projectPath) useAppStore.getState().openFileTab(`${projectPath}/.termflow/launchers.json`, { preview: false });
+          if (projectPath) useAppStore.getState().openFileTab(`${projectPath}/.krosna/launchers.json`, { preview: false });
           setOpen(false);
         }}>{t("projectLaunchers.openFile")}</Button>}
         <Button disabled={busy || !!state.error} onClick={() => {

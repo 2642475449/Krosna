@@ -76,7 +76,7 @@ const server = http.createServer((request, response) => {
   if (
     request.method !== "POST" ||
     request.url !== "/internal/session-events" ||
-    request.headers["x-termflow-token"] !== token
+    request.headers["x-krosna-token"] !== token
   ) {
     response.writeHead(404).end();
     return;
@@ -127,10 +127,10 @@ function runAgent(agentId) {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        TERMFLOW_SESSION_ID: sessionId,
-        TERMFLOW_PROJECT_PATH: process.cwd(),
-        TERMFLOW_INGEST_PORT: String(address.port),
-        TERMFLOW_INGEST_TOKEN: token,
+        KROSNA_SESSION_ID: sessionId,
+        KROSNA_PROJECT_PATH: process.cwd(),
+        KROSNA_INGEST_PORT: String(address.port),
+        KROSNA_INGEST_TOKEN: token,
       },
       shell: process.platform === "win32",
       windowsHide: true,

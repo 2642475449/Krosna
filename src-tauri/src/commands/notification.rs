@@ -4,7 +4,7 @@ use tauri::State;
 use tauri_plugin_notification::NotificationExt;
 
 #[cfg(target_os = "windows")]
-const WINDOWS_TOAST_APP_ID: &str = "com.termflow.desktop";
+const WINDOWS_TOAST_APP_ID: &str = "com.krosna.desktop";
 
 #[tauri::command]
 pub fn send_session_notification(
@@ -78,7 +78,7 @@ fn ensure_windows_toast_registration(app: &tauri::AppHandle) -> Result<(), Strin
         ))
         .map_err(|e| format!("创建 Windows 通知注册表失败: {e}"))?;
 
-    key.set_string("DisplayName", "Termflow")
+    key.set_string("DisplayName", "Krosna")
         .map_err(|e| format!("写入 Windows 通知显示名失败: {e}"))?;
     key.set_string("IconBackgroundColor", "0")
         .map_err(|e| format!("写入 Windows 通知背景色失败: {e}"))?;

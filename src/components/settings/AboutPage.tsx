@@ -21,7 +21,7 @@ import { AboutFlowBackdrop } from "./AboutFlowBackdrop";
 
 const ABOUT_LINKS: Record<"website" | "github", string | null> = {
   website: null,
-  github: "https://github.com/2642475449/Termflow",
+  github: "https://github.com/2642475449/Krosna",
 };
 
 const MIT_LICENSE_TEXT = `MIT License
@@ -147,9 +147,9 @@ export const AboutPage: FC = () => {
 
   const handleCopyDiagnostics = async () => {
     const diagnostics = [
-      `Application: Termflow`,
+      `Application: Krosna`,
       `Version: v${packageJson.version}`,
-      `App ID: com.termflow.desktop`,
+      `App ID: com.krosna.desktop`,
       `Platform: ${navigator.userAgent}`,
       `Timestamp: ${new Date().toISOString()}`,
     ].join("\n");
@@ -181,13 +181,13 @@ export const AboutPage: FC = () => {
           <div className="flex min-w-0 items-center gap-4">
             <img
               src="/logo.png"
-              alt="Termflow"
+              alt="Krosna"
               className="h-16 w-16 shrink-0 object-contain"
             />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="app-about-hero-title m-0 text-2xl font-semibold tracking-tight">
-                  Termflow
+                  Krosna
                 </h1>
                 <Tag className="app-about-hero-version m-0! rounded-full !px-2.5">
                   v{packageJson.version}
@@ -319,7 +319,7 @@ export const AboutPage: FC = () => {
         </SettingRow>
         <SettingRow label={t("settings.about.appId")}>
           <span className="break-all font-mono text-xs text-[var(--cs-text-secondary)]">
-            com.termflow.desktop
+            com.krosna.desktop
           </span>
         </SettingRow>
       </SettingsSection>
@@ -341,7 +341,7 @@ export const AboutPage: FC = () => {
       >
         <div className="py-2">
           <p className="mb-3 text-xs text-[var(--cs-text-tertiary)]">
-            Termflow is released under the MIT License.
+            Krosna is released under the MIT License.
           </p>
           <pre className="max-h-80 overflow-auto rounded-lg border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-4 font-mono text-xs leading-relaxed text-[var(--cs-text-secondary)] whitespace-pre-wrap select-text">
             {MIT_LICENSE_TEXT}

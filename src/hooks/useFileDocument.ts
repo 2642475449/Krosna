@@ -17,11 +17,11 @@ export function useFileDocument(projectPath: string, path: string, active: boole
       const detail = (event as CustomEvent<{ projectPath?: string; path?: string }>).detail;
       if (detail?.projectPath === projectPath && (!detail.path || detail.path === path)) void document.refresh();
     };
-    window.addEventListener("termflow:git-refresh", refresh);
+    window.addEventListener("krosna:git-refresh", refresh);
     window.addEventListener("git:file-change", refresh);
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener("termflow:git-refresh", refresh);
+      window.removeEventListener("krosna:git-refresh", refresh);
       window.removeEventListener("git:file-change", refresh);
     };
   }, [active, document, path, projectPath]);

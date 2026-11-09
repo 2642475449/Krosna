@@ -270,7 +270,7 @@ pub fn start_ingest_server(
             let token_ok = request
                 .headers()
                 .iter()
-                .find(|header| header.field.equiv("x-termflow-token"))
+                .find(|header| header.field.equiv("x-krosna-token"))
                 .map(|header| header.value.as_str() == config.token)
                 .unwrap_or(false);
             if !token_ok {
@@ -430,7 +430,7 @@ fn handle_agent_status(
 
     if state == "completed" && completion_candidate.is_none() {
         info!(
-            "suppressing unverified Claude task completion for Termflow session {}",
+            "suppressing unverified Claude task completion for Krosna session {}",
             payload.session_id
         );
         return;
@@ -1174,7 +1174,7 @@ fn accept_guard_event(
 fn sanitized_metadata(_payload: Option<&serde_json::Value>) -> serde_json::Value {
     // This is intentionally a positive allowlist. Provider payload schemas are
     // not stable and commonly contain prompts, commands, paths, and environment
-    // values. Safe Termflow-owned fields such as duration are added later.
+    // values. Safe Krosna-owned fields such as duration are added later.
     json!({})
 }
 
@@ -1257,7 +1257,7 @@ fn notify_ingest_failure(app: &AppHandle, message: &str) {
             revision: None,
             session_id: "__system__".to_string(),
             project_path: String::new(),
-            session_name: "Termflow 系统".to_string(),
+            session_name: "Krosna 系统".to_string(),
             event_type: SessionEventType::HookError,
             title: "Hook 接收服务启动失败".to_string(),
             body: message.to_string(),

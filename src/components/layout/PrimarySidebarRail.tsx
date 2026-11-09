@@ -415,7 +415,7 @@ function PrimarySidebarRail() {
   const handleCheckVersion = useCallback(async () => {
     if (checkingForUpdate) return;
 
-    const messageKey = "termflow-update";
+    const messageKey = "krosna-update";
     handleCloseQuickSettings();
     message.info({
       key: messageKey,

@@ -644,7 +644,7 @@ impl ScheduledTaskScheduler {
         }
         let worker = scheduler.clone();
         thread::Builder::new()
-            .name("termflow-scheduled-task-dispatcher".to_string())
+            .name("krosna-scheduled-task-dispatcher".to_string())
             .spawn(move || worker.dispatch_loop())
             .map_err(|error| format!("无法启动定时任务调度服务: {error}"))?;
         Ok(scheduler)
@@ -887,7 +887,7 @@ impl ScheduledTaskScheduler {
             let task_id = task.id.clone();
             let scheduler = self.clone();
             if let Err(error) = thread::Builder::new()
-                .name(format!("termflow-scheduled-task-{run_id}"))
+                .name(format!("krosna-scheduled-task-{run_id}"))
                 .spawn(move || scheduler.execute_queued_task(task, run, cancel_requested))
             {
                 let now_ms = Utc::now().timestamp_millis();
@@ -1115,7 +1115,7 @@ impl ScheduledTaskScheduler {
             .app
             .notification()
             .builder()
-            .title(&format!("Termflow · {}", task.name))
+            .title(&format!("Krosna · {}", task.name))
             .body(body)
             .show()
         {
@@ -1590,7 +1590,7 @@ mod tests {
     #[test]
     fn scheduled_process_has_no_console_window() {
         let mut command = std::process::Command::new("powershell.exe");
-        command.args(["-NoProfile", "-NonInteractive", "-Command", r#"Add-Type -Name NativeConsole -Namespace TermflowTest -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();'; if ([TermflowTest.NativeConsole]::GetConsoleWindow() -ne [IntPtr]::Zero) { exit 1 }; Write-Output 'no-console'"#]);
+        command.args(["-NoProfile", "-NonInteractive", "-Command", r#"Add-Type -Name NativeConsole -Namespace KrosnaTest -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();'; if ([KrosnaTest.NativeConsole]::GetConsoleWindow() -ne [IntPtr]::Zero) { exit 1 }; Write-Output 'no-console'"#]);
         command
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());

@@ -5,9 +5,9 @@ import { projectPathKey } from "@/lib/openProjects";
 import { touchRecentProjects, type ProjectInfo } from "@/store/utils/recentProjects";
 import { mergeRecentProjectRecords, visibleRecentProjects, type RecentProjectRecord } from "@/store/utils/recentProjectSync";
 
-const SNAPSHOT_EVENT = "termflow:recent-projects-snapshot";
-const REQUEST_EVENT = "termflow:recent-projects-request";
-const STORAGE_KEY = "termflow-recent-projects-v1";
+const SNAPSHOT_EVENT = "krosna:recent-projects-snapshot";
+const REQUEST_EVENT = "krosna:recent-projects-request";
+const STORAGE_KEY = "krosna-recent-projects-v1";
 
 export async function broadcastRecentProjectOpened(project: ProjectInfo) {
   const state = useAppStore.getState();

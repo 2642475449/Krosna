@@ -445,24 +445,24 @@ fn collect_jsonl_files(root: &Path, output: &mut Vec<PathBuf>) {
     }
 }
 
-fn termflow_user_data_paths() -> Vec<PathBuf> {
+fn krosna_user_data_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    if let Some(value) = env::var_os("TERMFLOW_USER_DATA_PATH").filter(|value| !value.is_empty()) {
+    if let Some(value) = env::var_os("KROSNA_USER_DATA_PATH").filter(|value| !value.is_empty()) {
         paths.push(PathBuf::from(value));
     }
     if cfg!(windows) {
         if let Some(value) = env::var_os("APPDATA").filter(|value| !value.is_empty()) {
             let app_data = PathBuf::from(value);
-            paths.push(app_data.join("com.termflow.desktop"));
-            paths.push(app_data.join("Termflow"));
+            paths.push(app_data.join("com.krosna.desktop"));
+            paths.push(app_data.join("Krosna"));
         } else if let Some(home_dir) = dirs_next::home_dir() {
             paths.push(
                 home_dir
                     .join("AppData")
                     .join("Roaming")
-                    .join("com.termflow.desktop"),
+                    .join("com.krosna.desktop"),
             );
-            paths.push(home_dir.join("AppData").join("Roaming").join("Termflow"));
+            paths.push(home_dir.join("AppData").join("Roaming").join("Krosna"));
         }
     } else if cfg!(target_os = "macos") {
         if let Some(home_dir) = dirs_next::home_dir() {
@@ -470,28 +470,28 @@ fn termflow_user_data_paths() -> Vec<PathBuf> {
                 home_dir
                     .join("Library")
                     .join("Application Support")
-                    .join("com.termflow.desktop"),
+                    .join("com.krosna.desktop"),
             );
             paths.push(
                 home_dir
                     .join("Library")
                     .join("Application Support")
-                    .join("Termflow"),
+                    .join("Krosna"),
             );
         }
     } else if let Some(value) = env::var_os("XDG_CONFIG_HOME").filter(|value| !value.is_empty()) {
         let xdg_config = PathBuf::from(value);
-        paths.push(xdg_config.join("com.termflow.desktop"));
-        paths.push(xdg_config.join("termflow"));
+        paths.push(xdg_config.join("com.krosna.desktop"));
+        paths.push(xdg_config.join("krosna"));
     } else if let Some(home_dir) = dirs_next::home_dir() {
-        paths.push(home_dir.join(".config").join("com.termflow.desktop"));
-        paths.push(home_dir.join(".config").join("termflow"));
+        paths.push(home_dir.join(".config").join("com.krosna.desktop"));
+        paths.push(home_dir.join(".config").join("krosna"));
     }
     paths
 }
 
-fn termflow_managed_codex_home_paths() -> Vec<PathBuf> {
-    termflow_user_data_paths()
+fn krosna_managed_codex_home_paths() -> Vec<PathBuf> {
+    krosna_user_data_paths()
         .into_iter()
         .map(|path| path.join("codex-runtime-home").join("home"))
         .collect()
@@ -555,10 +555,10 @@ fn collect_codex_session_files_from_homes(homes: Vec<PathBuf>) -> Vec<PathBuf> {
 
 pub(crate) fn collect_codex_session_files() -> Vec<PathBuf> {
     let mut homes = Vec::<PathBuf>::new();
-    if let Some(raw_home) = env::var_os("TERMFLOW_CODEX_HOME").filter(|value| !value.is_empty()) {
+    if let Some(raw_home) = env::var_os("KROSNA_CODEX_HOME").filter(|value| !value.is_empty()) {
         homes.push(PathBuf::from(raw_home));
     }
-    for home in termflow_managed_codex_home_paths() {
+    for home in krosna_managed_codex_home_paths() {
         homes.push(home);
     }
     if let Ok(home) = crate::agent_paths::user_path(crate::agent_paths::AgentPath::Codex) {
@@ -583,7 +583,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         env::temp_dir().join(format!(
-            "termflow-agent-usage-{name}-{}-{nonce}",
+            "krosna-agent-usage-{name}-{}-{nonce}",
             std::process::id()
         ))
     }

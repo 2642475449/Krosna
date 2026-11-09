@@ -492,7 +492,7 @@ fn relocate_index_root(source: &Path, destination: &Path) -> Result<(), String> 
         }
     }
     let temporary =
-        destination.with_file_name(format!(".termflow-search-index-moving-{}", now_ms()));
+        destination.with_file_name(format!(".krosna-search-index-moving-{}", now_ms()));
     copy_directory(source, &temporary)?;
     if destination.exists() {
         fs::remove_dir(destination)
@@ -863,7 +863,7 @@ fn ensure_project_watcher(
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = stop.clone();
     std::thread::Builder::new()
-        .name(format!("termflow-index-watch-{}", project_hash(project)))
+        .name(format!("krosna-index-watch-{}", project_hash(project)))
         .spawn(move || {
             while !worker_stop.load(Ordering::Relaxed) {
                 match receiver.recv_timeout(SCHEDULER_TICK) {
@@ -2507,7 +2507,7 @@ mod tests {
 
     #[test]
     fn disabled_status_is_explicitly_scan_backed() {
-        let status = disabled_status("E:/projects/Termflow".to_string());
+        let status = disabled_status("E:/projects/Krosna".to_string());
         assert!(!status.enabled);
         assert_eq!(status.state, "disabled");
         assert_eq!(status.backend, "scan");
@@ -2524,7 +2524,7 @@ mod tests {
             root.path()
                 .join("target")
                 .join("debug")
-                .join("termflow.exe"),
+                .join("krosna.exe"),
         );
         assert!(!event_requires_rebuild(root.path(), &target_event));
 

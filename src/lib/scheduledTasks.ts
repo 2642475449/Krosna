@@ -12,7 +12,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const SCHEDULED_TASKS_TAB_ID = "__scheduled_tasks__";
-export const SCHEDULED_TASKS_CHANGED_EVENT = "termflow:scheduled-tasks-changed";
+export const SCHEDULED_TASKS_CHANGED_EVENT = "krosna:scheduled-tasks-changed";
 export const DEFAULT_SCHEDULED_TASK_TIMEOUT_MS = 30 * 60 * 1000;
 
 export function getSystemTimeZone(): string {

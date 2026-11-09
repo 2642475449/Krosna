@@ -46,7 +46,7 @@ export const useQuickCommandUsageStore = create<QuickCommandUsageState>()(persis
     }
   },
 }), {
-  name: "termflow-quick-command-usage",
+  name: "krosna-quick-command-usage",
   partialize: ({ usageByProject }) => ({ usageByProject }),
   merge: (saved, current) => ({
     ...current,

@@ -84,14 +84,15 @@ fn root(project_path: &str) -> Result<PathBuf, String> {
 }
 
 fn config_path(root: &Path) -> Result<PathBuf, String> {
-    let directory = root.join(".termflow");
+    crate::brand_migration::migrate_project_file(root, "launchers.json")?;
+    let directory = root.join(".krosna");
     let file = directory.join("launchers.json");
     for path in [&directory, &file] {
         match fs::symlink_metadata(path) {
             Ok(_) => {
                 let resolved = fs::canonicalize(path).map_err(|error| error.to_string())?;
                 if !resolved.starts_with(root) {
-                    return Err(".termflow 配置路径必须位于项目内".into());
+                    return Err(".krosna 配置路径必须位于项目内".into());
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -207,7 +208,7 @@ mod tests {
             .expect("load")
             .launchers
             .is_empty());
-        assert!(!directory.path().join(".termflow").exists());
+        assert!(!directory.path().join(".krosna").exists());
         save_project_launchers(project.clone(), document()).expect("save");
         save_project_launchers(project.clone(), document()).expect("replace");
         let loaded = load_project_launchers(project.clone()).expect("reload");
@@ -245,7 +246,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("directory");
         let project = directory.path().to_string_lossy().to_string();
         save_project_launchers(project.clone(), document()).expect("save");
-        let path = directory.path().join(".termflow/launchers.json");
+        let path = directory.path().join(".krosna/launchers.json");
         fs::write(&path, "invalid").expect("write");
         assert!(load_project_launchers(project.clone()).is_err());
         let mut value = document();
@@ -288,7 +289,7 @@ mod tests {
         let project = directory.path().to_string_lossy().to_string();
         save_project_launchers(project.clone(), document()).expect("save");
         fs::write(
-            directory.path().join(".termflow/launchers.json"),
+            directory.path().join(".krosna/launchers.json"),
             vec![b' '; MAX_BYTES as usize + 1],
         )
         .expect("write");
@@ -303,7 +304,7 @@ mod tests {
     fn rejects_links_outside_the_project() {
         let directory = tempfile::tempdir().expect("directory");
         let outside = tempfile::tempdir().expect("outside");
-        std::os::unix::fs::symlink(outside.path(), directory.path().join(".termflow"))
+        std::os::unix::fs::symlink(outside.path(), directory.path().join(".krosna"))
             .expect("link");
         let project = directory.path().to_string_lossy().to_string();
         assert!(load_project_launchers(project.clone()).is_err());

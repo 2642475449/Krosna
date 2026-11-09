@@ -1,0 +1,4 @@
+interface:
+  display_name: "Krosna GitHub Release"
+  short_description: "Publish and verify GitHub-hosted auto-updates"
+  default_prompt: "Use $krosna-github-release to prepare and verify a Krosna release."

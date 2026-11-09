@@ -26,6 +26,7 @@ import { getAppShortcut } from "@/lib/appShortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
+import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
@@ -721,17 +722,29 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                     </span>
                   </Tooltip>
                 )}
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<CloseOutlined style={{ fontSize: 10 }} />}
-                  className="tab-close-btn ml-auto shrink-0 !p-0 !w-4 !h-4 !min-w-0 flex items-center justify-center"
-                  style={{ color: "var(--cs-text-tertiary)" }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void requestCloseTabs([tabId]);
-                  }}
-                />
+                <span className="app-tabbar-action">
+                  {session && (
+                    <span className="app-tabbar-action-status">
+                      <AgentSessionStatus session={session} visible={activeSessionId === tabId} />
+                    </span>
+                  )}
+                  <Button
+                    type="text"
+                    size="small"
+                    aria-label={t("tabBar.closeTab")}
+                    icon={<CloseOutlined style={{ fontSize: 10 }} />}
+                    className="tab-close-btn !p-0 !w-5 !h-5 !min-w-0 flex items-center justify-center"
+                    style={{ color: "var(--cs-text-tertiary)" }}
+                    onPointerDown={(event) => {
+                      if (event.button === 0) event.stopPropagation();
+                    }}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void requestCloseTabs([tabId]);
+                    }}
+                  />
+                </span>
               </div>
             </div>
           </Dropdown>

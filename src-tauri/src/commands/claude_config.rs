@@ -311,7 +311,7 @@ fn get_user_opencode_plugin_path() -> Result<PathBuf, String> {
     Ok(
         crate::agent_paths::user_path(crate::agent_paths::AgentPath::OpenCode)?
             .join("plugins")
-            .join("termflow-status.js"),
+            .join("krosna-status.js"),
     )
 }
 
@@ -367,7 +367,7 @@ fn get_agent_scope_config_path(
             Ok(normalize_input_path(project_path)
                 .join(".opencode")
                 .join("plugins")
-                .join("termflow-status.js"))
+                .join("krosna-status.js"))
         }
         _ => Err("无效的 Hook 来源".to_string()),
     }
@@ -1896,7 +1896,7 @@ mod codex_usage_v2_tests {
     #[test]
     #[ignore = "requires an explicit local rollout path; reads usage metadata only"]
     fn codex_v2_real_rollout_reconciles_compaction_usage() {
-        let path = std::env::var("TERMFLOW_USAGE_TEST_ROLLOUT").expect("explicit rollout path");
+        let path = std::env::var("KROSNA_USAGE_TEST_ROLLOUT").expect("explicit rollout path");
         let result = build_codex_usage_session_stats(Path::new(&path), None).unwrap();
         assert_eq!(result.total_tokens(), 63_636_343);
         assert_eq!(result.total_messages(), 272);
@@ -2422,7 +2422,7 @@ fn build_opencode_usage_stats() -> Result<AggregatedTranscriptStats, String> {
 
 fn antigravity_gemini_home() -> Option<PathBuf> {
     for variable in [
-        "TERMFLOW_ANTIGRAVITY_HOME",
+        "KROSNA_ANTIGRAVITY_HOME",
         "ANTIGRAVITY_HOME",
         "GEMINI_HOME",
     ] {
@@ -2779,7 +2779,7 @@ fn local_path_key(path: &Path) -> String {
 
 fn collect_qoder_database_paths() -> Vec<PathBuf> {
     let mut paths = BTreeMap::<String, PathBuf>::new();
-    // Termflow starts qoderclicn, whose desktop client stores history under
+    // Krosna starts qoderclicn, whose desktop client stores history under
     // QoderCN. Keep Qoder too: both desktop clients may coexist and each has
     // its own independent local history.
     for (env_prefix, app_directory) in [("QODER", "Qoder"), ("QODER_CN", "QoderCN")] {
@@ -3429,7 +3429,7 @@ fn remove_legacy_disabled_hooks_file(config_path: &Path) -> Result<(), String> {
     let Some(parent) = config_path.parent() else {
         return Ok(());
     };
-    let disabled_path = parent.join("termflow-hooks-disabled.json");
+    let disabled_path = parent.join("krosna-hooks-disabled.json");
     if disabled_path.exists() {
         fs::remove_file(&disabled_path)
             .map_err(|e| format!("清理旧版 Hook 停用备份失败: {}", e))?;
@@ -3691,14 +3691,14 @@ fn remove_active_hook(settings: &mut Value, scope: &str, id: &str) -> Result<(),
     Ok(())
 }
 
-fn is_termflow_managed_claude_hook(action: &Value) -> bool {
+fn is_krosna_managed_claude_hook(action: &Value) -> bool {
     action
         .get("command")
         .and_then(Value::as_str)
-        .is_some_and(|command| command.contains("termflow-hook.cjs"))
+        .is_some_and(|command| crate::brand_migration::is_managed_name(command, "krosna-hook.cjs"))
 }
 
-fn remove_termflow_managed_claude_hooks(settings: &mut Value) -> usize {
+fn remove_krosna_managed_claude_hooks(settings: &mut Value) -> usize {
     let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
         return 0;
     };
@@ -3714,7 +3714,7 @@ fn remove_termflow_managed_claude_hooks(settings: &mut Value) -> usize {
                 return true;
             };
             let previous_len = actions.len();
-            actions.retain(|action| !is_termflow_managed_claude_hook(action));
+            actions.retain(|action| !is_krosna_managed_claude_hook(action));
             removed_count += previous_len - actions.len();
             !actions.is_empty()
         });
@@ -3821,7 +3821,7 @@ fn get_claude_hook_script_path() -> Result<PathBuf, String> {
     Ok(
         crate::agent_paths::user_path(crate::agent_paths::AgentPath::Claude)?
             .join("hooks")
-            .join("termflow-hook.cjs"),
+            .join("krosna-hook.cjs"),
     )
 }
 
@@ -3834,14 +3834,14 @@ pub(crate) fn ensure_claude_statusline_bridge() -> Result<PathBuf, String> {
     fs::create_dir_all(&bridge_dir)
         .map_err(|error| format!("创建 Claude status line bridge 目录失败: {error}"))?;
 
-    let script_path = bridge_dir.join("termflow-statusline.cjs");
+    let script_path = bridge_dir.join("krosna-statusline.cjs");
     let script_content = build_statusline_bridge_content();
     if fs::read_to_string(&script_path).ok().as_deref() != Some(script_content.as_str()) {
         fs::write(&script_path, script_content)
             .map_err(|error| format!("写入 Claude status line bridge 失败: {error}"))?;
     }
 
-    let settings_path = bridge_dir.join("termflow-statusline-settings.json");
+    let settings_path = bridge_dir.join("krosna-statusline-settings.json");
     let command = format!("node \"{}\"", script_path.to_string_lossy());
     let settings = json!({
         "statusLine": {
@@ -3914,9 +3914,9 @@ function normalizeWindow(window) {
 }
 
 function reportRateLimits() {
-  const sessionId = process.env.TERMFLOW_SESSION_ID || '';
-  const port = Number(process.env.TERMFLOW_INGEST_PORT);
-  const token = process.env.TERMFLOW_INGEST_TOKEN || '';
+  const sessionId = process.env.KROSNA_SESSION_ID || '';
+  const port = Number(process.env.KROSNA_INGEST_PORT);
+  const token = process.env.KROSNA_INGEST_TOKEN || '';
   if (!sessionId || !Number.isFinite(port) || port <= 0 || !token) return;
 
   const body = JSON.stringify({
@@ -3943,7 +3943,7 @@ function reportRateLimits() {
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(body),
-      'X-TERMFLOW-TOKEN': token,
+      'X-KROSNA-TOKEN': token,
     },
     timeout: 1200,
   });
@@ -3957,7 +3957,7 @@ function renderOriginalStatusLine() {
   const command = original && original.type === 'command' && typeof original.command === 'string'
     ? original.command.trim()
     : '';
-  if (!command || command.includes('termflow-statusline.cjs')) return;
+  if (!command || command.includes('krosna-statusline.cjs')) return;
 
   const result = spawnSync(command, {
     input: inputData,
@@ -4030,13 +4030,13 @@ const stateByHook = {
   elicitationresult: 'running',
   sessionend: 'waiting',
 };
-const port = process.env.TERMFLOW_INGEST_PORT;
-const token = process.env.TERMFLOW_INGEST_TOKEN;
+const port = process.env.KROSNA_INGEST_PORT;
+const token = process.env.KROSNA_INGEST_TOKEN;
 
 if (!port || !token || !eventType || !stateByHook[hookName]) {
   process.exit(0);
 }
-/* TERMFLOW_RUNTIME_CONTEXT */
+/* KROSNA_RUNTIME_CONTEXT */
 
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -4075,11 +4075,11 @@ const payload = {
   version: '1.0',
   agent: 'claude',
   state: stateByHook[hookName],
-  event_id: `claude:${process.env.TERMFLOW_SESSION_ID || ''}:${hookName}:${crypto.randomUUID()}`,
+  event_id: `claude:${process.env.KROSNA_SESSION_ID || ''}:${hookName}:${crypto.randomUUID()}`,
   event_type: eventType,
-  session_id: process.env.TERMFLOW_SESSION_ID || '',
-  project_path: process.env.TERMFLOW_PROJECT_PATH || process.cwd(),
-  session_name: process.env.TERMFLOW_SESSION_ID || '',
+  session_id: process.env.KROSNA_SESSION_ID || '',
+  project_path: process.env.KROSNA_PROJECT_PATH || process.cwd(),
+  session_name: process.env.KROSNA_SESSION_ID || '',
   source: 'hook',
   created_at: Date.now(),
   // Only keyed digests and opaque IDs leave this process. Raw hook stdin can
@@ -4097,22 +4097,22 @@ const req = http.request(
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(body),
-      'X-TERMFLOW-TOKEN': token,
+      'X-KROSNA-TOKEN': token,
     },
     timeout: 1200,
   },
-  finishTermflowHook
+  finishKrosnaHook
 );
 
-req.on('error', finishTermflowHook);
+req.on('error', finishKrosnaHook);
 req.on('timeout', () => {
   req.destroy();
-  finishTermflowHook();
+  finishKrosnaHook();
 });
 req.write(body);
 req.end();
 "#
-    .replace("/* TERMFLOW_RUNTIME_CONTEXT */", crate::runtime_context::hook_bridge())
+    .replace("/* KROSNA_RUNTIME_CONTEXT */", crate::runtime_context::hook_bridge())
 }
 
 fn list_hooks_for_scope(scope: &str, project_path: Option<&str>) -> Result<Vec<HookInfo>, String> {
@@ -4232,7 +4232,7 @@ fn collect_opencode_plugin_record(
         info: HookInfo {
             agent: "opencode".to_string(),
             id: build_hook_id(scope, "plugin", "", &display_path(config_path)),
-            name: "Termflow OpenCode Status Plugin".to_string(),
+            name: "Krosna OpenCode Status Plugin".to_string(),
             enabled: true,
             scope: scope.to_string(),
             event: "plugin:event".to_string(),
@@ -4264,7 +4264,7 @@ fn collect_pi_extension_record(scope: &str, config_path: &Path) -> Result<Vec<Ho
             event: "extension:event".to_string(),
             matcher: String::new(),
             command: display_path(config_path),
-            command_preview: "termflow-agent-status.js".to_string(),
+            command_preview: "krosna-agent-status.js".to_string(),
             timeout: None,
             config_path: display_path(config_path),
             updated_at: resolve_updated_at(config_path),
@@ -4349,7 +4349,7 @@ pub fn repair_agent_hooks(
 ) -> Result<HookCatalog, String> {
     let agent = normalize_hook_agent(&agent)?;
     if scope != "user" {
-        return Err("Termflow 默认 Hook 只允许安装到全局用户配置".to_string());
+        return Err("Krosna 默认 Hook 只允许安装到全局用户配置".to_string());
     }
     if agent == "claude" {
         return repair_claude_hooks(scope, project_path);
@@ -4423,12 +4423,24 @@ pub fn repair_claude_hooks(
     project_path: Option<String>,
 ) -> Result<HookCatalog, String> {
     if scope != "user" {
-        return Err("Termflow 默认 Hook 只允许安装到全局用户配置".to_string());
+        return Err("Krosna 默认 Hook 只允许安装到全局用户配置".to_string());
     }
     let config_path = get_scope_config_path(&scope, project_path.as_deref())?;
     let mut settings = read_settings(&config_path)?;
     if !settings.is_object() {
         settings = json!({});
+    }
+    // Replace only managed hooks from the previous brand; preserve user actions.
+    if let Some(events) = settings.get_mut("hooks").and_then(Value::as_object_mut) {
+        for entries in events.values_mut().filter_map(Value::as_array_mut) {
+            for entry in entries.iter_mut() {
+                if let Some(actions) = entry.get_mut("hooks").and_then(Value::as_array_mut) {
+                    actions.retain(|action| !action.get("command").and_then(Value::as_str)
+                        .is_some_and(|command| command.contains("termflow-hook.cjs")));
+                }
+            }
+            entries.retain(|entry| entry.get("hooks").and_then(Value::as_array).map_or(true, |actions| !actions.is_empty()));
+        }
     }
     let defaults = default_hook_entries()?;
     for entry in &defaults {
@@ -4458,7 +4470,7 @@ pub fn migrate_workspace_claude_hooks(
 
     let config_path = get_scope_config_path("workspace", Some(&project_path))?;
     let mut settings = read_settings(&config_path)?;
-    let removed_count = remove_termflow_managed_claude_hooks(&mut settings);
+    let removed_count = remove_krosna_managed_claude_hooks(&mut settings);
     if removed_count > 0 {
         write_settings(&config_path, &settings)?;
         remove_legacy_disabled_hooks_file(&config_path)?;
@@ -4478,7 +4490,7 @@ pub fn check_claude_hook_status() -> Result<HookStatus, String> {
         records.iter().any(|record| {
             record.info.enabled
                 && record.info.event.eq_ignore_ascii_case(required_event)
-                && record.info.command.contains("termflow-hook.cjs")
+                && record.info.command.contains("krosna-hook.cjs")
         })
     });
     let hook_command = records
@@ -4486,7 +4498,7 @@ pub fn check_claude_hook_status() -> Result<HookStatus, String> {
         .find(|record| {
             record.info.enabled
                 && record.info.event.eq_ignore_ascii_case("stop")
-                && record.info.command.contains("termflow-hook.cjs")
+                && record.info.command.contains("krosna-hook.cjs")
         })
         .map(|record| record.info.command.clone());
 
@@ -4651,7 +4663,7 @@ pub fn configure_claude_hook() -> Result<HookStatus, String> {
             hook.scope == "user"
                 && hook.enabled
                 && hook.event.eq_ignore_ascii_case(required_event)
-                && hook.command.contains("termflow-hook.cjs")
+                && hook.command.contains("krosna-hook.cjs")
         })
     });
     let stop_hook = catalog
@@ -4661,7 +4673,7 @@ pub fn configure_claude_hook() -> Result<HookStatus, String> {
             hook.scope == "user"
                 && hook.enabled
                 && hook.event.eq_ignore_ascii_case("stop")
-                && hook.command.contains("termflow-hook.cjs")
+                && hook.command.contains("krosna-hook.cjs")
         })
         .map(|hook| hook.command.clone());
 
@@ -4689,14 +4701,14 @@ mod tests {
             crate::agent_paths::user_path(crate::agent_paths::AgentPath::Pi)
                 .unwrap()
                 .join("extensions")
-                .join("termflow-agent-status.js")
+                .join("krosna-agent-status.js")
         );
         assert_eq!(
             get_agent_scope_config_path("pi", "workspace", Some("project")).unwrap(),
             normalize_input_path("project")
                 .join(".pi")
                 .join("extensions")
-                .join("termflow-agent-status.js")
+                .join("krosna-agent-status.js")
         );
         assert!(get_agent_scope_config_path("pi", "workspace", None).is_err());
     }
@@ -4704,11 +4716,11 @@ mod tests {
     #[test]
     fn pi_catalog_reads_source_and_keeps_scope_identities_separate() {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("termflow-agent-status.js");
+        let path = temp.path().join("krosna-agent-status.js");
         assert!(collect_pi_extension_record("user", &path)
             .unwrap()
             .is_empty());
-        let source = "// Termflow managed Pi status extension\nexport default function(pi) {}";
+        let source = "// Krosna managed Pi status extension\nexport default function(pi) {}";
         fs::write(&path, source).unwrap();
         let user = collect_pi_extension_record("user", &path).unwrap();
         let project = collect_pi_extension_record("workspace", &path).unwrap();
@@ -4784,7 +4796,7 @@ mod tests {
     #[test]
     fn default_claude_hooks_cover_permission_resume_lifecycle() {
         let entries = default_hook_entries_for_path(Path::new(
-            "C:/Users/test/.claude/hooks/termflow-hook.cjs",
+            "C:/Users/test/.claude/hooks/krosna-hook.cjs",
         ));
         let events = entries
             .iter()
@@ -4862,7 +4874,7 @@ mod tests {
 
     #[test]
     fn restored_user_hook_preserves_timeout_policy() {
-        let mut entry = default_hook_entries_for_path(Path::new("C:/termflow-hook.cjs")).remove(0);
+        let mut entry = default_hook_entries_for_path(Path::new("C:/krosna-hook.cjs")).remove(0);
         entry.command = "node user-hook.js".to_string();
         for timeout in [None, Some(120)] {
             entry.timeout = timeout;
@@ -4883,7 +4895,7 @@ mod tests {
                 }]
             }
         });
-        let managed = default_hook_entries_for_path(Path::new("C:/termflow-hook.cjs"))
+        let managed = default_hook_entries_for_path(Path::new("C:/krosna-hook.cjs"))
             .into_iter()
             .find(|entry| entry.event == "PostToolUse")
             .unwrap();
@@ -4896,7 +4908,7 @@ mod tests {
         assert!(hooks[1]["hooks"][0]["command"]
             .as_str()
             .unwrap()
-            .contains("termflow-hook.cjs"));
+            .contains("krosna-hook.cjs"));
     }
 
     #[test]
@@ -4906,17 +4918,17 @@ mod tests {
                 "PostToolUse": [{
                     "matcher": "*",
                     "hooks": [
-                        {"type": "command", "command": "node C:/Users/test/.claude/hooks/termflow-hook.cjs posttooluse"},
+                        {"type": "command", "command": "node C:/Users/test/.claude/hooks/krosna-hook.cjs posttooluse"},
                         {"type": "command", "command": "node user-hook.js"}
                     ]
                 }],
                 "Stop": [{
-                    "hooks": [{"type": "command", "command": "node C:/Users/test/.claude/hooks/termflow-hook.cjs stop"}]
+                    "hooks": [{"type": "command", "command": "node C:/Users/test/.claude/hooks/krosna-hook.cjs stop"}]
                 }]
             }
         });
 
-        let removed = remove_termflow_managed_claude_hooks(&mut settings);
+        let removed = remove_krosna_managed_claude_hooks(&mut settings);
 
         assert_eq!(removed, 2);
         assert_eq!(
@@ -4965,21 +4977,21 @@ mod tests {
     #[test]
     fn parses_antigravity_top_level_hook_groups() {
         let directory =
-            std::env::temp_dir().join(format!("termflow-antigravity-hooks-{}", std::process::id()));
+            std::env::temp_dir().join(format!("krosna-antigravity-hooks-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
         let path = directory.join("hooks.json");
         fs::write(
             &path,
             serde_json::to_vec(&json!({
-                "termflow-agent-status": {
+                "krosna-agent-status": {
                     "PreInvocation": [{
                         "type": "command",
-                        "command": "node termflow-agent-hook.cjs antigravity PreInvocation",
+                        "command": "node krosna-agent-hook.cjs antigravity PreInvocation",
                         "timeout": 10
                     }],
                     "Stop": [{
                         "type": "command",
-                        "command": "node termflow-agent-hook.cjs antigravity Stop",
+                        "command": "node krosna-agent-hook.cjs antigravity Stop",
                         "timeout": 10
                     }]
                 },
@@ -5052,7 +5064,7 @@ mod tests {
         let mut context = CodexUsageParseContext {
             session_id: "session-test".to_string(),
             session_cwd: None,
-            current_cwd: Some("D:/3.project/Termflow".to_string()),
+            current_cwd: Some("D:/3.project/Krosna".to_string()),
             current_model: None,
             previous_totals: None,
             total_only_baseline_pending: false,

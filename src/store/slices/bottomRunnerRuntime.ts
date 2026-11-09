@@ -61,7 +61,7 @@ export function buildRunnerCommand(command: string, shell: TerminalShell, window
   // 将正文作为字符串解析，追加换行后再捕获，避免行尾注释吞掉退出逻辑。
   const script = command.replaceAll("'", "''");
   // 执行后主动退出交互 shell；显式写 OSC 133，避免 exit 跳过 PowerShell prompt 钩子。
-  return `& { $global:LASTEXITCODE = 0; try { . ([scriptblock]::Create('${script}' + [char]10 + '$termflowRunnerOk = $?')); $termflowRunnerExit = if ($global:LASTEXITCODE -ne 0) { $global:LASTEXITCODE } elseif ($termflowRunnerOk) { 0 } else { 1 } } catch { Write-Error $_; $termflowRunnerExit = 1 }; [Console]::Write(([char]27).ToString() + "]133;D;" + $termflowRunnerExit + [char]7); exit $termflowRunnerExit }`;
+  return `& { $global:LASTEXITCODE = 0; try { . ([scriptblock]::Create('${script}' + [char]10 + '$krosnaRunnerOk = $?')); $krosnaRunnerExit = if ($global:LASTEXITCODE -ne 0) { $global:LASTEXITCODE } elseif ($krosnaRunnerOk) { 0 } else { 1 } } catch { Write-Error $_; $krosnaRunnerExit = 1 }; [Console]::Write(([char]27).ToString() + "]133;D;" + $krosnaRunnerExit + [char]7); exit $krosnaRunnerExit }`;
 }
 
 async function disposeRunner(tab: BottomRunnerTab) {

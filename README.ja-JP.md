@@ -1,7 +1,9 @@
 <h1 align="center">
-  <img src="public/logo.png" width="56" alt="Termflow Logo" align="absmiddle">
-  Termflow
+  <img src="public/logo.png" width="56" alt="Krosna Logo" align="absmiddle">
+  Krosna
 </h1>
+
+> **Termflow** は **Krosna** に名称を変更しました。新版は GitHub Releases から更新し、旧更新ドメインは互換用として維持します。初回起動時に旧アプリのデータ、ブラウザーの保存キー、プロジェクト設定を移行し、元のデータは保持します。更新前に旧アプリを終了し、フォルダー名を変更したプロジェクトは新しいパスから開き直してください。
 
 <p align="center">
   <a href="README.md">简体中文</a> | <a href="README.en-US.md">English</a> | 日本語
@@ -21,11 +23,11 @@
   <img src="https://img.shields.io/badge/v1.8.22-blue?style=flat-square" alt="バージョン">
 </p>
 
-![Termflow の概要](.github/assets/termflow-overview.png)
+![Krosna の概要](.github/assets/krosna-overview.png)
 
 ## 対応エージェント
 
-Termflow は次の CLI エージェントをネイティブにサポートします。
+Krosna は次の CLI エージェントをネイティブにサポートします。
 
 <p align="center">
   <code><img src="public/agents/claude.svg" width="16" alt="" align="absmiddle"> Claude Code</code>
@@ -40,7 +42,7 @@ Termflow は次の CLI エージェントをネイティブにサポートしま
 
 ## 概要
 
-**Termflow** は、Tauri 2 で構築されたターミナル向け CLI エージェントのデスクトップワークスペースです。複数の CLI エージェントのコマンドライン体験を一つのローカル GUI にまとめ、プロジェクト、セッション、ターミナル、Git 作業を同じコンテキストで扱えます。
+**Krosna** は、Tauri 2 で構築されたターミナル向け CLI エージェントのデスクトップワークスペースです。複数の CLI エージェントのコマンドライン体験を一つのローカル GUI にまとめ、プロジェクト、セッション、ターミナル、Git 作業を同じコンテキストで扱えます。
 
 主な特長：
 
@@ -57,19 +59,19 @@ Termflow は次の CLI エージェントをネイティブにサポートしま
 
 ## オープンソースにした理由
 
-Termflow は、日常的に使いたいワークフローに合わせて作り始めたアプリケーションです。機能と使い心地が整ってきたため、AI 支援開発ツールを選ぶ人に別の選択肢を届けるべくオープンソース化しました。
+Krosna は、日常的に使いたいワークフローに合わせて作り始めたアプリケーションです。機能と使い心地が整ってきたため、AI 支援開発ツールを選ぶ人に別の選択肢を届けるべくオープンソース化しました。
 
 ## コア機能
 
 | 機能 | 内容 |
 | :--- | :--- |
-| **プロジェクトとセッションのワークスペース** | プロジェクトディレクトリごとに各エージェントのセッションを自動整理し、タスクを素早く作成・切替しながら、各セッションの稼働状態をリアルタイムで確認できます。<br><br><img src=".github/assets/demos/multi-session-management.gif" alt="Termflow プロジェクトとセッションのワークスペースデモ" width="240"> |
+| **プロジェクトとセッションのワークスペース** | プロジェクトディレクトリごとに各エージェントのセッションを自動整理し、タスクを素早く作成・切替しながら、各セッションの稼働状態をリアルタイムで確認できます。<br><br><img src=".github/assets/demos/multi-session-management.gif" alt="Krosna プロジェクトとセッションのワークスペースデモ" width="240"> |
 | **サイドタスクと補助ワークスペース** | ターミナルのエラーやファイルの問題が発生したとき、選択したターミナル出力からサイド質問を開始し、メインセッションを離れずに右側で関連ファイルの確認や独立したタスクの実行ができます。 |
-| **ファイルとコンテキストの連携** | プロジェクトファイルの閲覧・検索・編集、Markdown のプレビュー、CLI 入力欄へのファイルのドラッグ＆ドロップにより、エージェントへ素早くコンテキストを渡せます。<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Termflow ファイルとコンテキストの連携デモ" width="240"> |
+| **ファイルとコンテキストの連携** | プロジェクトファイルの閲覧・検索・編集、Markdown のプレビュー、CLI 入力欄へのファイルのドラッグ＆ドロップにより、エージェントへ素早くコンテキストを渡せます。<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Krosna ファイルとコンテキストの連携デモ" width="240"> |
 | **Git 変更ワークフロー** | 変更確認、ステージング、ブランチ管理、コミット、プッシュ、プル、同期を一か所で行い、AI によるコミットメッセージ生成も利用できます。 |
 | **チェックポイントと差分レビュー** | エージェントターンのチェックポイントを自動記録し、ファイル概要と変更差分を確認して、任意のチェックポイントへ戻れます。 |
 | **クイックコマンドと音声入力** | 検索可能でパラメータ化されたクイックコマンドから定型操作を実行できます。MiMo と DashScope ASR、グローバルショートカット、録音状態オーバーレイにも対応します。 |
-| **作業状況の概要** | セッション活動、Token 使用量、作業ペースを集約し、アテンションセンターとスマート通知で対応が必要なタスクを示します。<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Termflow 作業状況の概要デモ" width="240"> |
+| **作業状況の概要** | セッション活動、Token 使用量、作業ペースを集約し、アテンションセンターとスマート通知で対応が必要なタスクを示します。<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Krosna 作業状況の概要デモ" width="240"> |
 
 そのほか、セッションの永続化、カスタムタイトルバーとフレームレスウィンドウ操作、明暗・システム連動テーマ、簡体字中国語・英語・日本語の UI を提供します。
 
@@ -95,7 +97,7 @@ Termflow は、日常的に使いたいワークフローに合わせて作り�
 
 ## 謝辞
 
-Termflow は [Tauri](https://tauri.app/)、[React](https://react.dev/)、[xterm.js](https://xtermjs.org/)、[Ant Design](https://ant.design/)、[Zustand](https://zustand-demo.pmnd.rs/)、[Vite](https://vitejs.dev/)、[i18next](https://www.i18next.com/)、[Monaco Editor](https://microsoft.github.io/monaco-editor/)、[Mermaid](https://mermaid.js.org/)、[Geist Mono](https://vercel.com/font)、[reqwest](https://github.com/seanmonstar/reqwest) などの優れたオープンソースプロジェクトを利用しています。
+Krosna は [Tauri](https://tauri.app/)、[React](https://react.dev/)、[xterm.js](https://xtermjs.org/)、[Ant Design](https://ant.design/)、[Zustand](https://zustand-demo.pmnd.rs/)、[Vite](https://vitejs.dev/)、[i18next](https://www.i18next.com/)、[Monaco Editor](https://microsoft.github.io/monaco-editor/)、[Mermaid](https://mermaid.js.org/)、[Geist Mono](https://vercel.com/font)、[reqwest](https://github.com/seanmonstar/reqwest) などの優れたオープンソースプロジェクトを利用しています。
 
 ## ライセンス
 

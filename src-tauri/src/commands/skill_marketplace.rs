@@ -127,7 +127,7 @@ fn client(database: &State<'_, Arc<Database>>) -> Result<Client, String> {
             .no_proxy()
             .https_only(true)
             .redirect(redirect_policy(true))
-            .user_agent("Termflow skill marketplace")
+            .user_agent("Krosna skill marketplace")
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30)),
         &proxy,
@@ -1555,7 +1555,7 @@ mod tests {
             let client = crate::network_proxy::apply_proxy_to_client_builder(
                 Client::builder()
                     .no_proxy()
-                    .user_agent("Termflow marketplace integration check")
+                    .user_agent("Krosna marketplace integration check")
                     .timeout(Duration::from_secs(30)),
                 &proxy,
             )
@@ -1622,7 +1622,7 @@ mod tests {
             let client = crate::network_proxy::apply_proxy_to_client_builder(
                 Client::builder()
                     .no_proxy()
-                    .user_agent("Termflow marketplace integration check")
+                    .user_agent("Krosna marketplace integration check")
                     .timeout(Duration::from_secs(30)),
                 &proxy,
             )
@@ -1667,7 +1667,7 @@ mod tests {
             let client = crate::network_proxy::apply_proxy_to_client_builder(
                 Client::builder()
                     .no_proxy()
-                    .user_agent("Termflow archived skill regression check")
+                    .user_agent("Krosna archived skill regression check")
                     .timeout(Duration::from_secs(30)),
                 &proxy,
             )

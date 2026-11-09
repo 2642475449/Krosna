@@ -18,7 +18,7 @@ use crate::scheduled_tasks::{
     ScheduledTaskRunRecord, ScheduledTaskRunStatus, ScheduledTaskSchedule, ScheduledTaskTrigger,
 };
 
-const DATABASE_FILE_NAME: &str = "termflow.db";
+const DATABASE_FILE_NAME: &str = "krosna.db";
 const SEARCH_INDEX_PROJECT_PREFERENCES_KEY: &str = "searchIndex.projectPreferences";
 const SEARCH_INDEX_STORAGE_KEY: &str = "searchIndex.storage";
 pub const DEFAULT_SEARCH_INDEX_QUOTA_BYTES: u64 = 5 * 1024 * 1024 * 1024;
@@ -1746,8 +1746,8 @@ mod tests {
     fn scheduled_task_record() -> ScheduledTaskRecord {
         ScheduledTaskRecord {
             id: "scheduled-task-a".to_string(),
-            project_path: "D:/projects/termflow".to_string(),
-            project_name: "Termflow".to_string(),
+            project_path: "D:/projects/krosna".to_string(),
+            project_name: "Krosna".to_string(),
             name: "Daily inspection".to_string(),
             execution_kind: ScheduledTaskExecutionKind::Command,
             agent_id: None,
@@ -2318,7 +2318,7 @@ mod tests {
             .unwrap();
 
         let mut competing_window = initial;
-        competing_window.last_project_path = Some("D:/3.project/Termflow".to_string());
+        competing_window.last_project_path = Some("D:/3.project/Krosna".to_string());
         competing_window.language = "en-US".to_string();
         database
             .save_general_persistent_settings(&competing_window)
@@ -2337,18 +2337,18 @@ mod tests {
         let database = Database::open_in_memory();
 
         assert!(!database
-            .load_project_search_index_enabled("e:/projects/termflow")
+            .load_project_search_index_enabled("e:/projects/krosna")
             .unwrap());
 
         database
-            .save_project_search_index_enabled("e:/projects/termflow", true)
+            .save_project_search_index_enabled("e:/projects/krosna", true)
             .unwrap();
         database
             .save_project_search_index_enabled("e:/projects/other", false)
             .unwrap();
 
         assert!(database
-            .load_project_search_index_enabled("e:/projects/termflow")
+            .load_project_search_index_enabled("e:/projects/krosna")
             .unwrap());
         assert!(!database
             .load_project_search_index_enabled("e:/projects/other")
@@ -2363,7 +2363,7 @@ mod tests {
         assert_eq!(defaults.quota_bytes, DEFAULT_SEARCH_INDEX_QUOTA_BYTES);
 
         let configured = SearchIndexStorageSettings {
-            cache_root: Some("D:/Termflow Search Index".to_string()),
+            cache_root: Some("D:/Krosna Search Index".to_string()),
             quota_bytes: 2 * 1024 * 1024 * 1024,
         };
         database.save_search_index_storage(&configured).unwrap();

@@ -16,7 +16,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, { error: Error 
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(`[Termflow:${this.props.scope}]`, error, info.componentStack);
+    console.error(`[Krosna:${this.props.scope}]`, error, info.componentStack);
   }
 
   render() {

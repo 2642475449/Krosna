@@ -1,5 +1,5 @@
-export const GIT_GRAPH_REFRESH_EVENT = "termflow:git-graph-refresh";
-export const GIT_FILE_HISTORY_OPEN_EVENT = "termflow:git-file-history-open";
+export const GIT_GRAPH_REFRESH_EVENT = "krosna:git-graph-refresh";
+export const GIT_FILE_HISTORY_OPEN_EVENT = "krosna:git-file-history-open";
 
 export interface GitGraphRefreshDetail {
   projectPath: string;

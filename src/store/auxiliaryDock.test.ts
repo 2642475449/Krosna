@@ -167,7 +167,7 @@ it("remembers separate widths across reopening, project resets and restarts", as
   store.getState().toggle();
   const widths = { "task-monitor": 260, file: 610 };
   expect(store.getState().widths).toEqual(widths);
-  expect(JSON.parse(values.get("termflow-auxiliary-dock") ?? "{}").state).toEqual({ widths });
+  expect(JSON.parse(values.get("krosna-auxiliary-dock") ?? "{}").state).toEqual({ widths });
   vi.resetModules();
   const { useAuxiliaryDockStore: reloaded } = await import("./auxiliaryDock");
   expect(reloaded.getState()).toMatchObject({ widths, initialWidths: {}, open: false, tabs: [], activeTabId: null });
@@ -175,7 +175,7 @@ it("remembers separate widths across reopening, project resets and restarts", as
 
 it("ignores the legacy shared width so a wide document cannot become the monitor default", async () => {
   const values = stubDockStorage();
-  values.set("termflow-auxiliary-dock", JSON.stringify({ state: { width: 880 }, version: 0 }));
+  values.set("krosna-auxiliary-dock", JSON.stringify({ state: { width: 880 }, version: 0 }));
   vi.resetModules();
   const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");
   expect(store.getState().widths).toEqual({});
@@ -185,7 +185,7 @@ it("ignores the legacy shared width so a wide document cannot become the monitor
 
 it("validates persisted widths independently and ignores unknown content types", async () => {
   const values = stubDockStorage();
-  values.set("termflow-auxiliary-dock", JSON.stringify({ state: { widths: {
+  values.set("krosna-auxiliary-dock", JSON.stringify({ state: { widths: {
     "task-monitor": 10, file: 10000, review: "invalid", task: null, terminal: 510, unknown: 600,
   } }, version: 0 }));
   vi.resetModules();

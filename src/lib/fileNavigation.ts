@@ -10,7 +10,7 @@ export interface FileNavigationRequest extends FileRevealTarget {
   path: string;
 }
 
-export const FILE_NAVIGATION_EVENT = "termflow:file-navigation";
+export const FILE_NAVIGATION_EVENT = "krosna:file-navigation";
 
 const pendingRequests = new Map<string, FileRevealTarget>();
 

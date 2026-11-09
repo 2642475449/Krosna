@@ -218,7 +218,7 @@ mod tests {
         index.write().expect("write index");
         let tree = repo.find_tree(tree_id).expect("find tree");
         let signature =
-            git2::Signature::now("Termflow", "termflow@example.com").expect("create signature");
+            git2::Signature::now("Krosna", "krosna@example.com").expect("create signature");
         repo.commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
             .expect("create initial commit");
         drop(tree);

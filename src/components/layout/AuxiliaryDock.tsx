@@ -13,6 +13,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
+import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import CheckpointReviewDrawer from "@/components/CheckpointReviewDrawer";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { TaskMonitorPanel } from "@/components/TaskMonitorPopover";
@@ -376,6 +377,7 @@ export default function AuxiliaryDock({
                     ) : fileVisual ? (
                       <span className="inline-flex" style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
                     ) : tabIcon(tab.kind)}
+                    {session && <AgentSessionStatus session={session} visible={open && active} />}
                     <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
                     <button
                       type="button"

@@ -68,7 +68,7 @@ pub(crate) const AGENT_DEFINITIONS: [AgentDefinition; 6] = [
     },
 ];
 
-/// Inspect the AI coding CLIs Termflow can launch from the current system PATH.
+/// Inspect the AI coding CLIs Krosna can launch from the current system PATH.
 #[tauri::command]
 pub async fn inspect_agent_clis() -> Result<Vec<AgentCliInfo>, String> {
     tauri::async_runtime::spawn_blocking(inspect_agent_clis_sync)
@@ -241,7 +241,7 @@ fn read_version(executable_path: &str, version_args: &[&str]) -> Result<String, 
 }
 
 fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Result<Output, String> {
-    // Termflow is a GUI application. Any discovery/version subprocess that
+    // Krosna is a GUI application. Any discovery/version subprocess that
     // inherits a console window causes a visible flash on Windows.
     #[cfg(target_os = "windows")]
     {

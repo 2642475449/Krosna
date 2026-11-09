@@ -135,7 +135,7 @@ export function createFileDocument(projectPath: string, path: string) {
           // Explicit overwrite applies only to the conflict the user approved.
           overwrite = false;
         }
-        if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("termflow:git-refresh", {
+        if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("krosna:git-refresh", {
           detail: { projectPath, path },
         }));
         return true;

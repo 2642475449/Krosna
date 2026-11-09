@@ -78,7 +78,7 @@ import {
   getCheckpointedAgentUserResponseBaseline,
   isAgentUserResponseBaselineCurrent,
 } from "@/lib/agentUserResponse";
-import { createPtyResizeGate } from "@/lib/terminalResize";
+import { createPtyResizeGate, createTerminalLayoutScheduler } from "@/lib/terminalResize";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import {
   createTerminalOutputFrameGate,
@@ -105,7 +105,7 @@ import { useTranslation } from "react-i18next";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
-const AGENT_FILE_DRAG_MIME = "application/x-termflow-agent-files";
+const AGENT_FILE_DRAG_MIME = "application/x-krosna-agent-files";
 const TERMINAL_FOCUS_RETRY_DELAYS_MS = [0, 50, 150, 300];
 const TERMINAL_SCROLLBAR_HIDE_DELAY_MS = 700;
 let cachedWebglSupport: boolean | null = null;
@@ -164,7 +164,7 @@ interface TerminalProps {
 }
 
 type AgentFileDropPayload = {
-  type: "termflow-agent-files";
+  type: "krosna-agent-files";
   projectPath: string;
   entries: AgentFileDropEntry[];
 };
@@ -1000,7 +1000,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       );
       if (
         marker === "A" &&
-        data.split(";").includes("termflow=1") &&
+        data.split(";").includes("krosna=1") &&
         isNativePowerShellTerminalRef.current
       ) {
         terminalIntegrationReportedRef.current = true;
@@ -1433,14 +1433,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       term.refresh(0, term.rows - 1);
     };
 
-    let layoutSyncAnimationFrame: number | null = null;
-    const scheduleSync = () => {
-      if (layoutSyncAnimationFrame !== null) return;
-      layoutSyncAnimationFrame = requestAnimationFrame(() => {
-        layoutSyncAnimationFrame = null;
-        fullRefresh();
-      });
-    };
+    const layoutScheduler = createTerminalLayoutScheduler(fullRefresh);
+    const scheduleSync = layoutScheduler.schedule;
 
     let intersectsViewport = true;
     const syncRenderingVisibility = () => {
@@ -1594,10 +1588,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         window.cancelAnimationFrame(fallbackAnimationFrame);
         fallbackAnimationFrame = null;
       }
-      if (layoutSyncAnimationFrame !== null) {
-        window.cancelAnimationFrame(layoutSyncAnimationFrame);
-        layoutSyncAnimationFrame = null;
-      }
+      layoutScheduler.dispose();
       clearTimeout(fitTimeout);
       observer.disconnect();
       intersectionObserver.disconnect();
@@ -1837,7 +1828,7 @@ function readAgentFileDragPayload(dataTransfer: DataTransfer): AgentFileDropPayl
 
   try {
     const parsed = JSON.parse(raw) as Partial<AgentFileDropPayload>;
-    if (parsed.type !== "termflow-agent-files" || typeof parsed.projectPath !== "string" || !Array.isArray(parsed.entries)) {
+    if (parsed.type !== "krosna-agent-files" || typeof parsed.projectPath !== "string" || !Array.isArray(parsed.entries)) {
       return null;
     }
 
@@ -1855,7 +1846,7 @@ function readAgentFileDragPayload(dataTransfer: DataTransfer): AgentFileDropPayl
       .filter((entry) => entry.path.length > 0);
 
     return {
-      type: "termflow-agent-files",
+      type: "krosna-agent-files",
       projectPath: sanitizePromptPath(parsed.projectPath),
       entries,
     };

@@ -348,7 +348,7 @@ fn fetch_via_rpc(executable: &str, identity: CodexIdentity) -> CodexRateLimits {
         &mut stdin,
         initialize_id,
         "initialize",
-        json!({ "clientInfo": { "name": "termflow", "version": "1.0.0" } }),
+        json!({ "clientInfo": { "name": "krosna", "version": "1.0.0" } }),
     ) {
         return error_result(error, identity);
     }

@@ -73,7 +73,7 @@ pub async fn start_live_asr(
     );
     request.headers_mut().insert(
         "user-agent",
-        "Termflow/1.0"
+        "Krosna/1.0"
             .parse()
             .map_err(|error| format!("设置实时语音客户端标识失败: {error}"))?,
     );

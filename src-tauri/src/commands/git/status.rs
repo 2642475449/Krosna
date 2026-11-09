@@ -345,7 +345,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("termflow-git-status-{suffix}"));
+        let path = std::env::temp_dir().join(format!("krosna-git-status-{suffix}"));
         fs::create_dir_all(&path).unwrap();
         let repo = Repository::init(&path).unwrap();
         (path, repo)
@@ -357,7 +357,7 @@ mod tests {
         index.add_path(std::path::Path::new(name)).unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
-        let signature = Signature::now("Termflow Test", "termflow@example.com").unwrap();
+        let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         repo.commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
             .unwrap();
     }

@@ -7,11 +7,11 @@ import {
 
 const rows: ArchivedRow[] = [
   {
-    projectPath: "D:\\work\\Termflow",
-    projectName: "Termflow",
+    projectPath: "D:\\work\\Krosna",
+    projectName: "Krosna",
     session: {
       id: "claude-session",
-      path: "D:\\work\\Termflow",
+      path: "D:\\work\\Krosna",
       name: "Fix archived sessions",
       createdAt: 1,
       archivedAt: 100,

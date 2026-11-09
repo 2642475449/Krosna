@@ -44,6 +44,7 @@ AGENTS.md
 AGENTS.local.md
 CLAUDE.md
 CLAUDE.local.md
+.krosna/
 .termflow/
 .agents/
 .codex-tmp/
@@ -54,11 +55,11 @@ CLAUDE.local.md
 .workbuddy/
 .mcp.json
 
-# Shared Termflow skills
+# Shared Krosna skills
 !.agents/
 !.agents/skills/
-!.agents/skills/termflow-github-release/
-!.agents/skills/termflow-github-release/**
+!.agents/skills/krosna-github-release/
+!.agents/skills/krosna-github-release/**
 
 # Locally installed third-party skills
 /.agents/skills/design-taste-frontend/
