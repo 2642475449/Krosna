@@ -13,6 +13,7 @@ import Sidebar from "./Sidebar";
 import AuxiliaryDock from "./AuxiliaryDock";
 import TabBar from "@/components/TabBar";
 import HomePage from "@/pages/home";
+import { WorkflowIllustration } from "@/components/ui/WorkflowIllustration";
 import { SettingsPanelSkeleton } from "@/components/settings/SettingsPanelSkeleton";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { SessionResumeView } from "@/components/SessionResumeView";
@@ -25,6 +26,7 @@ import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useResumeSession } from "@/hooks/useResumeSession";
 import { addTerminalSession } from "@/lib/sessions";
+import { getDefaultSessionTitle } from "@/lib/sessionTitles";
 import type { TerminalSplitTarget } from "@/types";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
@@ -221,10 +223,11 @@ function WorkspacePane({ paneId }: { paneId: string }) {
       <div className="relative min-h-0 flex-1">
         {pane.tabIds.length === 0 ? (
           <div
-            className="flex h-full items-center justify-center text-xs"
+            className="flex h-full flex-col items-center justify-center gap-3 text-xs"
             style={{ color: "var(--cs-text-tertiary)" }}
           >
-            {i18n.t("tabBar.emptyPane")}
+            <WorkflowIllustration className="h-32 w-48" />
+            <span>{i18n.t("tabBar.emptyPane")}</span>
           </div>
         ) : (
           <>
@@ -890,7 +893,7 @@ function AppLayout() {
         return;
       }
       void handleCreateSession(
-        `${request.agent.name} ${dayjs().format("HH:mm:ss")}`,
+        getDefaultSessionTitle(request.agent.name),
         request.agent,
         request.launchOptions,
         "default",

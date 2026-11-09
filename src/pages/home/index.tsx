@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { ExclamationCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Popover, Skeleton } from "antd";
+import { WorkflowIllustration } from "@/components/ui/WorkflowIllustration";
 import {
   AGENT_USAGE_HISTORY_CHANGED_EVENT,
   getAgentUsageOverview,
@@ -17,6 +18,7 @@ import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { createGreetingSelection, getGreetingPeriod } from "./greeting";
+import "./home.css";
 import {
   addDays,
   buildOverviewMetrics,
@@ -655,8 +657,8 @@ function HomePage() {
     ? "var(--cs-bg-app)"
     : "white";
   const panelShadow = isDark
-    ? "0 14px 36px rgba(0,0,0,0.24)"
-    : "0 10px 28px rgba(15,23,42,0.055)";
+    ? "0 2px 8px rgba(0,0,0,0.12)"
+    : "0 2px 8px rgba(15,23,42,0.035)";
   const chartAxisTextColor = isDark
     ? "var(--cs-text-secondary)"
     : "color-mix(in srgb, var(--cs-text-secondary) 86%, white 14%)";
@@ -830,45 +832,47 @@ function HomePage() {
     tokenDistributionItems.reduce((sum, item) => sum + item.value, 0) || knownTokenTotal;
 
   return (
+    <div className="app-home-page">
     <div
-      className="app-scrollbar-none flex h-full overflow-y-auto px-[clamp(12px,2vw,24px)] py-5"
-      style={{ background: "var(--cs-bg-body)" }}
+      className="app-home-page-scroll app-scrollbar-none flex h-full overflow-y-auto px-[clamp(12px,2vw,24px)] py-5"
     >
       <div className="app-home-overview-container mx-auto flex min-h-full w-full max-w-[1120px] items-start justify-center">
         <div className="w-full">
           <div className="mb-5 flex items-start justify-between gap-8">
-            <div>
-              <h1
-                className="m-0 text-[28px] font-semibold"
-                style={{ color: "var(--cs-text-primary)" }}
-              >
-                {greeting}
-              </h1>
-              <div
-                className="mt-2 flex items-center gap-2 text-[13px]"
-                style={{ color: "var(--cs-text-secondary)" }}
-              >
-                <span>{subtitle}</span>
-                {usageScope && (
-                  <Popover
-                    trigger="click"
-                    placement="bottomLeft"
-                    content={
-                      <div className="max-w-[420px] text-xs leading-5" style={{ color: "var(--cs-text-secondary)" }}>
-                        {usageScope}
-                      </div>
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[13px]"
-                      aria-label={homeCopy(i18n.language, "查看统计范围说明", "View usage scope details", "集計範囲の詳細を表示")}
-                      style={{ color: "var(--cs-text-tertiary)" }}
+            <div className="flex min-w-0 flex-1 items-center gap-6">
+              <div className="min-w-0 flex-1">
+                <h1
+                  className="m-0 text-[28px] font-semibold"
+                  style={{ color: "var(--cs-text-primary)" }}
+                >
+                  {greeting}
+                </h1>
+                <div
+                  className="mt-2 flex items-center gap-2 text-[13px]"
+                  style={{ color: "var(--cs-text-secondary)" }}
+                >
+                  <span>{subtitle}</span>
+                  {usageScope && (
+                    <Popover
+                      trigger="click"
+                      placement="bottomLeft"
+                      content={
+                        <div className="max-w-[420px] text-xs leading-5" style={{ color: "var(--cs-text-secondary)" }}>
+                          {usageScope}
+                        </div>
+                      }
                     >
-                      <ExclamationCircleOutlined />
-                    </button>
-                  </Popover>
-                )}
+                      <button
+                        type="button"
+                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[13px]"
+                        aria-label={homeCopy(i18n.language, "查看统计范围说明", "View usage scope details", "集計範囲の詳細を表示")}
+                        style={{ color: "var(--cs-text-tertiary)" }}
+                      >
+                        <ExclamationCircleOutlined />
+                      </button>
+                    </Popover>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -938,8 +942,9 @@ function HomePage() {
               {t("home.overview.error", { message: error })}
             </div>
           ) : !overview || !metrics ? (
-            <div className="py-8 text-sm" style={{ color: "var(--cs-text-secondary)" }}>
-              {t("home.overview.empty")}
+            <div className="flex flex-col items-center gap-3 py-8 text-center text-sm" style={{ color: "var(--cs-text-secondary)" }}>
+              <WorkflowIllustration className="h-32 w-48" />
+              <span>{t("home.overview.empty")}</span>
             </div>
           ) : activeTab === "overview" ? (
             <div className="space-y-5">
@@ -1892,6 +1897,7 @@ function HomePage() {
             )}
         </div>
       </div>
+    </div>
     </div>
   );
 }

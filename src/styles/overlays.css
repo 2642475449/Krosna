@@ -1,0 +1,114 @@
+/* 所有业务浮层共用外观；尺寸、滚动区和定位仍由各组件负责。 */
+[data-theme] {
+  --cs-overlay-bg: var(--cs-bg-card-solid);
+  --cs-overlay-border: var(--cs-border-card);
+  --cs-overlay-divider: var(--cs-border-card);
+  --cs-overlay-footer-bg: var(--cs-bg-app);
+  --cs-overlay-radius-dialog: 14px;
+  --cs-overlay-radius-popup: 10px;
+  --cs-overlay-shadow: 0 12px 32px var(--cs-shadow-overlay);
+}
+
+[data-theme="dark-starry"],
+[data-theme="dark-mocha"] {
+  --cs-overlay-border: color-mix(in srgb, var(--cs-border-card) 78%, white 22%);
+}
+
+[data-theme] .ant-modal .ant-modal-container {
+  border: 1px solid var(--cs-overlay-border);
+  border-radius: var(--cs-overlay-radius-dialog);
+  background: var(--cs-overlay-bg);
+  color: var(--cs-text-primary);
+  box-shadow: var(--cs-overlay-shadow);
+}
+
+/* 保留 AntD 标准正文布局；操作区用负外边距延伸到容器边缘。 */
+[data-theme] .ant-modal:where(:not(.ant-modal-confirm)) .ant-modal-container {
+  padding: 20px;
+}
+
+[data-theme] .ant-modal .ant-modal-header {
+  background: var(--cs-overlay-bg);
+}
+
+/* 静态 Modal.confirm 使用独立挂载点，同样从 CSS 获取当前应用主题。 */
+[data-theme] .ant-modal :is(.ant-modal-title, .ant-modal-confirm-title, .ant-modal-confirm-content) {
+  color: var(--cs-text-primary);
+}
+
+[data-theme] .ant-modal .ant-modal-footer,
+[data-theme] .ant-modal .ant-modal-confirm-btns {
+  margin: 20px -20px -20px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--cs-overlay-divider);
+  border-radius: 0 0 calc(var(--cs-overlay-radius-dialog) - 1px) calc(var(--cs-overlay-radius-dialog) - 1px);
+  background: var(--cs-overlay-footer-bg);
+}
+
+[data-theme] .ant-modal-confirm .ant-modal-container { padding: 20px; }
+
+[data-theme] .ant-modal :is(.ant-modal-footer, .ant-modal-confirm-btns) .ant-btn {
+  min-height: 32px;
+  border-radius: var(--cs-radius-control);
+}
+
+/* 静态确认框不继承 ConfigProvider，按钮也显式使用配对的主题颜色。 */
+[data-theme] .ant-modal-confirm .ant-btn-default:not(.ant-btn-dangerous) {
+  background: var(--cs-overlay-footer-bg);
+  border-color: var(--cs-overlay-border);
+  color: var(--cs-text-primary);
+}
+[data-theme] .ant-modal-confirm .ant-btn-primary:not(.ant-btn-dangerous) {
+  background: var(--cs-primary);
+  border-color: var(--cs-primary);
+  color: var(--cs-text-on-primary);
+}
+[data-theme] .ant-modal-confirm .ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover {
+  background: var(--cs-bg-hover);
+}
+[data-theme] .ant-modal-confirm .ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):hover {
+  background: color-mix(in srgb, var(--cs-primary) 88%, var(--cs-overlay-bg));
+}
+
+[data-theme] :is(.ant-popover .ant-popover-container, .ant-select-dropdown,
+  .ant-dropdown .ant-dropdown-menu, .ant-dropdown-menu-submenu .ant-dropdown-menu,
+  .ant-picker-dropdown .ant-picker-panel-container, .ant-mentions-dropdown),
+.app-overlay-surface {
+  border: 1px solid var(--cs-overlay-border);
+  border-radius: var(--cs-overlay-radius-popup);
+  background: var(--cs-overlay-bg);
+  color: var(--cs-text-primary);
+  box-shadow: var(--cs-overlay-shadow);
+}
+
+/* 菜单分组里的内嵌菜单共用外壳，避免逐层出现描边。 */
+[data-theme] .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu {
+  border: 0;
+  box-shadow: none;
+}
+
+[data-theme] .ant-tooltip .ant-tooltip-container {
+  border: 1px solid var(--cs-overlay-border);
+  border-radius: var(--cs-radius-control);
+  box-shadow: var(--cs-overlay-shadow);
+}
+
+/* Drawer 保留贴边布局，只让朝向工作区的一侧呈现圆角。 */
+[data-theme] .ant-drawer .ant-drawer-section {
+  border: 1px solid var(--cs-overlay-border);
+  background: var(--cs-overlay-bg);
+  color: var(--cs-text-primary);
+}
+
+[data-theme] .ant-drawer-right .ant-drawer-section { border-radius: 14px 0 0 14px; }
+[data-theme] .ant-drawer-left .ant-drawer-section { border-radius: 0 14px 14px 0; }
+[data-theme] .ant-drawer-top .ant-drawer-section { border-radius: 0 0 14px 14px; }
+[data-theme] .ant-drawer-bottom .ant-drawer-section { border-radius: 14px 14px 0 0; }
+[data-theme] .ant-drawer .ant-drawer-content-wrapper { box-shadow: var(--cs-overlay-shadow); }
+[data-theme] .ant-drawer :is(.ant-drawer-header, .ant-drawer-footer) { border-color: var(--cs-overlay-divider); }
+[data-theme] .ant-drawer .ant-drawer-footer { padding: 12px 20px; background: var(--cs-overlay-footer-bg); }
+
+/* 自定义全宽正文沿用自己的布局，不额外叠加标准弹窗内边距。 */
+[data-theme] :is(.app-session-launcher-modal, .app-global-search-modal, .app-remote-modal) .ant-modal-container {
+  padding: 0;
+}

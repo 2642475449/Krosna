@@ -1,0 +1,8 @@
+Generator: built-in image_gen
+Transparent background: true
+Asset: workflow-ribbon-v1.png
+
+Use case: stylized-concept. Create one polished raster decorative illustration for the welcome area of Krosna, a professional desktop workspace integrating terminals, coding agents, files and Git. This is a standalone image asset, NOT a screenshot or UI mockup, NOT a logo.
+Subject: a small sculptural study of workflow: a restrained bundle of fine parallel strands smoothly interweaving into a single gently folded ribbon. Clear elegant silhouette, precise smooth geometry, subtle tactile satin material, refined editorial product illustration. One cohesive object, airy and quiet, ample transparent negative space around it. Soft studio illumination with self-shading, no hard cast shadow or ground plane.
+Palette follows the existing app's cool theme: muted slate blue, restrained indigo, pale blue-gray highlights. Avoid bright saturated colors. Object should remain readable against both very pale and charcoal application backgrounds. Centered composition, landscape approximately 3:2 aspect ratio, entire object visible with comfortable margins.
+Genuinely transparent alpha background, no baked checkerboard. No text, letters, code, terminal symbols, lightning, stars, sparkles, robots, mascots, glossy bubbles, glass orbs, lens flares, neon, gradients filling the canvas, frames or watermarks. The visual should feel calm and crafted, suitable for a small welcome illustration, with no large decorative backdrop.

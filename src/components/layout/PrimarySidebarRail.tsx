@@ -198,8 +198,10 @@ export function SettingsMenu({
         aria-label={t("common.settings")}
         className="w-56 rounded-lg overflow-hidden"
         style={{
-          background: "var(--cs-bg-sidebar)",
-          border: "1px solid var(--cs-border-sidebar)",
+          background: "var(--cs-overlay-bg)",
+          border: "1px solid var(--cs-overlay-border)",
+          borderRadius: "var(--cs-overlay-radius-popup)",
+          boxShadow: "var(--cs-overlay-shadow)",
         }}
       >
 
@@ -246,12 +248,7 @@ export function SettingsMenu({
           role="menu"
           aria-label={t("settings.quickMenu.language")}
           data-submenu="language"
-          className="absolute left-full top-0 ml-1 w-48 rounded-lg overflow-hidden py-1"
-          style={{
-            background: "var(--cs-bg-sidebar)",
-            border: "1px solid var(--cs-border-sidebar)",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-          }}
+          className="app-overlay-surface absolute left-full top-0 ml-1 w-48 overflow-hidden py-1"
         >
           {languageLabels.map(({ value: lang, label }) => {
             const isSelected = language === lang;
@@ -284,12 +281,7 @@ export function SettingsMenu({
           role="menu"
           aria-label={t("settings.quickMenu.theme")}
           data-submenu="theme"
-          className="absolute left-full top-0 ml-1 w-48 rounded-lg overflow-hidden py-1"
-          style={{
-            background: "var(--cs-bg-sidebar)",
-            border: "1px solid var(--cs-border-sidebar)",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-          }}
+          className="app-overlay-surface absolute left-full top-0 ml-1 w-48 overflow-hidden py-1"
         >
           {quickThemeModeOptions.map((opt) => {
             const isSelected = themeCategory === opt.key;
@@ -533,7 +525,7 @@ function PrimarySidebarRail() {
           )}
           open={quickSettingsOpen}
           onOpenChange={handleQuickSettingsOpenChange}
-          styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
+          styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
         >
           <div>
             <RailButton

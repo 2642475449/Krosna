@@ -1,8 +1,13 @@
+import dayjs from "dayjs";
 import type { Session } from "@/types";
 import { sanitizeSessionTitle } from "@/components/terminalTitle";
 
 export const TITLE_RETRY_DELAYS = [20_000, 60_000];
 export const CODEX_NATIVE_TITLE_WAIT_MS = 60_000;
+
+export function getDefaultSessionTitle(agentName: string, timestamp = Date.now()): string {
+  return `${agentName} ${dayjs(timestamp).format("HH:mm:ss")}`;
+}
 
 export function getNativeSessionTitle(session: Session): string | undefined {
   return session.agentId === "codex" && session.nativeTitle?.sessionId === session.agentSessionId

@@ -52,7 +52,7 @@
     padding: 0 10px;
     border: 1px solid var(--cs-border);
     border-radius: var(--cs-radius-control);
-    background: var(--cs-bg-card-solid);
+    background: color-mix(in srgb, var(--cs-bg-card-solid) 65%, var(--cs-bg-header));
     color: var(--cs-text-secondary);
     transition: border-color 140ms ease, background-color 140ms ease;
   }
@@ -92,7 +92,7 @@
     min-height: 48px;
     padding: 7px 10px;
     border: 1px solid transparent;
-    border-radius: 0 var(--cs-radius-overlay) var(--cs-radius-overlay) 0;
+    border-radius: var(--cs-radius-overlay);
     background: transparent;
   }
 

@@ -1,0 +1,21 @@
+Generation mode: built-in image_gen; transparent_background=true.
+Final asset: krosna-bottom-atmosphere-v1.png
+Actual output: 1672 x 941 RGBA PNG. Requested 2560 x 1440; the built-in generator returned the smaller dimensions after both calls.
+
+Initial generation prompt:
+Use case: stylized-concept.
+Asset type: production PNG atmospheric bottom background for Krosna professional desktop developer workbench.
+Generate ONE landscape 16:9 high-resolution image, target 2560 x 1440, with TRUE transparent alpha background.
+Composition is critical: the upper 70% of the canvas must be entirely empty transparent pixels. All visible material is confined to the bottom 25–30%, fading gently upward to alpha zero. Keep the central and upper screen completely clear for real application statistics, text and charts.
+At the very bottom draw a small number of broad, shallow, intertwined layered flowing surfaces, between finely woven fabric and precisely folded matte thin sheets. These are a continuous horizontal environment extending beyond both left and right edges, partially cropped by the bottom edge. Low silhouette, only one or two very gentle undulations, no separate centered object. Layers should be broad calm horizontal contours, not a tangled bundle.
+Palette: desaturated graphite, deep blue gray, tiny hints of gray violet. Intended to be composited onto #1E232D. Main material colors near #29313F, #354054 and sparing #46516A. Extremely restrained low contrast and dim highlights; no near-white highlights. Subtle microscopic silk weave or brushed texture, overwhelmingly matte. Soft side illumination reveals only a few edges. Delicate self-shadow between thin layers, quiet precision, refined spatial depth.
+Transparency: genuine empty alpha, NOT a rendered solid background, NOT checkerboard. Natural alpha fade at the top of the material, no visible rectangular boundary, no halo. Do not render the app screenshot or UI; it only informs the intended dark color context.
+No text, letters, numbers, logos, icons, UI, buttons, cards, code, watermarks. No floating centered ribbon, complete bow, sharp curling ends. No neon, glowing lines, intense gradients, mirrored metal, glass spheres, particles, stars, smoke or dramatic effects.
+
+Final refinement prompt:
+Refine this transparent background asset, keeping its existing restrained broad horizontal matte woven folds at the very bottom. Output exactly 2560 x 1440 pixels, 16:9 PNG with RGBA transparency. The top 1008 rows (70%) MUST have alpha exactly zero, no nearly invisible pixels or residual texture anywhere in that region. Keep all flowing geometry below y=1008, low silhouette, full-bleed off left, right, and bottom edges. From y=1008 to y=1150 introduce the material gradually with a smooth clean alpha fade, no noisy fringe, no glow. Retain 2 or 3 gentle layered surfaces with only one or two wide shallow undulations, fine silk weave and self-shadow, quiet professional software background. Dim the upper pale sheet to deep desaturated graphite-blue: base #29313F, midtone #354054, very sparing #46516A edge highlights; designed to blend subtly over #1E232D. Avoid white or silver highlights. Keep the entire upper 70% and the central UI area completely blank transparent. No text, UI, logo, watermark, particles, smoke, neon, halo, hard rectangular backing or checkerboard. This is a transparent background asset, not a screenshot.
+
+Validation:
+32-bit RGBA PNG with real alpha transparency.
+First row with alpha > 8: 720 (76.5% down the canvas).
+Upper 70% contains 3582 residual pixels with alpha 1/255; all other pixels there have alpha zero.

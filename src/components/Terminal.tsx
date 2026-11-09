@@ -1749,14 +1749,12 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           ) : null}
           {imagePreview ? (
             <div
-              className="xterm-hover pointer-events-none absolute z-20 overflow-hidden rounded-sm border p-1 shadow-lg"
+              className="xterm-hover app-overlay-surface pointer-events-none absolute z-20 overflow-hidden p-1"
               style={{
                 left: imagePreview.x,
                 top: imagePreview.y,
                 maxWidth: 320,
                 maxHeight: 240,
-                borderColor: "var(--cs-border)",
-                background: "var(--cs-bg-card-solid, rgba(255,255,255,0.98))",
               }}
             >
               <img

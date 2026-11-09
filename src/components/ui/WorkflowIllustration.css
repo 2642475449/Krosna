@@ -1,0 +1,13 @@
+.app-workflow-artwork {
+  --workflow-shade: color-mix(in srgb, var(--cs-text-secondary) 42%, var(--cs-bg-body));
+  --workflow-mid: color-mix(in srgb, var(--cs-folder-icon) 65%, var(--cs-bg-body));
+  --workflow-highlight: color-mix(in srgb, var(--cs-folder-icon) 55%, var(--cs-text-primary));
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+.app-workflow-illustration {
+  flex-shrink: 0;
+  max-width: 100%;
+}

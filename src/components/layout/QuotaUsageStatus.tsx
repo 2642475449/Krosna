@@ -50,12 +50,7 @@ export function QuotaUsageStatus({
 
   const popoverContent = (
     <div
-      className="w-[340px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[8px] border"
-      style={{
-        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
-        borderColor: "var(--cs-border-sidebar)",
-        boxShadow: "0 18px 44px rgba(0, 0, 0, 0.30)",
-      }}
+      className="app-overlay-surface w-[340px] max-w-[calc(100vw-24px)] overflow-hidden"
     >
       <div
         className="flex items-center justify-between gap-3 px-3 py-2"
@@ -164,7 +159,7 @@ export function QuotaUsageStatus({
       }}
       arrow={false}
 
-      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
+      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
       getPopupContainer={() => document.body}
     >
       <button

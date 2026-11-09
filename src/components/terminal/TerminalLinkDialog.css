@@ -1,4 +1,4 @@
-/* 弹窗外观沿用全局 Ant Design 主题，仅约束内容布局和长路径。 */
+/* 浮层外观统一由 overlays.css 提供；这里只约束内容布局和长路径。 */
 .app-terminal-link-dialog.ant-modal { max-width: calc(100vw - 32px); padding-bottom: 0; }
 .app-terminal-link-dialog .ant-modal-container {
   display: flex;

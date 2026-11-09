@@ -353,12 +353,7 @@ function TitleBarProjectSwitcher() {
 
   const content = (
     <div
-      className="w-[360px] max-w-[calc(100vw-16px)] overflow-hidden rounded-[12px] border"
-      style={{
-        background: "var(--cs-bg-card, var(--cs-bg-sidebar))",
-        borderColor: "var(--cs-border-card, var(--cs-border-sidebar))",
-        boxShadow: "0 14px 32px var(--cs-shadow-overlay)",
-      }}
+      className="app-overlay-surface w-[360px] max-w-[calc(100vw-16px)] overflow-hidden"
     >
       <div className="p-1.5">
         <div className="overflow-hidden rounded-[8px]">
@@ -452,7 +447,7 @@ function TitleBarProjectSwitcher() {
         align={{ offset: [0, 6] }}
         arrow={false}
 
-        styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
+        styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
         getPopupContainer={() => document.body}
       >
         <button

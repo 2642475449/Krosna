@@ -2,6 +2,7 @@
 @import "tailwindcss" source("../");
 @import "./shell.css";
 @import "./motion.css";
+@import "./overlays.css";
 @source "../../index.html";
 
 @custom-variant dark (&:where([data-theme="dark-starry"], [data-theme="dark-starry"] *, [data-theme="dark-mocha"], [data-theme="dark-mocha"] *));
@@ -350,9 +351,9 @@ html, body, #root {
   min-width: 100px;
   margin-top: 0;
   border: 0;
-  border-right: 1px solid var(--cs-border-card);
-  border-radius: 0;
-  background: var(--cs-bg-header);
+  border-right: 1px solid color-mix(in srgb, var(--cs-border-card) 65%, transparent);
+  border-radius: 7px 7px 0 0;
+  background: transparent;
   color: var(--cs-text-secondary);
   transition: background-color 140ms ease, color 140ms ease;
 }
@@ -365,6 +366,18 @@ html, body, #root {
 .app-tab-chrome[data-active="true"] {
   background: var(--cs-bg-card-solid);
   color: var(--cs-text-primary);
+}
+
+.app-tab-chrome[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  width: 24px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--cs-primary);
+  pointer-events: none;
 }
 
 .app-marker-top[data-active="true"]::before,
@@ -488,7 +501,7 @@ html, body, #root {
 .app-rail-button[data-active="true"] {
   color: var(--cs-primary);
   background: var(--cs-bg-active);
-  border-color: color-mix(in srgb, var(--cs-primary) 22%, var(--cs-border) 78%);
+  border-color: color-mix(in srgb, var(--cs-primary) 14%, var(--cs-border-card) 86%);
   box-shadow: none;
 }
 
@@ -1011,98 +1024,26 @@ html, body, #root {
   }
 }
 
-/* 默认 Tooltip：与页面背景拉开层次（配色由 App.tsx 中 Tooltip 组件 token 提供） */
-[data-theme] .ant-tooltip .ant-tooltip-container {
-  border: 1px solid var(--cs-border-card, var(--cs-border));
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--cs-bg-app) 50%, transparent);
-}
-
+/* Status popup sizing; surfaces are shared via overlays.css. */
 .app-status-pill {
   backdrop-filter: blur(6px) saturate(118%);
   -webkit-backdrop-filter: blur(6px) saturate(118%);
 }
-
-.app-status-tooltip .ant-tooltip-container,
-.app-status-popover .ant-popover-container {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-statusbar)) 96%, white 4%) 0%,
-      color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-statusbar)) 92%, transparent) 100%
-    ) !important;
-  color: var(--cs-text-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--cs-border-card, var(--cs-border)) 88%, transparent);
-  border-radius: 16px !important;
-  box-shadow:
-    0 16px 34px color-mix(in srgb, var(--cs-bg-app) 62%, transparent),
-    0 4px 18px color-mix(in srgb, var(--cs-border) 18%, transparent);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-}
-
-.app-status-tooltip .ant-tooltip-container {
-  padding: 12px 14px !important;
-  min-width: 280px;
-}
-
-.app-status-popover .ant-popover-container {
-  padding: 8px !important;
-}
-
-.app-status-tooltip .ant-tooltip-arrow::before,
-.app-status-popover .ant-popover-arrow::before {
-  background:
-    color-mix(in srgb, var(--cs-bg-card, var(--cs-bg-statusbar)) 94%, transparent) !important;
-}
-
-[data-theme="light-glass"] .app-status-tooltip .ant-tooltip-container,
-[data-theme="light-glass"] .app-status-popover .ant-popover-container {
-  background-image: none !important;
-  box-shadow: 0 14px 30px rgba(31, 42, 68, 0.08);
-}
-
-[data-theme="dark-starry"] .app-status-tooltip .ant-tooltip-container,
-[data-theme="dark-starry"] .app-status-popover .ant-popover-container {
-  box-shadow:
-    0 20px 44px rgba(6, 8, 20, 0.48),
-    0 0 0 1px rgba(96, 165, 250, 0.08);
-}
-
-[data-theme="dark-mocha"] .app-status-tooltip .ant-tooltip-container,
-[data-theme="dark-mocha"] .app-status-popover .ant-popover-container {
-  box-shadow:
-    0 18px 38px rgba(8, 8, 16, 0.42),
-    0 0 0 1px rgba(245, 189, 105, 0.08);
-}
+.app-status-tooltip .ant-tooltip-container { padding: 12px 14px; min-width: 280px; }
+.app-status-popover .ant-popover-container { padding: 8px; }
 
 .app-git-graph-hover-card {
   padding: 8px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--cs-border-card, var(--cs-border));
-  background: var(--cs-bg-card-solid, var(--cs-bg-card));
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--cs-bg-app) 24%, transparent);
+  border-radius: var(--cs-overlay-radius-popup);
+  border: 1px solid var(--cs-overlay-border);
+  background: var(--cs-overlay-bg);
+  box-shadow: var(--cs-overlay-shadow);
 }
 
 .app-git-graph-hover-separator {
   height: 1px;
   margin: 8px 0;
   background: var(--cs-border-card, var(--cs-border));
-}
-
-[data-theme="light-glass"] .app-git-graph-hover-card {
-  box-shadow: 0 4px 12px rgba(31, 42, 68, 0.12);
-}
-
-[data-theme="dark-starry"] .app-git-graph-hover-card {
-  box-shadow:
-    0 6px 16px rgba(6, 8, 20, 0.42),
-    0 0 0 1px rgba(96, 165, 250, 0.04);
-}
-
-[data-theme="dark-mocha"] .app-git-graph-hover-card {
-  box-shadow:
-    0 6px 16px rgba(8, 8, 16, 0.4),
-    0 0 0 1px rgba(245, 189, 105, 0.04);
 }
 
 .app-git-settings-panel {
@@ -2311,8 +2252,8 @@ html, body, #root {
 .app-global-search-modal .ant-modal-container {
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--cs-border-sidebar);
-  background: var(--cs-bg-card, var(--cs-bg-content));
+  border: 1px solid var(--cs-overlay-border);
+  background: var(--cs-overlay-bg);
 }
 
 .app-global-search-modal .ant-modal-body {
@@ -2613,7 +2554,7 @@ html, body, #root {
 }
 
 .app-global-search-modal .ant-modal-container {
-  box-shadow: var(--cs-shadow-floating);
+  box-shadow: var(--cs-overlay-shadow);
 }
 
 .app-global-search-query {
@@ -2816,10 +2757,10 @@ html, body, #root {
   width: min(320px, calc(100vw - 24px));
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--cs-border-card, var(--cs-border-sidebar));
-  border-radius: 12px;
-  background: var(--cs-bg-card-solid, var(--cs-bg-card));
-  box-shadow: 0 12px 32px var(--cs-shadow-overlay);
+  border: 1px solid var(--cs-overlay-border);
+  border-radius: var(--cs-overlay-radius-popup);
+  background: var(--cs-overlay-bg);
+  box-shadow: var(--cs-overlay-shadow);
 }
 
 .app-task-monitor {
@@ -3496,10 +3437,14 @@ html, body, #root {
   -webkit-backdrop-filter: blur(8px);
 }
 
-.app-session-launcher-modal .ant-modal-container, .app-session-launcher-modal .ant-modal-content { padding: 0; overflow: hidden; border: 1px solid var(--cs-border-card); background: var(--cs-bg-card-solid); border-radius: 14px; }
+.app-session-launcher-modal .ant-modal-container, .app-session-launcher-modal .ant-modal-content { padding: 0; overflow: hidden; border: 1px solid var(--cs-overlay-border); background: var(--cs-overlay-bg); border-radius: var(--cs-overlay-radius-dialog); }
 .app-launcher-header { display: flex; align-items: center; gap: 8px; padding: 15px 18px; border-bottom: 1px solid var(--cs-border-card); }
-.app-launcher-header .ant-input { font-size: 15px; }
-.app-launcher-permission { flex-shrink: 0; font-size: 11px; padding: 5px 9px; border-radius: 20px; background: var(--cs-bg-hover); color: var(--cs-text-secondary); }
+.app-launcher-name, .app-launcher-header .app-launcher-name-input { flex: 1; min-width: 0; height: 32px; padding: 4px 11px; font-size: 15px; line-height: 24px; color: var(--cs-text-primary); }
+.app-launcher-name { overflow: hidden; border: 0; background: transparent; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.app-launcher-name:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: 2px; border-radius: 6px; }
+.app-launcher-permission { flex-shrink: 0; font-size: 11px; padding: 5px 4px; border-radius: 4px; background: transparent; color: var(--cs-text-secondary); }
+.app-launcher-permission:hover { background: var(--cs-bg-hover); }
+.app-launcher-permission:focus-visible { outline: 2px solid var(--cs-focus-ring); outline-offset: 2px; }
 .app-launcher-permission[data-yolo="true"] { color: var(--cs-warning); }
 .app-launcher-body { padding: 16px 18px; }
 .app-launcher-select.ant-select .ant-select-selector { min-height: 44px; padding: 6px 12px !important; border-radius: 10px !important; border-color: var(--cs-border-card) !important; background: var(--cs-bg-app) !important; }
@@ -3507,7 +3452,7 @@ html, body, #root {
 .app-launcher-select.ant-select-focused .ant-select-selector, .app-launcher-select.ant-select-open .ant-select-selector { border-color: var(--cs-primary) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--cs-primary) 16%, transparent) !important; }
 .app-launcher-select .ant-select-selection-item { display: flex; align-items: center; line-height: 1.4; }
 .app-launcher-agent-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-width: 0; padding-right: 4px; font-size: 13px; }
-.app-launcher-select-dropdown { padding: 6px; border: 1px solid var(--cs-border-card); border-radius: 12px; background: var(--cs-bg-card-solid); }
+.app-launcher-select-dropdown { padding: 6px; }
 .app-launcher-select-dropdown .ant-select-item { min-height: 40px; padding: 8px 10px; border-radius: 8px; display: flex; align-items: center; }
 .app-launcher-select-dropdown .ant-select-item-option-content { display: flex; align-items: center; width: 100%; min-width: 0; }
 .app-launcher-pills button:focus-visible, .app-launcher-command:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: 2px; }
@@ -3515,7 +3460,7 @@ html, body, #root {
 .app-launcher-pills { display: flex; gap: 4px; overflow-x: auto; }
 .app-launcher-pills button { flex-shrink: 0; border-radius: 6px; padding: 6px 9px; font-size: 11px; color: var(--cs-text-secondary); }
 .app-launcher-pills button[aria-pressed="true"] { color: var(--cs-primary); background: var(--cs-bg-active); }
-.app-launcher-footer { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: var(--cs-bg-app); border-top: 1px solid var(--cs-border-card); }
+.app-launcher-footer { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: var(--cs-overlay-footer-bg); border-top: 1px solid var(--cs-overlay-divider); }
 .app-launcher-command { min-width: 0; flex: 1; padding: 0; border: 0; background: transparent; color: var(--cs-text-secondary); text-align: left; }
 .app-launcher-command code { display: block; font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: inherit; white-space: normal; overflow-wrap: anywhere; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
 @media (max-width: 520px) { .app-launcher-header { flex-wrap: wrap; } .app-launcher-footer { flex-wrap: wrap; } .app-launcher-command { flex-basis: 100%; } }

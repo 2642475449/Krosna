@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Modal, Select, Spin, Tooltip, message } from "antd";
+import type { InputRef } from "antd";
 import { EnterOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { getCachedAgentClis, getClaudeEffortInfo, inspectAgentClis, getClaudeRateLimits, getCodexRateLimits, getAntigravityUsage, getQoderUsage } from "@/lib/api";
@@ -11,6 +12,7 @@ import { AgentIcon } from "@/components/AgentIcon";
 import { TASK_CHOICES, useLaunchChoiceLabel } from "@/components/AgentLaunchConfigPanel";
 import { useDefaultInstalledAgentSelection } from "@/hooks/useDefaultInstalledAgentSelection";
 import { useAppStore } from "@/store";
+import { getDefaultSessionTitle } from "@/lib/sessionTitles";
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -26,6 +28,11 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
   const projectPath = useAppStore(s => s.currentProject?.path);
   const [name, setName] = useState("");
   const [nameEdited, setNameEdited] = useState(false);
+  const [defaultTitleTimestamp, setDefaultTitleTimestamp] = useState(Date.now);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const nameInputRef = useRef<InputRef>(null);
+  const nameButtonRef = useRef<HTMLButtonElement>(null);
   const [agents, setAgents] = useState<AgentCliInfo[]>([]);
   const [agentId, setAgentId] = useState<AiAgentId | null>(null);
   const [selectOpen, setSelectOpen] = useState(false);
@@ -39,6 +46,8 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
     if (!open) return;
     let disposed = false;
     setName("");
+    setDefaultTitleTimestamp(Date.now());
+    setEditingName(false);
     setNameEdited(false); setAgentId(null); setSelectOpen(false); setOverrides({}); setFailed(false); submitting.current = false;
     const filter = (items: AgentCliInfo[]) => items.filter(a => a.installed && supportsAgentCapability(a.id, "interactiveTerminal"));
     const cached = getCachedAgentClis();
@@ -49,6 +58,9 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
     }).finally(() => { if (!disposed) setDetecting(false); });
     return () => { disposed = true; };
   }, [open, t]);
+  useEffect(() => {
+    if (editingName) nameInputRef.current?.focus({ cursor: "all" });
+  }, [editingName]);
   useEffect(() => {
     if (!open) return;
     let disposed = false; setEffortInfo(null);
@@ -82,7 +94,15 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
       message.success(t("newSession.commandCopied"));
     });
   };
-  const sessionName = nameEdited ? name : selected?.name ?? "";
+  const sessionName = nameEdited ? name : selected ? getDefaultSessionTitle(selected.name, defaultTitleTimestamp) : "";
+  const finishNameEditing = () => {
+    const nextName = nameDraft.trim();
+    if (nextName && nextName !== sessionName) {
+      setName(nextName);
+      setNameEdited(true);
+    }
+    setEditingName(false);
+  };
   const canCreate = Boolean(selected && sessionName.trim() && !creating && !detecting);
   const confirm = () => { if (!canCreate || !selected || submitting.current) return; submitting.current = true; onCreate(sessionName.trim(), selected, launchOptions, nameEdited ? "manual" : "default"); };
   useEffect(() => { if (!creating) submitting.current = false; }, [creating]);
@@ -96,8 +116,38 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
       if (event.key === "Enter" && !selectOpen) { event.preventDefault(); event.stopPropagation(); confirm(); }
       else if (event.altKey && ["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); move(event.key === "ArrowLeft" ? -1 : 1); }
     }}>
-      <div className="app-launcher-header"><span className="font-mono text-[var(--cs-primary)]">&gt;_</span><Input variant="borderless" aria-label={t("newSession.name")} value={sessionName} disabled={creating} maxLength={80} onChange={e => { setName(e.target.value); setNameEdited(true); }} />
-        {selected && !["pi", "opencode"].includes(selected.id) && <Tooltip title={t("newSession.permissionManagedInSettings")}><button type="button" className="app-launcher-permission" disabled={creating} data-yolo={isAgentYoloEnabled(selected.id, defaults)} onClick={() => { onCancel(); sessionStorage.setItem("krosna.settings.pendingPage", "agents"); useAppStore.getState().openTab("__settings__"); window.dispatchEvent(new CustomEvent("settings:navigate", { detail: "agents" })); }}>{isAgentYoloEnabled(selected.id, defaults) ? "⚡ " + t("newSession.yoloActive") : t("newSession.manualActive")}</button></Tooltip>}
+      <div className="app-launcher-header">
+        {editingName ? <Input
+          ref={nameInputRef}
+          className="app-launcher-name-input"
+          variant="borderless"
+          aria-label={t("newSession.name")}
+          value={nameDraft}
+          disabled={creating}
+          maxLength={80}
+          onChange={event => setNameDraft(event.target.value)}
+          onBlur={finishNameEditing}
+          onKeyDown={event => {
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+            if (event.key === "Enter" || event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.key === "Enter") finishNameEditing();
+              else setEditingName(false);
+              // Restore keyboard navigation after the editor unmounts.
+              requestAnimationFrame(() => nameButtonRef.current?.focus());
+            }
+          }}
+        /> : <button
+          ref={nameButtonRef}
+          type="button"
+          className="app-launcher-name"
+          aria-label={t("newSession.name")}
+          disabled={creating}
+          onClick={() => { setNameDraft(sessionName); setEditingName(true); }}
+          onKeyDown={event => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
+        >{sessionName || title || t("newSession.title")}</button>}
+        {selected && !["pi", "opencode"].includes(selected.id) && <Tooltip title={t("newSession.permissionManagedInSettings")}><button type="button" className="app-launcher-permission" disabled={creating} data-yolo={isAgentYoloEnabled(selected.id, defaults)} onClick={() => { onCancel(); sessionStorage.setItem("krosna.settings.pendingPage", "agents"); useAppStore.getState().openTab("__settings__"); window.dispatchEvent(new CustomEvent("settings:navigate", { detail: "agents" })); }}>{isAgentYoloEnabled(selected.id, defaults) ? t("newSession.yoloActive") : t("newSession.manualActive")}</button></Tooltip>}
       </div>
       <div className="app-launcher-body"><div className="mb-2 text-xs text-[var(--cs-text-secondary)]">{t("newSession.agent")}</div>
         {!detecting && !agents.length ? <p role="status" className="mb-0 text-xs text-[var(--cs-text-secondary)]">{t(failed ? "newSession.detectionFailed" : "newSession.noAgents")}</p> : (

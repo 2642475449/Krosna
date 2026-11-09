@@ -329,8 +329,8 @@ function TitleBarQuickSearch() {
           container: {
             padding: 8,
             background: "var(--cs-bg-card)",
-            border: "1px solid var(--cs-border-card, var(--cs-border))",
-            boxShadow: "var(--cs-shadow-floating)",
+            border: "1px solid var(--cs-overlay-border)",
+            boxShadow: "var(--cs-overlay-shadow)",
           },
         }}
       >

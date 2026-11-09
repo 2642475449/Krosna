@@ -320,12 +320,7 @@ function StatusBar() {
         });
   const backgroundTaskPopoverContent = backgroundTaskSummary.totalCount > 0 ? (
     <div
-      className="w-[520px] overflow-hidden rounded-[12px] border"
-      style={{
-        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
-        borderColor: "var(--cs-border-sidebar)",
-        boxShadow: "0 24px 56px rgba(0, 0, 0, 0.36)",
-      }}
+      className="app-overlay-surface w-[520px] overflow-hidden"
     >
       <div
         className="flex items-center justify-between px-3 py-2"
@@ -547,7 +542,7 @@ function StatusBar() {
             content={backgroundTaskPopoverContent}
             arrow={false}
 
-            styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
+            styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
             getPopupContainer={() => document.body}
           >
             <button
@@ -657,12 +652,7 @@ function QoderUsageStatus({
 
   const popoverContent = (
     <div
-      className="w-[300px] overflow-hidden rounded-[8px] border"
-      style={{
-        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
-        borderColor: "var(--cs-border-sidebar)",
-        boxShadow: "0 18px 44px rgba(0, 0, 0, 0.30)",
-      }}
+      className="app-overlay-surface w-[300px] overflow-hidden"
     >
       <div
         className="flex items-center justify-between gap-3 px-3 py-2"
@@ -746,7 +736,7 @@ function QoderUsageStatus({
       content={popoverContent}
       arrow={false}
 
-      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
+      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
       getPopupContainer={() => document.body}
     >
       <button
@@ -850,12 +840,7 @@ function AntigravityUsageStatus({
 
   const content = (
     <div
-      className="w-[300px] overflow-hidden rounded-[8px] border"
-      style={{
-        background: "var(--cs-bg-elevated, var(--cs-bg-sidebar))",
-        borderColor: "var(--cs-border-sidebar)",
-        boxShadow: "0 18px 44px rgba(0, 0, 0, 0.30)",
-      }}
+      className="app-overlay-surface w-[300px] overflow-hidden"
     >
       <div
         className="flex items-center justify-between gap-3 px-3 py-2"
@@ -911,7 +896,7 @@ function AntigravityUsageStatus({
       content={content}
       arrow={false}
 
-      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none" } }}
+      styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
       getPopupContainer={() => document.body}
     >
       <button
