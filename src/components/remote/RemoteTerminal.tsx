@@ -6,6 +6,7 @@ import { getTerminalTheme } from "@/lib/terminalTheme";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createPtyResizeGate } from "@/lib/terminalResize";
+import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
 import { decodeRemoteOutput, reconcileRemoteRead, remoteErrorText, type RemoteSession } from "@/lib/remote";
 import {
   getRemoteConnectionGeneration, readRemoteSession, resizeRemoteSession, sendRemoteAuthentication, useRemoteWorkspaceStore, writeRemoteSession,
@@ -44,8 +45,9 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
       fontSize: settings.terminalFontSize, lineHeight: settings.terminalLineHeight,
       fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
       cursorBlink: settings.terminalCursorBlink, scrollback: settings.terminalScrollback,
-      allowProposedApi: false, disableStdin: true,
+      disableStdin: true,
     });
+    initializePtyTextLayout(term);
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
@@ -160,6 +162,7 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
       rows: 8, cols: 100, fontSize: 13, theme: colors.theme, minimumContrastRatio: colors.minimumContrastRatio,
       fontFamily: "'Cascadia Code', Consolas, monospace", scrollback: 1000, cursorBlink: true, reflowCursorLine: true,
     });
+    initializePtyTextLayout(term);
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(containerRef.current);

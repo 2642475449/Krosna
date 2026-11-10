@@ -33,6 +33,14 @@ pub struct PtyExitPayload {
     pub code: Option<i32>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtyGridSize {
+    pub rows: u16,
+    pub cols: u16,
+    pub instance_id: u64,
+}
+
 fn wait_for_pty_exit(child: &mut dyn portable_pty::Child) -> Option<i32> {
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
@@ -578,9 +586,41 @@ impl PtyManager {
         }
     }
 
-    pub fn resize(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), String> {
+    pub fn get_size(&self, session_id: &str) -> Result<Option<PtyGridSize>, String> {
+        let sessions = self.sessions.lock();
+        let Some(session) = sessions.get(session_id) else {
+            return Ok(None);
+        };
+        let Some(pty) = session.pty.as_ref() else {
+            return Ok(None);
+        };
+        // On Windows portable-pty records this only after ResizePseudoConsole succeeds.
+        let size = pty
+            .master
+            .get_size()
+            .map_err(|e| format!("读取终端大小失败: {e}"))?;
+        Ok(Some(PtyGridSize {
+            rows: size.rows,
+            cols: size.cols,
+            instance_id: session.instance_id,
+        }))
+    }
+
+    pub fn resize(
+        &self,
+        session_id: &str,
+        rows: u16,
+        cols: u16,
+        expected_instance_id: Option<u64>,
+    ) -> Result<(), String> {
+        if rows == 0 || cols == 0 || rows > i16::MAX as u16 || cols > i16::MAX as u16 {
+            return Err("终端大小超出有效范围".into());
+        }
         let sessions = self.sessions.lock();
         let session = sessions.get(session_id).ok_or("会话不存在")?;
+        if expected_instance_id.is_some_and(|id| id != session.instance_id) {
+            return Err("终端实例已更换".into());
+        }
         let Some(pty) = session.pty.as_ref() else {
             return Ok(());
         };
@@ -1114,6 +1154,53 @@ fn runtime_agent_label(agent_id: Option<&str>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pty_size_readback_tracks_applied_grid_and_rejects_stale_instances() {
+        let pair = create_test_pty_pair();
+        #[cfg(target_os = "windows")]
+        let command = CommandBuilder::new("cmd.exe");
+        #[cfg(not(target_os = "windows"))]
+        let command = CommandBuilder::new("sh");
+        let child = pair.slave.spawn_command(command).unwrap();
+        let child_pid = child.process_id().unwrap_or(0);
+        let writer = pair.master.take_writer().unwrap();
+        let manager = PtyManager::new(Arc::new(HookIngestConfig {
+            port: 0,
+            token: "test".to_string(),
+        }));
+        assert!(manager.get_size("size-test").unwrap().is_none());
+        manager.sessions.lock().insert(
+            "size-test".to_string(),
+            PtySession {
+                instance_id: 7,
+                project_path: String::new(),
+                agent_id: "test".to_string(),
+                writer,
+                child,
+                child_pid,
+                exit_code: None,
+                pty: Some(pair),
+            },
+        );
+        let initial = manager.get_size("size-test").unwrap().unwrap();
+        assert_eq!(
+            (initial.rows, initial.cols, initial.instance_id),
+            (24, 80, 7)
+        );
+        assert!(manager.resize("size-test", 30, 90, Some(6)).is_err());
+        assert_eq!(manager.get_size("size-test").unwrap().unwrap().cols, 80);
+        assert!(manager.resize("size-test", 0, 90, Some(7)).is_err());
+        manager.resize("size-test", 30, 90, Some(7)).unwrap();
+        let applied = manager.get_size("size-test").unwrap().unwrap();
+        assert_eq!(
+            (applied.rows, applied.cols, applied.instance_id),
+            (30, 90, 7)
+        );
+        assert_eq!(serde_json::to_value(applied).unwrap()["instanceId"], 7);
+        manager.close("size-test");
+        assert!(manager.get_size("size-test").unwrap().is_none());
+    }
 
     #[test]
     fn exited_pty_closes_output_only_after_delivering_the_final_screen() {

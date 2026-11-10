@@ -394,9 +394,18 @@ pub fn pty_resize(
     session_id: String,
     rows: u16,
     cols: u16,
+    expected_instance_id: Option<u64>,
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<(), String> {
-    manager.resize(&session_id, rows, cols)
+    manager.resize(&session_id, rows, cols, expected_instance_id)
+}
+
+#[tauri::command]
+pub fn pty_get_size(
+    session_id: String,
+    manager: State<'_, Arc<PtyManager>>,
+) -> Result<Option<crate::pty::PtyGridSize>, String> {
+    manager.get_size(&session_id)
 }
 
 /// 关闭 PTY 会话

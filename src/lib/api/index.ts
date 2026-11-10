@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PtyGridSize } from "../terminalSizeReconcile";
 export { resolveTerminalLink } from "./terminalLinks";
 export type { TerminalLinkResolution, TerminalLinkTarget } from "./terminalLinks";
 import { getAsrLanguageContext, type AsrLanguage } from "@/lib/asrLanguage";
@@ -733,9 +734,14 @@ export async function completeAgentTurn(sessionId: string): Promise<AgentTurnRev
 export async function ptyResize(
   sessionId: string,
   rows: number,
-  cols: number
+  cols: number,
+  expectedInstanceId?: number,
 ): Promise<void> {
-  await invoke("pty_resize", { sessionId, rows, cols });
+  await invoke("pty_resize", { sessionId, rows, cols, expectedInstanceId: expectedInstanceId ?? null });
+}
+
+export async function ptyGetSize(sessionId: string): Promise<PtyGridSize | null> {
+  return invoke("pty_get_size", { sessionId });
 }
 
 export async function closePty(sessionId: string): Promise<void> {

@@ -279,6 +279,7 @@ pub fn run() {
             commands::session::generate_session_title,
             commands::codex_titles::read_codex_session_titles,
             commands::session::pty_resize,
+            commands::session::pty_get_size,
             commands::session::close_pty,
             commands::session::cleanup_stale_sessions,
             commands::session::cleanup_session_process,

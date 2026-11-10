@@ -5,6 +5,33 @@ interface TerminalRenderingResource {
   cursorBlink: boolean;
   blur: () => void;
   refresh: () => void;
+  repaint?: () => void;
+}
+
+/** Reveal after layout settles; refocus alone must preserve the shared glyph atlas. */
+export function createTerminalRevealRepaint(options: {
+  isVisible: () => boolean;
+  repaint: () => void;
+  requestFrame: (callback: () => void) => number;
+  cancelFrame: (frame: number) => void;
+}) {
+  let frame: number | null = null;
+  const cancel = () => {
+    if (frame !== null) options.cancelFrame(frame);
+    frame = null;
+  };
+  return {
+    schedule() {
+      cancel();
+      frame = options.requestFrame(() => {
+        frame = options.requestFrame(() => {
+          frame = null;
+          if (options.isVisible()) options.repaint();
+        });
+      });
+    },
+    dispose: cancel,
+  };
 }
 
 // 只保存渲染资源句柄；会话与标签业务状态仍由 store 管理。
@@ -37,12 +64,15 @@ export function createTerminalRenderingPool(maxHiddenContexts = 4) {
       return {
         setVisible(next: boolean) {
           if (disposed || visible === next) return;
+          const revealed = visible === false;
+          const retained = attached;
           visible = next;
           hidden.delete(release);
           resource.setCursorBlink(next && resource.cursorBlink);
           if (next) {
             if (!attached) attached = resource.attachWebgl();
             resource.refresh();
+            if (revealed && retained) resource.repaint?.();
           } else {
             resource.blur();
             if (attached) retain(release);

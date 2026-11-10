@@ -26,11 +26,14 @@ const versions = Object.fromEntries(await Promise.all(["@xterm/xterm", "@xterm/a
 const fixture = `
 import { Terminal } from '@xterm/xterm';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { createTerminalRevealRepaint } from './src/lib/terminalRendering.ts';
+import { initializePtyTextLayout } from './src/lib/terminalTextLayout.ts';
 const terms = [], addons = [];
 const options = { cols: 80, rows: 24, fontSize: 16, fontFamily: 'monospace', cursorBlink: false, cursorStyle: 'bar', allowProposedApi: true, scrollback: 1000, theme: ${JSON.stringify(theme)} };
 let atlasRemovalEvents = 0;
 for (let i = 0; i < 2; i++) {
   const term = new Terminal(options);
+  initializePtyTextLayout(term);
   term.open(document.getElementById('t' + i));
   const addon = new WebglAddon(${versions["@xterm/addon-webgl"] === "0.19.0" ? "true" : "{ preserveDrawingBuffer: true }"});
   term.loadAddon(addon); terms.push(term); addons.push(addon);
@@ -90,17 +93,32 @@ window.runRegression = async () => {
   terms[1].clearSelection(); await settle();
   const afterSelection = difference(churnReference, rowPixels(1));
   await window.capture('after-churn-and-selection');
+  const restoredHeader = 'Recovered after hidden output 中文 ABCDE 12345';
+  await write(1, '\\x1b[1;1H\\x1b[2K' + restoredHeader);
+  const revealReference = rowPixels(1);
+  await write(1, '\\x1b[1;1H\\x1b[2K' + header);
+  await write(0, '\\x1b[1;1H' + header);
+  const otherOwnerReference = rowPixels(0);
   document.getElementById('t1').style.display='none'; await settle();
+  await write(1, '\\x1b[1;1H\\x1b[2K' + restoredHeader);
   document.getElementById('t1').style.display='block';
-  terms[1].refresh(0,23); await settle();
-  const afterReveal = difference(churnReference, rowPixels(1));
+  const reveal = createTerminalRevealRepaint({
+    isVisible: () => document.getElementById('t1').clientWidth > 0,
+    repaint: () => { addons[1].clearTextureAtlas(); terms[1].refresh(0,23); },
+    requestFrame: (callback) => requestAnimationFrame(callback),
+    cancelFrame: (frame) => cancelAnimationFrame(frame),
+  });
+  reveal.schedule(); await settle();
+  const afterReveal = difference(revealReference, rowPixels(1));
+  const otherOwnerAfterReveal = difference(otherOwnerReference, rowPixels(0));
+  reveal.dispose();
   addons[1].dispose(); await settle();
   const replacement = new WebglAddon(${versions["@xterm/addon-webgl"] === "0.19.0" ? "true" : "{ preserveDrawingBuffer: true }"});
   terms[1].loadAddon(replacement); terms[1].refresh(0,23); await settle();
-  const afterReattach = difference(churnReference, rowPixels(1));
+  const afterReattach = difference(revealReference, rowPixels(1));
   return { shared, bufferUnchanged, afterClear, afterGlyphChurn, afterSelection, afterReveal,
-    afterReattach, atlasRemovalEvents, atlasPages: rendererA._charAtlas.pages.length,
-    pass: bufferUnchanged && atlasRemovalEvents > 0 && [afterClear,afterGlyphChurn,afterSelection,afterReveal,afterReattach].every(x => x < 0.001) };
+    afterReattach, otherOwnerAfterReveal, atlasRemovalEvents, atlasPages: rendererA._charAtlas.pages.length,
+    pass: bufferUnchanged && atlasRemovalEvents > 0 && [afterClear,afterGlyphChurn,afterSelection,afterReveal,otherOwnerAfterReveal,afterReattach].every(x => x < 0.001) };
 };
 window.fixtureReady = true;
 `;

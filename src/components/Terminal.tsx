@@ -26,6 +26,7 @@ import {
   inferAgentInterrupt,
   ptyInput,
   ptyResize,
+  ptyGetSize,
   submitAgentTurnInput,
   inspectProjectFile,
   resolveTerminalLink,
@@ -78,14 +79,16 @@ import {
   getCheckpointedAgentUserResponseBaseline,
   isAgentUserResponseBaselineCurrent,
 } from "@/lib/agentUserResponse";
-import { createPtyResizeGate, createTerminalLayoutScheduler } from "@/lib/terminalResize";
+import { createTerminalLayoutScheduler } from "@/lib/terminalResize";
+import { createTerminalSizeReconciler } from "@/lib/terminalSizeReconcile";
+import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import {
   createTerminalOutputFrameGate,
   writeTerminalOutputWithCursorRefresh,
 } from "@/lib/terminalOutputFrames";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
-import { terminalRenderingPool } from "@/lib/terminalRendering";
+import { createTerminalRevealRepaint, terminalRenderingPool } from "@/lib/terminalRendering";
 import { createTerminalOutputMonitor } from "@/lib/terminalOutputMonitor";
 import { useTerminalDiagnosticsStore } from "@/store/slices/terminalDiagnosticsSlice";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
@@ -901,13 +904,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       minimumContrastRatio: termTheme.minimumContrastRatio,
       cursorBlink: forceStableCursor ? false : cursorBlink,
       scrollback: terminalScrollback,
-      convertEol: true,
       // 普通拖选始终选择文字；应用鼠标交互可通过 Alt 使用。
       mouseEventsRequireAlt: true,
       disableStdin: !currentSession?.active || currentSession?.status === "starting",
       // OSC 8 超链接优先于文本链接，必须显式接入应用的确认及原生打开流程。
       linkHandler: webLinkHandler,
     });
+    initializePtyTextLayout(term);
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -1053,6 +1056,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     let webglContextLossListener: { dispose(): void } | null = null;
     let fallbackAnimationFrame: number | null = null;
     let isTerminalDisposed = false;
+    let intersectsViewport = true;
     let rendererFailed = false;
 
     const disposeWebglAddon = () => {
@@ -1086,7 +1090,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           return;
         }
         fitAddon.fit();
-        ptyResize(sessionId, term.rows, term.cols).catch(console.error);
+        scheduleSync();
         term.refresh(0, term.rows - 1);
       });
     };
@@ -1116,6 +1120,20 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       }
     };
 
+    const revealRepaint = createTerminalRevealRepaint({
+      requestFrame: (callback) => window.requestAnimationFrame(callback),
+      cancelFrame: (frame) => window.cancelAnimationFrame(frame),
+      isVisible: () => !isTerminalDisposed && !document.hidden
+        && container.clientWidth > 0 && container.clientHeight > 0,
+      repaint: () => {
+        try {
+          webglAddon?.clearTextureAtlas();
+          term.refresh(0, term.rows - 1);
+        } catch (error) {
+          fallbackToStandardRenderer("reveal repaint failed", error);
+        }
+      },
+    });
     const rendering = terminalRenderingPool.register({
       attachWebgl: activateWebglRenderer,
       disposeWebgl: disposeWebglAddon,
@@ -1123,6 +1141,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       setCursorBlink: (enabled) => { term.options.cursorBlink = enabled; },
       blur: () => term.blur(),
       refresh: () => scheduleSync(),
+      repaint: () => revealRepaint.schedule(),
     });
 
     const setDiagnostics = useTerminalDiagnosticsStore.getState().setTerminalDiagnostics;
@@ -1403,13 +1422,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     };
     container.addEventListener("mousedown", handleMouseShortcut, true);
 
-    // Resize PTY only when the character grid changes. Claude and other
-    // full-screen TUIs redraw on SIGWINCH, so duplicate resize calls pollute
-    // the normal-screen scrollback with historical full-screen frames.
-    const requestPtyResize = createPtyResizeGate((rows, cols) => {
-      ptyResize(sessionId, rows, cols).catch(console.error);
-    });
-
     const fitGrid = () => {
       if (!runnerOptionsRef.current) { fitAddon.fit(); return; }
       const size = fitAddon.proposeDimensions();
@@ -1418,17 +1430,35 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       // 使用一次 resize，避免窄/宽网格反复重排日志。
       term.resize(runnerOptionsRef.current.wordWrap ? size.cols : Math.max(1024, size.cols), size.rows);
     };
-    const syncSize = () => {
-      if (document.hidden || !containerRef.current || containerRef.current.clientWidth === 0) return;
+    const measureGrid = () => {
+      if (isTerminalDisposed || document.hidden || !intersectsViewport
+        || container.clientWidth === 0 || container.clientHeight === 0) return null;
       fitGrid();
-      requestPtyResize(term.rows, term.cols);
+      return { rows: term.rows, cols: term.cols };
+    };
+    const findLayoutSession = (state = useAppStore.getState()) =>
+      state.sessions.find((session) => session.id === sessionId)
+      ?? (runnerOptionsRef.current
+        ? Object.values(state.projectSessions).flat().find((session) => session.id === sessionId)
+        : undefined);
+    const sizeReconciler = createTerminalSizeReconciler({
+      isReady: () => {
+        const session = findLayoutSession();
+        return Boolean(session?.active && session.status !== "starting");
+      },
+      measure: measureGrid,
+      getSize: () => ptyGetSize(sessionId),
+      resize: (size, instanceId) => ptyResize(sessionId, size.rows, size.cols, instanceId),
+      onError: (error) => console.warn(`[terminal:${sessionId}] size reconciliation failed`, error),
+    });
+    const syncSize = () => {
+      if (measureGrid()) sizeReconciler.request();
     };
 
     // Full refresh: resize + force canvas redraw (for display:none → block transitions)
     const fullRefresh = () => {
-      if (document.hidden || !containerRef.current || containerRef.current.clientWidth === 0) return;
-      fitGrid();
-      requestPtyResize(term.rows, term.cols);
+      if (!measureGrid()) return;
+      sizeReconciler.request();
       // Force xterm.js to redraw the canvas after container becomes visible
       term.refresh(0, term.rows - 1);
     };
@@ -1436,11 +1466,24 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const layoutScheduler = createTerminalLayoutScheduler(fullRefresh);
     const scheduleSync = layoutScheduler.schedule;
 
-    let intersectsViewport = true;
+    const unsubscribeLayoutSession = useAppStore.subscribe((state, previous) => {
+      const session = findLayoutSession(state);
+      const before = findLayoutSession(previous);
+      const ready = Boolean(session?.active && session.status !== "starting");
+      const wasReady = Boolean(before?.active && before.status !== "starting");
+      if (ready !== wasReady) {
+        sizeReconciler.invalidate();
+        if (ready) scheduleSync();
+      }
+    });
+    const handleWindowFocus = () => scheduleSync();
+    window.addEventListener("focus", handleWindowFocus);
+
     const syncRenderingVisibility = () => {
       const visible = !document.hidden && intersectsViewport
         && container.clientWidth > 0 && container.clientHeight > 0;
       rendering.setVisible(visible);
+      if (!visible) sizeReconciler.invalidate();
     };
     syncRenderingVisibility();
     document.addEventListener("visibilitychange", syncRenderingVisibility);
@@ -1589,6 +1632,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         fallbackAnimationFrame = null;
       }
       layoutScheduler.dispose();
+      sizeReconciler.dispose();
+      revealRepaint.dispose();
+      unsubscribeLayoutSession();
+      window.removeEventListener("focus", handleWindowFocus);
       clearTimeout(fitTimeout);
       observer.disconnect();
       intersectionObserver.disconnect();

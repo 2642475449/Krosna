@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTerminalRenderingPool } from "./terminalRendering";
+import { createTerminalRenderingPool, createTerminalRevealRepaint } from "./terminalRendering";
 
 function resource(webgl = true) {
   return {
@@ -9,6 +9,7 @@ function resource(webgl = true) {
     cursorBlink: true,
     blur: vi.fn(),
     refresh: vi.fn(),
+    repaint: vi.fn(),
   };
 }
 
@@ -22,6 +23,7 @@ describe("terminal rendering resources", () => {
     terminal.setVisible(true);
     expect(target.attachWebgl).toHaveBeenCalledTimes(1);
     expect(target.refresh).toHaveBeenCalledTimes(1);
+    expect(target.repaint).not.toHaveBeenCalled();
     expect(target.setCursorBlink).toHaveBeenLastCalledWith(true);
   });
 
@@ -37,6 +39,7 @@ describe("terminal rendering resources", () => {
     expect(target.attachWebgl).toHaveBeenCalledTimes(1);
     expect(target.disposeWebgl).not.toHaveBeenCalled();
     expect(target.refresh).toHaveBeenCalledTimes(2);
+    expect(target.repaint).toHaveBeenCalledTimes(1);
   });
 
   it("evicts the least recently hidden context and recreates it on reveal", () => {
@@ -53,6 +56,7 @@ describe("terminal rendering resources", () => {
     expect(b.disposeWebgl).not.toHaveBeenCalled();
     first.setVisible(true);
     expect(a.attachWebgl).toHaveBeenCalledTimes(2);
+    expect(a.repaint).not.toHaveBeenCalled();
     second.setVisible(true);
     expect(b.attachWebgl).toHaveBeenCalledTimes(1);
   });
@@ -120,5 +124,43 @@ describe("terminal rendering resources", () => {
     terminal.setVisible(true);
     terminal.setVisible(false);
     expect(target.disposeWebgl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("terminal reveal repaint", () => {
+  it("waits two frames, coalesces reveals and cancels work on disposal", () => {
+    const frames = new Map<number, () => void>();
+    let id = 0;
+    let visible = true;
+    const repaint = vi.fn();
+    const reveal = createTerminalRevealRepaint({
+      isVisible: () => visible,
+      repaint,
+      requestFrame: (callback) => { frames.set(++id, callback); return id; },
+      cancelFrame: (frame) => { frames.delete(frame); },
+    });
+    const tick = () => {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      callbacks.forEach((callback) => callback());
+    };
+    reveal.schedule();
+    reveal.schedule();
+    expect(frames.size).toBe(1);
+    tick();
+    expect(repaint).not.toHaveBeenCalled();
+    tick();
+    expect(repaint).toHaveBeenCalledTimes(1);
+    reveal.schedule();
+    tick();
+    visible = false;
+    tick();
+    expect(repaint).toHaveBeenCalledTimes(1);
+    reveal.schedule();
+    tick();
+    reveal.dispose();
+    tick();
+    expect(repaint).toHaveBeenCalledTimes(1);
+    expect(frames.size).toBe(0);
   });
 });
