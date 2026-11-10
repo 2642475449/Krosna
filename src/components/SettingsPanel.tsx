@@ -467,8 +467,6 @@ function TerminalPage() {
   const setTerminalFontSize = useAppStore((s) => s.setTerminalFontSize);
   const cursorBlink = useAppStore((s) => s.terminalCursorBlink);
   const setCursorBlink = useAppStore((s) => s.setTerminalCursorBlink);
-  const lineHeight = useAppStore((s) => s.terminalLineHeight);
-  const setLineHeight = useAppStore((s) => s.setTerminalLineHeight);
   const terminalRenderer = useAppStore((s) => s.terminalRenderer);
   const setTerminalRenderer = useAppStore((s) => s.setTerminalRenderer);
   const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
@@ -531,19 +529,6 @@ function TerminalPage() {
               { label: t("common.off"), value: "off" },
             ]}
             onChange={(v) => setCursorBlink(v === "on")}
-          />
-        </SettingRow>
-        <SettingRow label={t("settings.terminal.lineHeight")}>
-          <Segmented
-            size="small"
-            value={lineHeight}
-            options={[
-              { label: "1.0", value: 1.0 },
-              { label: "1.2", value: 1.2 },
-              { label: "1.5", value: 1.5 },
-              { label: "1.8", value: 1.8 },
-            ]}
-            onChange={(v) => setLineHeight(v as number)}
           />
         </SettingRow>
         <SettingRow label={t("settings.terminal.renderer")}>

@@ -1,5 +1,6 @@
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import type { IUnicodeVersionProvider, Terminal } from "@xterm/xterm";
+import { TERMINAL_LINE_HEIGHT } from "./terminalSettings";
 
 const UNICODE_VERSION = "krosna-11-zwj";
 const ZERO_WIDTH_JOINER = 0x200d;
@@ -10,6 +11,8 @@ type TerminalUnicodeCore = {
 
 /** Apply before the first PTY byte: reflow/refresh cannot fix cell widths already parsed. */
 export function initializePtyTextLayout(terminal: Terminal): void {
+  // All PTY surfaces use the same fixed row spacing, independent of legacy settings.
+  terminal.options.lineHeight = TERMINAL_LINE_HEIGHT;
   // PTYs own CR/LF translation; an extra CR moves positioned TUI text to column zero.
   terminal.options.convertEol = false;
   terminal.options.allowProposedApi = true;

@@ -25,6 +25,17 @@ const CLAUDE_STATUS = [
 ];
 
 describe("PTY text layout", () => {
+  it.each([1.2, 1.5, 1.8])("overrides legacy line height %s with fixed spacing on initialization and reinitialization", (lineHeight) => {
+    const terminal = new Terminal({ lineHeight });
+    try {
+      initializePtyTextLayout(terminal);
+      expect(terminal.options.lineHeight).toBe(1);
+      terminal.options.lineHeight = lineHeight;
+      initializePtyTextLayout(terminal);
+      expect(terminal.options.lineHeight).toBe(1);
+    } finally { terminal.dispose(); }
+  });
+
   it("keeps OpenCode's positioned LF at the same column through the Windows frame gate", async () => {
     const legacy = new Terminal({ cols: 120, rows: 40, convertEol: true });
     const terminal = new Terminal({ cols: 120, rows: 40, convertEol: true });

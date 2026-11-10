@@ -119,7 +119,6 @@ function SidebarSessionsPanel({
               size={17}
             />
           </span>
-          <AgentSessionStatus session={session} />
           <div className="flex-1 min-w-0">
             <div
               className="flex min-w-0 items-center text-[13px] font-medium"
@@ -163,11 +162,14 @@ function SidebarSessionsPanel({
           </div>
 
           <div className="app-session-trailing ml-auto grid shrink-0 items-center">
-            <Tooltip title={dayjs(timestamp).format("YYYY-MM-DD HH:mm:ss")} mouseEnterDelay={0.5}>
-              <span className="app-session-time justify-self-end whitespace-nowrap text-xs">
-                {relative}
-              </span>
-            </Tooltip>
+            <div className="app-session-summary flex items-center justify-end gap-2">
+              <Tooltip title={dayjs(timestamp).format("YYYY-MM-DD HH:mm:ss")} mouseEnterDelay={0.5}>
+                <span className="app-session-time whitespace-nowrap text-xs">
+                  {relative}
+                </span>
+              </Tooltip>
+              <AgentSessionStatus session={session} />
+            </div>
             <div className="app-session-actions flex items-center justify-end">
               <Tooltip title={session.pinned ? unpinSessionText : pinSessionText} mouseEnterDelay={0.5}>
                 <button

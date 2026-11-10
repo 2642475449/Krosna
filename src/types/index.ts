@@ -89,6 +89,7 @@ export interface PersistentSettings {
   editorFontSize: number;
   terminalFontSize: number;
   terminalCursorBlink: boolean;
+  /** Legacy persistence field; current clients always write 1 and ignore incoming values. */
   terminalLineHeight: number;
   terminalScrollback: number;
   terminalRenderer: string;

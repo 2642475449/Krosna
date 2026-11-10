@@ -1,4 +1,4 @@
-export const DEFAULT_TERMINAL_LINE_HEIGHT = 1;
+export const TERMINAL_LINE_HEIGHT = 1;
 
 export const DEFAULT_TERMINAL_SCROLLBACK = 5_000;
 

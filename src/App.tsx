@@ -25,6 +25,7 @@ import { useShortcutStore } from "./store/slices/shortcutSlice";
 import { useAuxiliaryDockStore } from "./store/auxiliaryDock";
 import { startPersistentSettingsUpdates } from "./store/slices/persistentSettingsUpdates";
 import { normalizeShortcutOverrides } from "./lib/appShortcuts";
+import { TERMINAL_LINE_HEIGHT } from "./lib/terminalSettings";
 import {
   initializePersistentSettings,
   savePersistentSettings,
@@ -105,7 +106,6 @@ function App() {
   const editorFontSize = useAppStore((s) => s.editorFontSize);
   const terminalFontSize = useAppStore((s) => s.terminalFontSize);
   const terminalCursorBlink = useAppStore((s) => s.terminalCursorBlink);
-  const terminalLineHeight = useAppStore((s) => s.terminalLineHeight);
   const terminalScrollback = useAppStore((s) => s.terminalScrollback);
   const terminalRenderer = useAppStore((s) => s.terminalRenderer);
   const terminalQuickCommands = useAppStore((s) => s.terminalQuickCommands);
@@ -186,7 +186,7 @@ function App() {
       editorFontSize,
       terminalFontSize,
       terminalCursorBlink,
-      terminalLineHeight,
+      terminalLineHeight: TERMINAL_LINE_HEIGHT,
       terminalScrollback,
       terminalRenderer,
       defaultTerminalShell,
@@ -260,7 +260,6 @@ function App() {
       networkNoProxy,
       terminalCursorBlink,
       terminalFontSize,
-      terminalLineHeight,
       terminalScrollback,
       terminalRenderer,
       defaultTerminalShell,

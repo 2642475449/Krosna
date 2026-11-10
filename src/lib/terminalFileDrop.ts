@@ -10,7 +10,9 @@ export function sanitizePromptPath(path: string): string {
 
 function normalizePath(path: string): string {
   // Preserve the leading double slash in UNC paths.
-  return sanitizePromptPath(path).replace(/\\/g, "/").replace(/\/$/, "");
+  const normalized = sanitizePromptPath(path).replace(/\\/g, "/");
+  if (normalized === "/" || /^[a-z]:\/$/i.test(normalized)) return normalized;
+  return normalized.replace(/\/$/, "");
 }
 
 function quoteReference(path: string): string {
@@ -19,25 +21,15 @@ function quoteReference(path: string): string {
     : path;
 }
 
-export function buildAgentFileReferencePrompt({ agentId, projectPath, entries }: {
+export function buildAgentFileReferencePrompt({ agentId, entries }: {
   agentId: string | undefined;
-  projectPath: string;
   entries: AgentFileDropEntry[];
 }): string {
-  const project = normalizePath(projectPath);
   return entries.filter((entry) => sanitizePromptPath(entry.path)).map((entry) => {
     const original = sanitizePromptPath(entry.path);
     if (agentId === "powershell") return `'${original.replace(/'/g, "''")}'`;
     if (agentId === "cmd") return `"${original.replace(/"/g, '""')}"`;
-    const absolute = normalizePath(original);
-    const prefix = `${project}/`;
-    // Windows drive and UNC paths are case insensitive.
-    const windows = /^(?:[a-z]:|\/\/)/i.test(project);
-    const inside = windows
-      ? absolute.toLowerCase().startsWith(prefix.toLowerCase())
-      : absolute.startsWith(prefix);
-    const path = absolute === project ? "." : inside ? absolute.slice(prefix.length) : absolute;
-    const reference = quoteReference(path);
+    const reference = quoteReference(normalizePath(original));
     if (["claude", "antigravity", "opencode"].includes(agentId ?? "")) return `@${reference}`;
     return entry.kind === "directory" && ["codex", "qoder"].includes(agentId ?? "")
       ? `${reference} (directory)`

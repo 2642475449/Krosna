@@ -42,6 +42,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it.each([1.2, 1.5, 1.8])("normalizes legacy persisted line height %s to 1 on save", (terminalLineHeight) => {
+  const previous = getPersistentSettingsSnapshot();
+  try {
+    applyPersistentSettingsToStore({ ...previous, terminalLineHeight });
+    expect(getPersistentSettingsSnapshot().terminalLineHeight).toBe(1);
+  } finally {
+    applyPersistentSettingsToStore(previous);
+  }
+});
+
 it.each(["openTab", "setActiveSession"] as const)("%s preserves unread completion when the window is not foreground", action => {
   const store = createAppStore();
   const projectPath = "D:/workspace/demo";

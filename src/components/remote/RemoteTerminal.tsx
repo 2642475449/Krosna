@@ -30,7 +30,6 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
   const theme = useAppStore((state) => state.activeTheme());
   const fontSize = useAppStore((state) => state.terminalFontSize);
   const cursorBlink = useAppStore((state) => state.terminalCursorBlink);
-  const lineHeight = useAppStore((state) => state.terminalLineHeight);
   const connection = useRemoteWorkspaceStore((state) => state.connections[hostId]);
   sessionRef.current = session;
   activeRef.current = active;
@@ -42,7 +41,7 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     const colors = getTerminalTheme(settings.activeTheme());
     const term = new XTerm({
       theme: colors.theme, minimumContrastRatio: colors.minimumContrastRatio,
-      fontSize: settings.terminalFontSize, lineHeight: settings.terminalLineHeight,
+      fontSize: settings.terminalFontSize,
       fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
       cursorBlink: settings.terminalCursorBlink, scrollback: settings.terminalScrollback,
       disableStdin: true,
@@ -139,10 +138,9 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     term.options.minimumContrastRatio = colors.minimumContrastRatio;
     term.options.fontSize = fontSize;
     term.options.cursorBlink = cursorBlink;
-    term.options.lineHeight = lineHeight;
     term.options.disableStdin = connection?.state !== "connected" || session.processState !== "running";
     if (active) { fitRef.current?.(); term.focus(); }
-  }, [active, connection?.state, cursorBlink, fontSize, lineHeight, session.processState, theme]);
+  }, [active, connection?.state, cursorBlink, fontSize, session.processState, theme]);
 
   return <div ref={containerRef} className="app-remote-terminal" data-remote-session={session.id} />;
 }

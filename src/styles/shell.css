@@ -110,7 +110,7 @@
     line-height: 18px;
   }
 
-  .app-session-time,
+  .app-session-summary,
   .app-session-actions {
     grid-area: 1 / 1;
   }
@@ -129,8 +129,8 @@
     transition: opacity 140ms ease;
   }
 
-  .app-session-list-item:hover .app-session-time,
-  .app-session-list-item:focus-within .app-session-time {
+  .app-session-list-item:hover .app-session-summary,
+  .app-session-list-item:focus-within .app-session-summary {
     visibility: hidden;
   }
 

@@ -71,7 +71,7 @@ import {
 import { AgentIcon } from "@/components/AgentIcon";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
 import { TerminalLinkDialog } from "@/components/terminal/TerminalLinkDialog";
-import { getAgentDisplayName, getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
+import { getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { canRestoreTerminalInputCursor, createTerminalAgentInterrupt } from "@/lib/terminalAgentInterrupt";
 import { getTerminalTheme } from "@/lib/terminalTheme";
@@ -272,7 +272,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const activeTheme = useAppStore((s) => s.activeTheme());
   const fontSize = useAppStore((s) => s.terminalFontSize);
   const cursorBlink = useAppStore((s) => s.terminalCursorBlink);
-  const lineHeight = useAppStore((s) => s.terminalLineHeight);
   const terminalScrollback = useRef(useAppStore.getState().terminalScrollback).current;
   const terminalRenderer = useAppStore((s) => s.terminalRenderer);
   const resourceDragState = useAppStore((s) => s.resourceDragState);
@@ -753,7 +752,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
       const text = buildAgentFileReferencePrompt({
         agentId,
-        projectPath: payload.projectPath,
         entries: payload.entries,
       });
       if (!text) return;
@@ -899,7 +897,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const term = new XTerm({
       fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
       fontSize,
-      lineHeight,
       theme: termTheme.theme,
       minimumContrastRatio: termTheme.minimumContrastRatio,
       cursorBlink: forceStableCursor ? false : cursorBlink,
@@ -1681,7 +1678,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     runnerOptions ? null : termTheme,
     fontSize,
     cursorBlink,
-    lineHeight,
     terminalScrollback,
     terminalRenderer,
     forceStableCursor,
@@ -1775,25 +1771,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           onDragLeave={handleAgentFileDragLeave}
           onDrop={handleAgentFileDrop}
         >
-          {isAgentFileDragOver || isExternalFileDragOver ? (
-            <div
-              className="pointer-events-none absolute inset-x-3 bottom-3 z-10 rounded-sm border px-3 py-2 text-xs shadow-xs"
-              style={{
-                borderColor: "var(--cs-accent)",
-                background: "var(--cs-bg-card-solid, rgba(255,255,255,0.94))",
-                color: "var(--cs-text-primary)",
-              }}
-            >
-              <div className="font-medium">
-                {t("terminal.dropFilesIntoAgent", {
-                  agent: currentSession?.agentId ? formatTerminalAgentName(currentSession.agentId) : t("terminal.agentFallback"),
-                })}
-              </div>
-              <div style={{ color: "var(--cs-text-secondary)" }}>
-                {t("terminal.dropFilesIntoAgentHint")}
-              </div>
-            </div>
-          ) : null}
           {imagePreview ? (
             <div
               className="xterm-hover app-overlay-surface pointer-events-none absolute z-20 overflow-hidden p-1"
@@ -1897,20 +1874,6 @@ function readAgentFileDragPayload(dataTransfer: DataTransfer): AgentFileDropPayl
     };
   } catch {
     return null;
-  }
-}
-
-function formatTerminalAgentName(agentId: string): string {
-  if (isAiAgentId(agentId)) {
-    return getAgentDisplayName(agentId);
-  }
-  switch (agentId) {
-    case "powershell":
-      return "PowerShell";
-    case "cmd":
-      return "CMD";
-    default:
-      return agentId;
   }
 }
 
