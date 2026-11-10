@@ -73,7 +73,8 @@ export async function saveAgentInstructionFile(projectPath: string, filePath: st
         if (errorMessage(error) !== "同名文件或文件夹已存在") throw error;
       }
     }
-    await writeProjectFile(projectPath, filePath, document.draft, document.encoding ?? undefined);
+    await writeProjectFile(projectPath, filePath, document.draft, document.encoding ?? undefined,
+      { content: document.content, encoding: document.encoding ?? "utf-8" });
     // 保存期间的新编辑继续保留为草稿。
     updateDocument(filePath, { exists: true, content: document.draft });
     return true;

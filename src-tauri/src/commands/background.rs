@@ -1,13 +1,108 @@
 use crate::database::{background::BackgroundSettings, Database};
-use crate::events::{BACKGROUND_SETTINGS_CHANGED_EVENT, WORKSPACE_CLOSE_REQUESTED_EVENT};
+use crate::events::{
+    BACKGROUND_SETTINGS_CHANGED_EVENT, WORKSPACE_CLOSE_REQUESTED_EVENT,
+    WORKSPACE_EXIT_CANCELLED_EVENT, WORKSPACE_EXIT_PREPARE_EVENT,
+};
 use crate::pty::PtyManager;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, State, WebviewWindow};
 
 pub fn is_workspace(label: &str) -> bool {
     label != "voice-overlay" && label != "voice-worker"
+}
+
+#[derive(Default)]
+pub struct WorkspaceExitState {
+    sequence: AtomicU64,
+    pending: parking_lot::Mutex<Option<WorkspaceExitPreparation>>,
+}
+
+struct WorkspaceExitPreparation {
+    nonce: String,
+    responses: HashMap<String, Option<bool>>,
+}
+
+impl WorkspaceExitState {
+    fn begin(&self, labels: Vec<String>) -> Result<String, String> {
+        let mut pending = self.pending.lock();
+        if pending.is_some() {
+            return Err("workspace-exit-in-progress".into());
+        }
+        let nonce = self.sequence.fetch_add(1, Ordering::Relaxed).to_string();
+        *pending = Some(WorkspaceExitPreparation {
+            nonce: nonce.clone(),
+            responses: labels.into_iter().map(|label| (label, None)).collect(),
+        });
+        Ok(nonce)
+    }
+
+    fn acknowledge(&self, nonce: &str, label: &str, ready: bool) -> Result<(), String> {
+        let mut pending = self.pending.lock();
+        let preparation = pending
+            .as_mut()
+            .filter(|item| item.nonce == nonce)
+            .ok_or("workspace-exit-stale-request")?;
+        let response = preparation
+            .responses
+            .get_mut(label)
+            .ok_or("workspace-exit-unknown-window")?;
+        if response.is_some() {
+            return Err("workspace-exit-duplicate-response".into());
+        }
+        *response = Some(ready);
+        Ok(())
+    }
+
+    fn outcome(&self, nonce: &str, current: &[String]) -> Option<Result<(), String>> {
+        let pending = self.pending.lock();
+        let Some(preparation) = pending.as_ref().filter(|item| item.nonce == nonce) else {
+            return Some(Err("workspace-exit-stale-request".into()));
+        };
+        // 准备期间新建的窗口也可能有草稿，不能绕过握手直接退出。
+        if current
+            .iter()
+            .any(|label| !preparation.responses.contains_key(label))
+        {
+            return Some(Err("workspace-exit-windows-changed".into()));
+        }
+        if preparation
+            .responses
+            .values()
+            .any(|ready| *ready == Some(false))
+        {
+            return Some(Err("workspace-exit-unsaved-documents".into()));
+        }
+        if preparation
+            .responses
+            .values()
+            .all(|ready| *ready == Some(true))
+        {
+            Some(Ok(()))
+        } else {
+            None
+        }
+    }
+
+    fn finish(&self, nonce: &str) -> Vec<String> {
+        let mut pending = self.pending.lock();
+        if pending.as_ref().is_some_and(|item| item.nonce == nonce) {
+            return pending
+                .take()
+                .map(|item| {
+                    item.responses
+                        .into_iter()
+                        .filter_map(|(label, ready)| (ready != Some(true)).then_some(label))
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
+        Vec::new()
+    }
 }
 
 fn show_workspaces(app: &tauri::AppHandle) {
@@ -160,10 +255,75 @@ pub fn complete_workspace_close(window: WebviewWindow, background: bool) -> Resu
 }
 
 #[tauri::command]
-pub fn exit_background_application(app: tauri::AppHandle) {
+pub fn acknowledge_workspace_exit(
+    window: WebviewWindow,
+    state: State<'_, WorkspaceExitState>,
+    nonce: String,
+    ready: bool,
+) -> Result<(), String> {
+    // 窗口标签来自 Tauri 注入的调用上下文，前端不能替其他窗口确认。
+    if !is_workspace(window.label()) {
+        return Err("Not a workspace window".into());
+    }
+    state.acknowledge(&nonce, window.label(), ready)
+}
+
+#[tauri::command]
+pub async fn exit_background_application(
+    app: tauri::AppHandle,
+    state: State<'_, WorkspaceExitState>,
+) -> Result<(), String> {
+    let workspaces: Vec<_> = app
+        .webview_windows()
+        .into_values()
+        .filter(|window| is_workspace(window.label()))
+        .collect();
+    let labels = workspaces
+        .iter()
+        .map(|window| window.label().to_string())
+        .collect();
+    let nonce = state.begin(labels)?;
+    for window in workspaces {
+        if window
+            .emit_to(window.label(), WORKSPACE_EXIT_PREPARE_EVENT, &nonce)
+            .is_err()
+        {
+            let _ = state.acknowledge(&nonce, window.label(), false);
+        }
+    }
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let result = loop {
+        let current = app
+            .webview_windows()
+            .keys()
+            .filter(|label| is_workspace(label))
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(result) = state.outcome(&nonce, &current) {
+            break result;
+        }
+        if Instant::now() >= deadline {
+            break Err("workspace-exit-save-timeout".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    let blocked = state.finish(&nonce);
+    if let Err(error) = result {
+        let _ = app.emit(WORKSPACE_EXIT_CANCELLED_EVENT, &nonce);
+        if let Some(window) = blocked
+            .iter()
+            .find_map(|label| app.get_webview_window(label))
+        {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        return Err(error);
+    }
     app.state::<Arc<PtyManager>>().cleanup_all();
-    app.state::<Arc<crate::remote_ssh::RemoteSshManager>>().disconnect_all();
+    app.state::<Arc<crate::remote_ssh::RemoteSshManager>>()
+        .disconnect_all();
     app.exit(0);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -175,5 +335,36 @@ mod tests {
         assert!(!is_workspace("voice-worker"));
         assert!(is_workspace("main"));
         assert!(is_workspace("project:example"));
+    }
+
+    #[test]
+    fn exit_requires_each_window_to_confirm_the_current_nonce() {
+        let state = WorkspaceExitState::default();
+        let labels = vec!["main".to_string(), "project:other".to_string()];
+        let nonce = state.begin(labels.clone()).unwrap();
+        assert!(state.begin(labels.clone()).is_err());
+        assert!(state.acknowledge("stale", "main", true).is_err());
+        assert!(state.acknowledge(&nonce, "unknown", true).is_err());
+        state.acknowledge(&nonce, "main", true).unwrap();
+        assert!(state.outcome(&nonce, &labels).is_none());
+        assert!(state.acknowledge(&nonce, "main", true).is_err());
+        state.acknowledge(&nonce, "project:other", true).unwrap();
+        assert_eq!(state.outcome(&nonce, &labels), Some(Ok(())));
+    }
+
+    #[test]
+    fn unsaved_or_new_windows_prevent_application_exit() {
+        let state = WorkspaceExitState::default();
+        let labels = vec!["main".to_string()];
+        let nonce = state.begin(labels.clone()).unwrap();
+        state.acknowledge(&nonce, "main", false).unwrap();
+        assert!(matches!(state.outcome(&nonce, &labels), Some(Err(_))));
+        assert_eq!(state.finish(&nonce), labels);
+        let nonce = state.begin(labels.clone()).unwrap();
+        state.acknowledge(&nonce, "main", true).unwrap();
+        assert!(matches!(
+            state.outcome(&nonce, &["main".into(), "project:new".into()]),
+            Some(Err(_))
+        ));
     }
 }

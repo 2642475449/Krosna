@@ -2,9 +2,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   completeWorkspaceClose, exitBackgroundApplication, getBackgroundSettings,
-  setBackgroundSettings, type BackgroundSettings,
+  setBackgroundSettings, acknowledgeWorkspaceExit, type BackgroundSettings,
 } from "@/lib/api";
 import { useApplicationUpdateStore } from "./applicationUpdate";
+import { discardWorkspaceDocuments, flushWorkspaceDocuments, pauseWorkspaceDocumentAutoSave } from "@/lib/workspaceClose";
 
 interface BackgroundState {
   settings: BackgroundSettings;
@@ -12,6 +13,13 @@ interface BackgroundState {
   busy: boolean;
   promptOpen: boolean;
   remember: boolean;
+  documentPromptOpen: boolean;
+  documentCloseIntent: "close" | "resolve";
+  documentCloseRemember: boolean;
+  unsavedPaths: string[];
+  exitPreparing: boolean;
+  closePreparing: boolean;
+  exitPreparationNonce: string | null;
   setSettings: (settings: BackgroundSettings) => void;
   setRemember: (remember: boolean) => void;
   setPromptOpen: (open: boolean) => void;
@@ -23,6 +31,13 @@ export const useBackgroundStore = create<BackgroundState>()(persist((set) => ({
   busy: false,
   promptOpen: false,
   remember: true,
+  documentPromptOpen: false,
+  documentCloseIntent: "resolve",
+  documentCloseRemember: false,
+  unsavedPaths: [],
+  exitPreparing: false,
+  closePreparing: false,
+  exitPreparationNonce: null,
   setSettings: (settings) => set({ settings, ready: true }),
   setRemember: (remember) => set({ remember }),
   setPromptOpen: (promptOpen) => set({ promptOpen }),
@@ -53,9 +68,88 @@ function checkUpdateGuard(): void {
   if (phase === "downloading" || phase === "installing") throw new Error("application-update-in-progress");
 }
 
+let releaseDocumentPause: (() => void) | undefined;
+function resumeDocumentAutoSave() {
+  releaseDocumentPause?.();
+  releaseDocumentPause = undefined;
+}
+
+function showDocumentPrompt(intent: "close" | "resolve", paths: string[], remember = false) {
+  resumeDocumentAutoSave();
+  releaseDocumentPause = pauseWorkspaceDocumentAutoSave();
+  useBackgroundStore.setState({ promptOpen: false, documentPromptOpen: true,
+    documentCloseIntent: intent, documentCloseRemember: remember, unsavedPaths: paths });
+}
+
+export function cancelWorkspaceDocumentClose(): void {
+  resumeDocumentAutoSave();
+  useBackgroundStore.setState({ documentPromptOpen: false, unsavedPaths: [] });
+}
+
+async function finishWorkspaceClose(background: boolean, remember: boolean): Promise<boolean> {
+  if (!background) useBackgroundStore.setState({ closePreparing: true });
+  try {
+    if (!background) {
+      const unsaved = await flushWorkspaceDocuments();
+      if (unsaved.length) { showDocumentPrompt("close", unsaved, remember); return false; }
+    }
+    if (remember) {
+      const settings = { runInBackground: background, askBeforeClose: false };
+      await setBackgroundSettings(settings);
+      useBackgroundStore.getState().setSettings(settings);
+    }
+    await completeWorkspaceClose(background);
+    useBackgroundStore.setState({ promptOpen: false, documentPromptOpen: false, unsavedPaths: [] });
+    return true;
+  } finally {
+    if (!background) useBackgroundStore.setState({ closePreparing: false });
+  }
+}
+
+export async function resolveWorkspaceDocumentClose(discard = false): Promise<void> {
+  const state = useBackgroundStore.getState();
+  if (state.busy || state.exitPreparing) return;
+  checkUpdateGuard();
+  useBackgroundStore.setState({ busy: true });
+  resumeDocumentAutoSave();
+  try {
+    const unsaved = await (discard ? discardWorkspaceDocuments() : flushWorkspaceDocuments());
+    if (unsaved.length) { showDocumentPrompt(state.documentCloseIntent, unsaved, state.documentCloseRemember); return; }
+    if (state.documentCloseIntent === "close") await finishWorkspaceClose(false, state.documentCloseRemember);
+    else cancelWorkspaceDocumentClose();
+  } finally { useBackgroundStore.setState({ busy: false }); }
+}
+
+/** 每个工作窗口各自保存；ACK 由 Rust 按真实窗口身份和本次 nonce 收集。 */
+export async function prepareWorkspaceExit(nonce: string): Promise<void> {
+  useBackgroundStore.setState({ exitPreparing: true, exitPreparationNonce: nonce });
+  let ready = false;
+  try {
+    checkUpdateGuard();
+    const unsaved = await flushWorkspaceDocuments();
+    if (useBackgroundStore.getState().exitPreparationNonce !== nonce) return;
+    ready = unsaved.length === 0;
+    if (!ready) showDocumentPrompt("resolve", unsaved);
+  } finally {
+    if (useBackgroundStore.getState().exitPreparationNonce === nonce) {
+      if (!ready) useBackgroundStore.setState({ exitPreparing: false });
+      try { await acknowledgeWorkspaceExit(nonce, ready); }
+      catch (error) {
+        cancelPreparedWorkspaceExit(nonce);
+        throw error;
+      }
+    }
+  }
+}
+
+export function cancelPreparedWorkspaceExit(nonce: string): void {
+  if (useBackgroundStore.getState().exitPreparationNonce !== nonce) return;
+  useBackgroundStore.setState({ exitPreparing: false, exitPreparationNonce: null });
+}
+
 export async function requestWorkspaceClose(exitApplication = false, explicitProjectClose = false): Promise<void> {
   const state = useBackgroundStore.getState();
-  if (state.busy || (state.promptOpen && !exitApplication)) return;
+  if (state.busy || state.exitPreparing || state.documentPromptOpen || (state.promptOpen && !exitApplication)) return;
   checkUpdateGuard();
   useBackgroundStore.setState({ busy: true });
   try {
@@ -73,7 +167,7 @@ export async function requestWorkspaceClose(exitApplication = false, explicitPro
     if (settings.askBeforeClose) {
       useBackgroundStore.setState({ promptOpen: true, remember: true });
     } else {
-      await completeWorkspaceClose(settings.runInBackground);
+      await finishWorkspaceClose(settings.runInBackground, false);
     }
   } finally {
     useBackgroundStore.setState({ busy: false });
@@ -81,17 +175,12 @@ export async function requestWorkspaceClose(exitApplication = false, explicitPro
 }
 
 export async function chooseWorkspaceClose(background: boolean): Promise<void> {
-  if (useBackgroundStore.getState().busy) return;
+  const state = useBackgroundStore.getState();
+  if (state.busy || state.exitPreparing || state.closePreparing || state.documentPromptOpen) return;
   checkUpdateGuard();
   useBackgroundStore.setState({ busy: true });
   try {
-    if (useBackgroundStore.getState().remember) {
-      const settings = { runInBackground: background, askBeforeClose: false };
-      await setBackgroundSettings(settings);
-      useBackgroundStore.getState().setSettings(settings);
-    }
-    await completeWorkspaceClose(background);
-    useBackgroundStore.setState({ promptOpen: false });
+    await finishWorkspaceClose(background, useBackgroundStore.getState().remember);
   } finally {
     useBackgroundStore.setState({ busy: false });
   }

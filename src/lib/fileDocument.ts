@@ -10,6 +10,7 @@ export interface FileDocumentState {
   loading: boolean;
   content: string;
   savedContent: string;
+  savedDiskContent: string;
   encoding: string | null;
   imageSrc: string | null;
   pdfData: Uint8Array | null;
@@ -31,7 +32,7 @@ export function fileDocumentKey(projectPath: string, path: string) {
 
 export function createFileDocument(projectPath: string, path: string) {
   const store = createStore<FileDocumentState>(() => ({
-    status: null, loading: true, content: "", savedContent: "", encoding: null,
+    status: null, loading: true, content: "", savedContent: "", savedDiskContent: "", encoding: null,
     imageSrc: null, pdfData: null, error: null, conflict: false, saving: false, autoSavePaused: false,
   }));
   let loadInFlight: Promise<void> | null = null;
@@ -59,7 +60,7 @@ export function createFileDocument(projectPath: string, path: string) {
           patch = {
             ...patch,
             status: { ...status, readOnly: file.readOnly, sizeBytes: file.sizeBytes, largeFile: file.largeFile, modifiedAtMs: file.modifiedAtMs ?? status.modifiedAtMs },
-            content, savedContent: content, encoding: file.encoding,
+            content, savedContent: content, savedDiskContent: file.content, encoding: file.encoding,
           };
         } else if (status.kind === "image") {
           patch.imageSrc = (await readProjectImage(projectPath, path)).dataUrl;
@@ -117,7 +118,12 @@ export function createFileDocument(projectPath: string, path: string) {
             store.setState({ conflict: true });
             return false;
           }
-          await writeProjectFile(projectPath, path, snapshot.content, snapshot.encoding ?? undefined);
+          const expected = overwrite
+            ? await readProjectFile(projectPath, path)
+            : { content: snapshot.savedDiskContent, encoding: snapshot.encoding ?? "utf-8" };
+          if (version !== generation || store.getState().autoSavePaused) return false;
+          await writeProjectFile(projectPath, path, snapshot.content, snapshot.encoding ?? undefined,
+            { content: expected.content, encoding: expected.encoding });
           if (version !== generation) return false;
           // Pair the saved snapshot with metadata from the same content read.
           // A separate post-write inspect can accidentally adopt an external edit's version.
@@ -131,7 +137,8 @@ export function createFileDocument(projectPath: string, path: string) {
             ...before, readOnly: file.readOnly, sizeBytes: file.sizeBytes,
             largeFile: file.largeFile, modifiedAtMs: file.modifiedAtMs,
           };
-          store.setState({ status, encoding: file.encoding, savedContent: snapshot.content, error: null, conflict: false });
+          store.setState({ status, encoding: file.encoding, savedContent: snapshot.content,
+            savedDiskContent: file.content, error: null, conflict: false });
           // Explicit overwrite applies only to the conflict the user approved.
           overwrite = false;
         }
@@ -140,7 +147,10 @@ export function createFileDocument(projectPath: string, path: string) {
         }));
         return true;
       } catch (error) {
-        if (version === generation) store.setState({ error: errorText(error) });
+        if (version === generation) {
+          if (errorText(error) === "file-write-conflict") store.setState({ conflict: true, error: null });
+          else store.setState({ error: errorText(error) });
+        }
         return false;
       } finally {
         store.setState({ saving: false });
@@ -178,12 +188,20 @@ export function createFileDocument(projectPath: string, path: string) {
   }
 
   return {
+    projectPath, path,
     store, load, refresh, save, pauseAutoSave, discardChanges,
     setContent(content: string) { store.setState({ content }); },
   };
 }
 
 const documents = new Map<string, ReturnType<typeof createFileDocument>>();
+// 包括辅助栏与暂时没有挂载视图的草稿，关闭时不能只检查主工作区标签。
+export function getUnsavedFileDocuments() {
+  return [...documents.values()].filter((document) => {
+    const state = document.store.getState();
+    return state.saving || state.content !== state.savedContent;
+  }).map((document) => ({ projectPath: document.projectPath, path: document.path, document }));
+}
 const leases = new Map<string, { count: number; timer?: ReturnType<typeof setTimeout> }>();
 export function findFileDocument(projectPath: string, path: string) {
   return documents.get(fileDocumentKey(projectPath, path));

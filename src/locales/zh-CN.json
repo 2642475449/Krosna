@@ -102,7 +102,18 @@
     "remember": "记住我的选择",
     "actionFailed": "无法完成操作：{{error}}",
     "trayShow": "显示窗口",
-    "trayQuit": "退出 Krosna"
+    "trayQuit": "退出 Krosna",
+    "unsavedTitle": "还有文件未保存",
+    "unsavedDescription": "部分文件保存失败或与磁盘内容冲突，窗口将保持打开。请处理后重试保存，或明确丢弃更改。",
+    "saveAndClose": "保存并关闭",
+    "discardAndClose": "丢弃更改并关闭",
+    "saveDocuments": "重试保存",
+    "discardChanges": "丢弃更改",
+    "preparingExit": "正在准备退出",
+    "preparingClose": "正在保存文件",
+    "preparingCloseDescription": "正在等待此窗口的文件保存完成，请稍候。",
+    "preparingExitDescription": "正在等待所有工作窗口保存文件，请稍候。",
+    "exitSaveFailed": "已取消退出：有窗口的文件尚未保存，或未能确认保存状态。请在对应窗口处理未保存的文件后重试。"
   },
   "taskMonitor": {
     "title": "任务监控",

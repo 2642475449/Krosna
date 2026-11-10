@@ -15,6 +15,7 @@ import {
   saveClaudeMd,
 } from "@/lib/api";
 import { getAgentDisplayName } from "@/lib/agents";
+import { mergeSavedInstructionDraft } from "@/lib/instructionDraft";
 import { AgentIcon } from "@/components/AgentIcon";
 import MonacoTextEditor from "@/components/editors/MonacoTextEditor";
 import MarkdownPreview from "@/components/markdown/MarkdownPreview";
@@ -317,12 +318,13 @@ export function ClaudeMdPage() {
         [claudeScope]: { ...prev[claudeScope], saving: true },
       }));
       try {
-        const detail = await saveClaudeMd(claudeScope, activeDraft, projectPath);
+        const submittedDraft = activeDraft;
+        const detail = await saveClaudeMd(claudeScope, submittedDraft, projectPath);
         setClaudeDocs((prev) => ({
           ...prev,
           [claudeScope]: {
             detail,
-            draft: detail.content,
+            draft: mergeSavedInstructionDraft(prev[claudeScope].draft, submittedDraft, detail.content),
             loading: false,
             saving: false,
             loaded: true,

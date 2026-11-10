@@ -92,6 +92,7 @@ export interface PersistentSettings {
   terminalLineHeight: number;
   terminalScrollback: number;
   terminalRenderer: string;
+  defaultTerminalShell?: "powershell" | "cmd";
   agentPermissionDefaults: AgentPermissionDefaults;
   notificationEnabled: boolean;
   notificationSoundEnabled: boolean;

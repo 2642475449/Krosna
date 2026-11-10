@@ -94,7 +94,8 @@ it("saves an existing file at its full path and preserves its encoding and newer
   finishSave();
   expect(await pending).toBe(true);
   expect(create).not.toHaveBeenCalled();
-  expect(write).toHaveBeenCalledWith(projectPath, filePath, "Saved draft", "utf-8-bom");
+  expect(write).toHaveBeenCalledWith(projectPath, filePath, "Saved draft", "utf-8-bom",
+    { content: "# 项目协作规范", encoding: "utf-8-bom" });
   expect(useAgentInstructionsStore.getState().documents[filePath]).toMatchObject({
     exists: true, content: "Saved draft", draft: "Newer draft", saving: false,
   });
@@ -108,7 +109,8 @@ it("creates a confirmed missing file and writes to the same full path", async ()
   useAgentInstructionsStore.getState().setDraft(filePath, "New instructions");
   expect(await saveAgentInstructionFile(projectPath, filePath)).toBe(true);
   expect(create).toHaveBeenCalledWith(projectPath, projectPath, "AGENTS.md");
-  expect(write).toHaveBeenCalledWith(projectPath, filePath, "New instructions", undefined);
+  expect(write).toHaveBeenCalledWith(projectPath, filePath, "New instructions", undefined,
+    { content: "", encoding: "utf-8" });
 });
 
 it("preserves unsaved content and clears saving when a write fails", async () => {

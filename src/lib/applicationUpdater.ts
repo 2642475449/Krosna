@@ -77,7 +77,18 @@ export async function checkForApplicationUpdate(
   if (checkPromise) {
     const result = await checkPromise;
     if (options.manual && result.status !== "up-to-date") {
-      useApplicationUpdateStore.getState().openModal();
+      const latestState = useApplicationUpdateStore.getState();
+      // 用户主动检查时，即使复用了后台请求，也要展示实际失败原因。
+      if (result.status === "error") {
+        latestState.patch({
+          phase: "error",
+          error: result.error,
+          errorStage: "check",
+          modalOpen: true,
+        });
+      } else {
+        latestState.openModal();
+      }
     }
     return result;
   }
@@ -133,10 +144,11 @@ export async function checkForApplicationUpdate(
       const detail = errorText(error);
       console.error("Failed to check for application updates:", error);
       useApplicationUpdateStore.getState().patch({
-        phase: "error",
+        // 后台检查失败保持静默，避免离线使用时常驻“更新失败”按钮。
+        phase: options.manual ? "error" : "idle",
         currentVersion: version,
-        error: detail,
-        errorStage: "check",
+        error: options.manual ? detail : null,
+        errorStage: options.manual ? "check" : null,
         ...(options.manual ? { modalOpen: true } : {}),
       });
       return { status: "error", currentVersion: version, error: detail } as const;

@@ -909,13 +909,15 @@ export async function writeProjectFile(
   projectPath: string,
   path: string,
   content: string,
-  encoding?: string
+  encoding?: string,
+  expected?: Pick<ProjectFileContent, "content" | "encoding">
 ): Promise<void> {
   await invoke("write_project_file", {
     projectPath,
     path,
     content,
     encoding,
+    expected,
   });
 }
 
@@ -1561,6 +1563,18 @@ export async function completeWorkspaceClose(background: boolean): Promise<void>
 
 export async function exitBackgroundApplication(): Promise<void> {
   await invoke("exit_background_application");
+}
+
+export async function acknowledgeWorkspaceExit(nonce: string, ready: boolean): Promise<void> {
+  await invoke("acknowledge_workspace_exit", { nonce, ready });
+}
+
+export async function onWorkspaceExitPreparationRequested(handler: (nonce: string) => void): Promise<UnlistenFn> {
+  return getCurrentWindow().listen<string>("krosna:workspace-exit-prepare", (event) => handler(event.payload));
+}
+
+export async function onWorkspaceExitPreparationCancelled(handler: (nonce: string) => void): Promise<UnlistenFn> {
+  return listen<string>("krosna:workspace-exit-cancelled", (event) => handler(event.payload));
 }
 
 export async function onWorkspaceCloseRequested(handler: (exit: boolean) => void): Promise<UnlistenFn> {

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { FileStatusDetails, FileStatusPath } from "./FileStatusBar";
+import { QuotaUsageRing } from "./QuotaUsageRing";
 import { QuotaUsageStatus } from "./QuotaUsageStatus";
 import { WorkbenchFeedback } from "./WorkbenchFeedback";
 import { getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
@@ -22,7 +23,7 @@ import { useAppStore } from "@/store";
 import { useAgentUsage } from "@/hooks/useAgentUsage";
 import { hasUsageData } from "@/lib/agentUsage";
 import type { AiAgentId, AntigravityQuotaWindow, AntigravityUsage, GitCloneEventPayload, GitCloneTask, ProjectSearchIndexStatus, QoderQuotaBucket, QoderUsage } from "@/types";
-import { antigravityQuotaLabel, antigravityQuotaPeriodLabel, antigravityQuotaScopeLabel, getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
+import { antigravityQuotaLabel, antigravityQuotaPeriodLabel } from "@/lib/antigravityQuota";
 const GIT_CLONE_EVENT = "git-clone-task-event";
 const SEARCH_INDEX_EVENT = "search-index-status";
 
@@ -62,14 +63,14 @@ function StatusBar() {
 
   const activeSession = !fileTab ? sessions.find((session) => session.id === activeSessionId) ?? null : null;
   const showCodexUsage = shouldLoadCodexRateLimits(activeSession);
-  const loadClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
-  const showClaudeUsage = loadClaudeUsage;
+  const showClaudeUsage = shouldLoadClaudeRateLimits(activeSession);
+  const claudeUsageSession = showClaudeUsage ? activeSession : null;
   const showQoderUsage = shouldLoadQoderUsage(activeSession);
   const showOpenCodeUsage = activeSession?.active === true && activeSession.agentId === "opencode";
-  const { value: openCodeUsage, loading: openCodeUsageLoading, error: openCodeUsageError, refresh: refreshOpenCodeUsage } = useAgentUsage("opencode", showOpenCodeUsage);
   const showAntigravityUsage = activeSession?.active === true && activeSession.agentId === "antigravity";
+  const { value: openCodeUsage, loading: openCodeUsageLoading, error: openCodeUsageError, refresh: refreshOpenCodeUsage } = useAgentUsage("opencode", showOpenCodeUsage);
   const { value: codexRateLimits, loading: codexUsageLoading, error: codexUsageError, refresh: handleRefreshCodexUsage } = useAgentUsage("codex", showCodexUsage);
-  const { value: claudeRateLimits, loading: claudeUsageLoading, error: claudeUsageError, refresh: handleRefreshClaudeUsage } = useAgentUsage("claude", showClaudeUsage, activeSession?.id);
+  const { value: claudeRateLimits, loading: claudeUsageLoading, error: claudeUsageError, refresh: handleRefreshClaudeUsage } = useAgentUsage("claude", showClaudeUsage && Boolean(claudeUsageSession), claudeUsageSession?.id);
   const { value: qoderUsage, loading: qoderUsageLoading, error: qoderUsageError, refresh: handleRefreshQoderUsage } = useAgentUsage("qoder", showQoderUsage);
   const { value: antigravityUsage, loading: antigravityUsageLoading, error: antigravityUsageError, refresh: handleRefreshAntigravityUsage } = useAgentUsage("antigravity", showAntigravityUsage);
   const effectiveAgentId = useMemo<AiAgentId | null>(() => {
@@ -499,39 +500,14 @@ function StatusBar() {
     >
       <div className="flex min-w-0 flex-1 items-center justify-start">
         <WorkbenchFeedback>
-        {fileTab ? <FileStatusPath path={fileTab.resourceId} projectPath={currentProject?.path} /> : showCodexUsage ? (
-          <QuotaUsageStatus
-            agentId="codex"
-            limits={codexRateLimits}
-            isLoading={codexUsageLoading}
-            error={codexUsageError}
-            onRefresh={handleRefreshCodexUsage}
-          />
-        ) : showOpenCodeUsage ? (
-          <QuotaUsageStatus agentId="opencode" limits={openCodeUsage} isLoading={openCodeUsageLoading} error={openCodeUsageError} onRefresh={refreshOpenCodeUsage} />
-        ) : showAntigravityUsage ? (
-          <AntigravityUsageStatus
-            usage={antigravityUsage}
-            isLoading={antigravityUsageLoading}
-            error={antigravityUsageError}
-            onRefresh={handleRefreshAntigravityUsage}
-          />
-        ) : showQoderUsage ? (
-          <QoderUsageStatus
-            usage={qoderUsage}
-            isLoading={qoderUsageLoading}
-            error={qoderUsageError}
-            onRefresh={handleRefreshQoderUsage}
-          />
-        ) : showClaudeUsage ? (
-          <QuotaUsageStatus
-            agentId="claude"
-            limits={claudeRateLimits}
-            isLoading={claudeUsageLoading}
-            error={claudeUsageError}
-            onRefresh={handleRefreshClaudeUsage}
-          />
-        ) : null}
+        {fileTab && <FileStatusPath path={fileTab.resourceId} projectPath={currentProject?.path} />}
+        <div className="app-statusbar-quotas flex min-w-0 items-center gap-1 overflow-x-auto">
+          {showCodexUsage && <QuotaUsageStatus agentId="codex" limits={codexRateLimits} isLoading={codexUsageLoading} error={codexUsageError} onRefresh={handleRefreshCodexUsage} />}
+          {showClaudeUsage && <QuotaUsageStatus agentId="claude" limits={claudeRateLimits} isLoading={claudeUsageLoading} error={claudeUsageError} onRefresh={() => { if (claudeUsageSession) handleRefreshClaudeUsage(); }} />}
+          {showAntigravityUsage && <AntigravityUsageStatus usage={antigravityUsage} isLoading={antigravityUsageLoading} error={antigravityUsageError} onRefresh={handleRefreshAntigravityUsage} />}
+          {showQoderUsage && <QoderUsageStatus usage={qoderUsage} isLoading={qoderUsageLoading} error={qoderUsageError} onRefresh={handleRefreshQoderUsage} />}
+          {showOpenCodeUsage && <QuotaUsageStatus agentId="opencode" limits={openCodeUsage} isLoading={openCodeUsageLoading} error={openCodeUsageError} onRefresh={refreshOpenCodeUsage} />}
+        </div>
         </WorkbenchFeedback>
       </div>
       <div className="app-statusbar-right flex min-w-0 items-center justify-end gap-3">
@@ -648,7 +624,6 @@ function QoderUsageStatus({
   const summary = hasData && remaining != null
     ? t("statusBar.qoderUsage.summary", { value: remaining })
     : t("statusBar.qoderUsage.title");
-  const barColor = remaining == null ? "var(--cs-text-tertiary)" : codexUsageBarColor(remaining);
 
   const popoverContent = (
     <div
@@ -741,24 +716,12 @@ function QoderUsageStatus({
     >
       <button
         type="button"
-        className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none transition-colors"
+        className="flex h-7 shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none transition-colors"
         style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
         title={summary}
       >
         <AgentIcon agentId="qoder" size={15} />
-        {hasData && remaining != null ? (
-        <div
-          aria-hidden="true"
-          className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
-          style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)", opacity: remaining == null ? 0.55 : 1 }}
-        >
-          <div
-            className="h-full rounded-full transition-[width] duration-200"
-            style={{ width: `${remaining ?? 0}%`, background: barColor }}
-          />
-        </div>
-        ) : null}
-        <span className="truncate tabular-nums">{summary}</span>
+        {hasData && remaining != null ? <QuotaUsageRing label={t("statusBar.qoderUsage.title")} remaining={remaining} /> : <span className="truncate tabular-nums">{summary}</span>}
       </button>
     </Popover>
   );
@@ -808,7 +771,7 @@ function formatCreditValue(value: number): string {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 }
 
-function AntigravityUsageStatus({
+export function AntigravityUsageStatus({
   usage,
   isLoading,
   error,
@@ -821,21 +784,11 @@ function AntigravityUsageStatus({
 }) {
   const { t } = useTranslation();
   const hasData = Boolean(usage && hasUsageData(usage));
-  const compactWindows = getAntigravityGeminiQuotaWindows(usage?.windows ?? []);
-  const compactScope = compactWindows.length ? "Gemini" : undefined;
-  const compactGroups = hasData && usage && compactScope ? [compactScope].map((scope) => ({
-    scope,
-    label: antigravityQuotaScopeLabel(scope, t),
-    periods: compactWindows.slice(0, 2).map((window) => ({
-      period: window.window,
-      label: antigravityQuotaPeriodLabel(window.window, t),
-      remaining: Math.max(0, Math.min(100, Math.round(window.remainingPercent))),
-    })),
-  })) : [];
+  const compactWindows = hasData ? usage?.windows ?? [] : [];
   const summary = t("statusBar.antigravityUsage.title");
-  const accessibleSummary = compactGroups.map((group) => `${group.label} · ${group.periods.map((period) =>
-    `${period.label} ${period.remaining == null ? t("statusBar.antigravityUsage.unavailableShort") : t("statusBar.codexUsage.remaining", { value: period.remaining })}`,
-  ).join(" · ")}`).join("; ");
+  const accessibleSummary = compactWindows.map((window) =>
+    `${antigravityQuotaLabel(window, t)} · ${t("statusBar.codexUsage.remaining", { value: Math.round(window.remainingPercent) })}`,
+  ).join("; ");
   const statusError = error ?? usage?.error;
 
   const content = (
@@ -901,28 +854,14 @@ function AntigravityUsageStatus({
     >
       <button
         type="button"
-        className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none"
+        className="flex h-7 shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none"
         aria-label={`${t("statusBar.antigravityUsage.title")} · ${accessibleSummary || summary}`}
         style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
       >
         <AgentIcon agentId="antigravity" size={15} />
-        {compactGroups.length > 0 ? compactGroups.map((group) => (
-          <span key={group.scope} className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-            {group.periods.map((period) => (
-              <span key={period.period} className="flex items-center gap-1 text-[12px]">
-                <span className="text-[var(--cs-text-tertiary)]">{period.label}</span>
-                {period.remaining != null && (
-                  <progress
-                    aria-hidden="true"
-                    className={`app-agent-quota-progress h-[6px] w-14 shrink-0 overflow-hidden rounded-full ${period.remaining <= 15 ? "text-[var(--cs-error)]" : period.remaining <= 35 ? "text-[var(--cs-warning)]" : "text-[var(--cs-success)]"}`}
-                    max={100}
-                    value={period.remaining}
-                  />
-                )}
-                <span className="tabular-nums">{period.remaining == null ? "—" : `${period.remaining}%`}</span>
-              </span>
-            ))}
-          </span>
+        {compactWindows.length > 0 ? compactWindows.map((window) => (
+          <QuotaUsageRing key={window.id} label={antigravityQuotaPeriodLabel(window.window, t)}
+            descriptionLabel={antigravityQuotaLabel(window, t)} remaining={window.remainingPercent} />
         )) : <span className="truncate">{summary}</span>}
       </button>
     </Popover>

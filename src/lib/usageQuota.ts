@@ -29,7 +29,7 @@ export function tightestQuota(windows: UsageQuotaWindow[]): UsageQuotaWindow | n
   return windows.reduce<UsageQuotaWindow | null>((best, window) => !best || window.usedPercent > best.usedPercent ? window : best, null);
 }
 
-export function quotaWindowLabel(window: UsageQuotaWindow, t: TFunction): string {
+export function quotaWindowLabel(window: UsageQuotaWindow, t: TFunction, includeBucketName = true): string {
   const key = "statusBar.quota";
   let label: string;
   if (window.label) {
@@ -43,7 +43,7 @@ export function quotaWindowLabel(window: UsageQuotaWindow, t: TFunction): string
       : minutes % 60 === 0 ? t(`${key}.hours`, { value: minutes / 60 })
       : t(`${key}.minutes`, { value: minutes });
   }
-  return window.bucketName ? `${window.bucketName} · ${label}` : label;
+  return includeBucketName && window.bucketName ? `${window.bucketName} · ${label}` : label;
 }
 
 export function hasQuotaData(value: (UsageQuotaDetails & Partial<Pick<CodexRateLimits, "session" | "weekly" | "rateLimitResetCredits">>) | null): boolean {

@@ -1306,6 +1306,12 @@ fn run_command(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let started = Instant::now();
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
@@ -1318,58 +1324,103 @@ fn run_command(
         }
     };
 
-    if let Some(input) = stdin_input {
-        if let Some(mut stdin) = child.stdin.take() {
-            if let Err(error) = std::io::Write::write_all(&mut stdin, input.as_bytes()) {
-                terminate_process_tree(&mut child);
-                let _ = child.wait();
-                return TaskExecution {
-                    status: ScheduledTaskRunStatus::Failed,
-                    exit_code: None,
-                    output: String::new(),
-                    error: Some(format!("写入定时任务输入失败: {error}")),
-                };
-            }
+    let process_tree = match TaskProcessTree::new(&child) {
+        Ok(tree) => tree,
+        Err(error) => {
+            let _ = child.kill();
+            return TaskExecution {
+                status: ScheduledTaskRunStatus::Failed,
+                exit_code: None,
+                output: String::new(),
+                error: Some(format!("无法建立定时任务进程保护: {error}")),
+            };
         }
-    }
-
-    let stdout_reader = child.stdout.take();
-    let stderr_reader = child.stderr.take();
-    let stdout_handle = stdout_reader.map(read_pipe_limited);
-    let stderr_handle = stderr_reader.map(read_pipe_limited);
-    let started = Instant::now();
+    };
+    let mut stdin_handle = stdin_input.and_then(|input| {
+        child.stdin.take().map(|mut stdin| {
+            thread::spawn(move || {
+                std::io::Write::write_all(&mut stdin, input.as_bytes())
+                    .map_err(|error| format!("写入定时任务输入失败: {error}"))
+            })
+        })
+    });
+    let stdout = child.stdout.take().map(read_pipe_limited);
+    let stderr = child.stderr.take().map(read_pipe_limited);
     let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
     let mut cancelled = false;
     let mut timed_out = false;
-    let exit_status = loop {
+    let mut exit_status = None;
+    let mut process_error = None;
+    // 父进程退出后管道仍可能由后代持有；整个输入/输出生命周期都受截止时间约束。
+    loop {
         if cancel_requested.load(Ordering::SeqCst) {
             cancelled = true;
-            terminate_process_tree(&mut child);
-            break child.wait().ok();
+            break;
         }
         if started.elapsed() >= timeout {
             timed_out = true;
-            terminate_process_tree(&mut child);
-            break child.wait().ok();
+            break;
         }
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) => thread::sleep(Duration::from_millis(80)),
-            Err(error) => {
-                terminate_process_tree(&mut child);
-                let _ = child.wait();
-                let output =
-                    combine_output(join_capture(stdout_handle), join_capture(stderr_handle));
-                return TaskExecution {
-                    status: ScheduledTaskRunStatus::Failed,
-                    exit_code: None,
-                    output,
-                    error: Some(format!("等待定时任务进程失败: {error}")),
-                };
+        if stdin_handle
+            .as_ref()
+            .is_some_and(thread::JoinHandle::is_finished)
+        {
+            if let Some(handle) = stdin_handle.take() {
+                if let Err(error) = handle
+                    .join()
+                    .unwrap_or_else(|_| Err("定时任务输入线程失败".to_string()))
+                {
+                    process_error = Some(error);
+                    break;
+                }
             }
         }
-    };
-    let output = combine_output(join_capture(stdout_handle), join_capture(stderr_handle));
+        if exit_status.is_none() {
+            match child.try_wait() {
+                Ok(status) => exit_status = status,
+                Err(error) => {
+                    process_error = Some(format!("等待定时任务进程失败: {error}"));
+                    break;
+                }
+            }
+        }
+        if exit_status.is_some()
+            && stdin_handle.is_none()
+            && stdout.as_ref().is_none_or(OutputCapture::is_finished)
+            && stderr.as_ref().is_none_or(OutputCapture::is_finished)
+        {
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    process_tree.terminate();
+    if exit_status.is_none() {
+        let _ = child.kill();
+    }
+    // 通常杀死进程组后所有管道马上关闭；即使有句柄逃逸也不能无限阻塞调度器。
+    let cleanup_started = Instant::now();
+    while cleanup_started.elapsed() < Duration::from_millis(500) {
+        if exit_status.is_none() {
+            exit_status = child.try_wait().ok().flatten();
+        }
+        if exit_status.is_some()
+            && stdin_handle
+                .as_ref()
+                .is_none_or(thread::JoinHandle::is_finished)
+            && stdout.as_ref().is_none_or(OutputCapture::is_finished)
+            && stderr.as_ref().is_none_or(OutputCapture::is_finished)
+        {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    if let Some(handle) = stdin_handle.filter(thread::JoinHandle::is_finished) {
+        let _ = handle.join();
+    }
+    let output = combine_output(
+        stdout.map(OutputCapture::finish).unwrap_or_default(),
+        stderr.map(OutputCapture::finish).unwrap_or_default(),
+    );
     if cancelled {
         return TaskExecution {
             status: ScheduledTaskRunStatus::Cancelled,
@@ -1384,6 +1435,14 @@ fn run_command(
             exit_code: exit_status.and_then(|status| status.code()),
             output,
             error: Some(format!("定时任务在 {} 分钟后超时", timeout_ms / 60_000)),
+        };
+    }
+    if let Some(error) = process_error {
+        return TaskExecution {
+            status: ScheduledTaskRunStatus::Failed,
+            exit_code: exit_status.and_then(|status| status.code()),
+            output,
+            error: Some(error),
         };
     }
     match exit_status {
@@ -1411,42 +1470,62 @@ fn run_command(
     }
 }
 
-fn read_pipe_limited<R>(mut reader: R) -> thread::JoinHandle<String>
+#[derive(Default)]
+struct CapturedOutput {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+struct OutputCapture {
+    worker: thread::JoinHandle<()>,
+    output: Arc<Mutex<CapturedOutput>>,
+}
+
+impl OutputCapture {
+    fn is_finished(&self) -> bool {
+        self.worker.is_finished()
+    }
+
+    fn finish(self) -> String {
+        if self.worker.is_finished() {
+            let _ = self.worker.join();
+        }
+        let output = self.output.lock();
+        let mut text = String::from_utf8_lossy(&output.bytes).into_owned();
+        if output.truncated {
+            text.push_str("\n[输出超过 1 MiB，后续内容已截断]\n");
+        }
+        text
+    }
+}
+
+fn read_pipe_limited<R>(mut reader: R) -> OutputCapture
 where
     R: Read + Send + 'static,
 {
-    thread::spawn(move || {
+    let output = Arc::new(Mutex::new(CapturedOutput::default()));
+    let captured = output.clone();
+    let worker = thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
-        let mut captured = Vec::new();
-        let mut truncated = false;
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(length) => {
-                    let remaining = MAX_CAPTURE_BYTES.saturating_sub(captured.len());
+                    let mut captured = captured.lock();
+                    let remaining = MAX_CAPTURE_BYTES.saturating_sub(captured.bytes.len());
                     if remaining > 0 {
                         let take = remaining.min(length);
-                        captured.extend_from_slice(&buffer[..take]);
+                        captured.bytes.extend_from_slice(&buffer[..take]);
                     }
                     if length > remaining {
-                        truncated = true;
+                        captured.truncated = true;
                     }
                 }
                 Err(_) => break,
             }
         }
-        let mut output = String::from_utf8_lossy(&captured).into_owned();
-        if truncated {
-            output.push_str("\n[输出超过 1 MiB，后续内容已截断]\n");
-        }
-        output
-    })
-}
-
-fn join_capture(handle: Option<thread::JoinHandle<String>>) -> String {
-    handle
-        .and_then(|handle| handle.join().ok())
-        .unwrap_or_default()
+    });
+    OutputCapture { worker, output }
 }
 
 fn combine_output(stdout: String, stderr: String) -> String {
@@ -1482,23 +1561,79 @@ fn summarize_execution(execution: &TaskExecution) -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn terminate_process_tree(child: &mut Child) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    let mut taskkill = Command::new("taskkill.exe");
-    taskkill
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW);
-    if !taskkill.status().is_ok_and(|status| status.success()) {
-        let _ = child.kill();
+struct TaskProcessTree(*mut std::ffi::c_void);
+
+#[cfg(target_os = "windows")]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn CreateJobObjectW(
+        attributes: *const std::ffi::c_void,
+        name: *const u16,
+    ) -> *mut std::ffi::c_void;
+    fn AssignProcessToJobObject(job: *mut std::ffi::c_void, process: *mut std::ffi::c_void) -> i32;
+    fn TerminateJobObject(job: *mut std::ffi::c_void, exit_code: u32) -> i32;
+    fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+impl TaskProcessTree {
+    fn new(child: &Child) -> Result<Self, String> {
+        use std::os::windows::io::AsRawHandle;
+        // Job 持续追踪后代，即使最初的 cmd/PowerShell 已退出仍可终止整个任务。
+        let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if handle.is_null() {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        if unsafe { AssignProcessToJobObject(handle, child.as_raw_handle()) } == 0 {
+            let error = std::io::Error::last_os_error().to_string();
+            unsafe {
+                CloseHandle(handle);
+            }
+            return Err(error);
+        }
+        Ok(Self(handle))
+    }
+
+    fn terminate(&self) {
+        unsafe {
+            TerminateJobObject(self.0, 1);
+        }
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn terminate_process_tree(child: &mut Child) {
-    let _ = child.kill();
+#[cfg(target_os = "windows")]
+impl Drop for TaskProcessTree {
+    fn drop(&mut self) {
+        self.terminate();
+        unsafe {
+            CloseHandle(self.0);
+        }
+    }
+}
+
+#[cfg(unix)]
+struct TaskProcessTree(u32);
+
+#[cfg(unix)]
+impl TaskProcessTree {
+    fn new(child: &Child) -> Result<Self, String> {
+        Ok(Self(child.id()))
+    }
+    fn terminate(&self) {
+        unsafe extern "C" {
+            fn kill(pid: i32, signal: i32) -> i32;
+        }
+        unsafe {
+            kill(-(self.0 as i32), 9);
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for TaskProcessTree {
+    fn drop(&mut self) {
+        self.terminate();
+    }
 }
 
 #[cfg(test)]
@@ -1510,6 +1645,97 @@ mod tests {
         ScheduledTaskTrigger, SchedulerState, MAX_QUEUE_WAIT_MS,
     };
     use chrono::{TimeZone, Utc};
+
+    fn command_with_background_pipe_holder() -> std::process::Command {
+        #[cfg(windows)]
+        let command_text = "start /b ping.exe -n 30 127.0.0.1";
+        #[cfg(unix)]
+        let command_text = "sleep 30 &";
+        let mut command = super::build_shell_command("cmd", command_text).unwrap();
+        command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null());
+        command
+    }
+
+    #[test]
+    fn task_timeout_covers_pipe_capture_after_parent_exits() {
+        let started = std::time::Instant::now();
+        let execution = super::run_command(
+            command_with_background_pipe_holder(),
+            None,
+            1000,
+            &std::sync::atomic::AtomicBool::new(false),
+        );
+        assert_eq!(execution.status, ScheduledTaskRunStatus::TimedOut);
+        assert_eq!(
+            execution.exit_code,
+            Some(0),
+            "parent exits before inherited pipes close"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
+    }
+
+    #[test]
+    fn task_cancel_covers_pipe_capture_after_parent_exits() {
+        let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let signal = cancelled.clone();
+        let canceller = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            signal.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        let started = std::time::Instant::now();
+        let execution = super::run_command(
+            command_with_background_pipe_holder(),
+            None,
+            10_000,
+            &cancelled,
+        );
+        canceller.join().unwrap();
+        assert_eq!(execution.status, ScheduledTaskRunStatus::Cancelled);
+        assert_eq!(execution.exit_code, Some(0));
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
+    }
+
+    #[test]
+    fn task_timeout_also_covers_blocked_stdin_writer() {
+        #[cfg(windows)]
+        let command_text = "ping.exe -n 30 127.0.0.1 >nul";
+        #[cfg(unix)]
+        let command_text = "sleep 30";
+        let mut command = super::build_shell_command("cmd", command_text).unwrap();
+        command
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let started = std::time::Instant::now();
+        let execution = super::run_command(
+            command,
+            Some("x".repeat(1024 * 1024)),
+            300,
+            &std::sync::atomic::AtomicBool::new(false),
+        );
+        assert_eq!(execution.status, ScheduledTaskRunStatus::TimedOut);
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
+    }
+
+    #[test]
+    fn task_keeps_normal_success_output() {
+        let mut command = super::build_shell_command("cmd", "echo task-output").unwrap();
+        command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let execution = super::run_command(
+            command,
+            None,
+            5000,
+            &std::sync::atomic::AtomicBool::new(false),
+        );
+        assert_eq!(execution.status, ScheduledTaskRunStatus::Succeeded);
+        assert!(execution.output.contains("task-output"));
+    }
 
     #[test]
     fn scheduled_agent_keeps_read_only_unattended_permissions() {

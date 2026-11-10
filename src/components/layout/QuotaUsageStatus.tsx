@@ -4,9 +4,10 @@ import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatQuotaDateTime, formatQuotaResetTime } from "@/lib/quotaDateTime";
+import { QuotaUsageRing } from "./QuotaUsageRing";
 import { AgentIcon } from "@/components/AgentIcon";
 import type { ClaudeRateLimits, CodexRateLimits, CodexRateLimitWindow, CodexRateLimitResetCredit, OpenCodeUsage, UsageQuotaDetails } from "@/types";
-import { hasQuotaData, legacyQuotaDetails, quotaPlanLabel, quotaWindowLabel, quotaWindows, remainingQuota, tightestQuota } from "@/lib/usageQuota";
+import { hasQuotaData, legacyQuotaDetails, quotaPlanLabel, quotaWindowLabel, quotaWindows, remainingQuota } from "@/lib/usageQuota";
 
 export function QuotaUsageStatus({
   agentId,
@@ -37,16 +38,13 @@ export function QuotaUsageStatus({
   const statusError = error ?? (agentId === "opencode" && limits?.error ? t(`statusBar.quota.${limits.error}`, { defaultValue: limits.error }) : limits?.error);
   const resetCredits = codexLimits?.rateLimitResetCredits?.availableCount;
   const resetCreditDetails = codexLimits?.rateLimitResetCredits;
-  // Different OpenCode providers are separate accounts, not simultaneous constraints.
-  const compactWindow = agentId === "opencode" ? null : tightestQuota(windows);
-  const compactRemaining = compactWindow ? remainingQuota(compactWindow) : null;
-  const summary = compactWindow
-    ? `${remainingQuota(compactWindow)}% ${quotaWindowLabel(compactWindow, t)}`
-    : t(`${translationRoot}.title`);
+  // 各周期同时展示，避免只显示最紧额度而隐藏五小时或周额度。
+  const compactWindows = agentId === "opencode" ? [] : windows;
+  const planLabel = quotaPlanLabel(details.planType);
+  const summary = [planLabel, t(`${translationRoot}.title`), ...compactWindows.map((window) =>
+    `${quotaWindowLabel(window, t)} · ${t("statusBar.codexUsage.remaining", { value: remainingQuota(window) })}`,
+  )].filter(Boolean).join(" · ");
   const stale = hasData && (Boolean(statusError) || Boolean(limits?.updatedAt && Date.now() - limits.updatedAt > 10 * 60_000));
-  const compactBarColor = compactRemaining == null
-    ? "var(--cs-text-tertiary)"
-    : codexUsageBarColor(compactRemaining);
 
   const popoverContent = (
     <div
@@ -164,7 +162,7 @@ export function QuotaUsageStatus({
     >
       <button
         type="button"
-        className="flex h-7 min-w-[154px] shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none transition-colors"
+        className="flex h-7 shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none transition-colors"
         style={{
           background: "transparent",
           border: "0",
@@ -172,31 +170,13 @@ export function QuotaUsageStatus({
           cursor: "pointer",
         }}
         title={summary}
+        aria-label={summary}
       >
         <AgentIcon agentId={agentId} size={15} />
-        {compactRemaining != null ? (
-        <div
-          aria-hidden="true"
-          className="h-[6px] w-14 shrink-0 overflow-hidden rounded-full"
-          style={{
-            background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)",
-            opacity: compactRemaining == null ? 0.55 : 1,
-          }}
-        >
-          <div
-            className="h-full rounded-full transition-[width] duration-200"
-            style={{
-              width: `${compactRemaining ?? 0}%`,
-              background: compactBarColor,
-              boxShadow: compactRemaining == null
-                ? "none"
-                : `0 0 5px color-mix(in srgb, ${compactBarColor} 55%, transparent)`,
-            }}
-          />
-        </div>
-        ) : null}
+        {compactWindows.map((window) => <QuotaUsageRing key={`${window.bucketId}:${window.id}`}
+          label={quotaWindowLabel(window, t, false)} descriptionLabel={quotaWindowLabel(window, t)} remaining={remainingQuota(window)} />)}
         {(stale || details.limitReached || openCode?.status === "error") && <WarningOutlined aria-label={t("statusBar.quota.attention")} style={{ color: "var(--cs-warning)", fontSize: 12 }} />}
-        <span className="truncate tabular-nums">{summary}</span>
+        {compactWindows.length === 0 && <span className="truncate tabular-nums">{t(`${translationRoot}.title`)}</span>}
 
       </button>
     </Popover>

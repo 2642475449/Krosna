@@ -239,8 +239,8 @@ pub fn rename_project_entry(
         return Err("项目目录不存在".to_string());
     }
 
-    let target_path = resolve_entry_path(&root_path, &path)?;
-    if !target_path.exists() {
+    let target_path = resolve_structural_entry_path(&root_path, &path)?;
+    if fs::symlink_metadata(&target_path).is_err() {
         return Err("目标路径不存在".to_string());
     }
 
@@ -248,7 +248,7 @@ pub fn rename_project_entry(
     if next_path == target_path {
         return Ok(display_path(&target_path));
     }
-    if next_path.exists() {
+    if fs::symlink_metadata(&next_path).is_ok() {
         return Err("同名文件或文件夹已存在".to_string());
     }
 
@@ -269,8 +269,8 @@ fn delete_project_entry_blocking(project_path: String, path: String) -> Result<(
         return Err("项目目录不存在".to_string());
     }
 
-    let target_path = resolve_entry_path(&root_path, &path)?;
-    if !target_path.exists() {
+    let target_path = resolve_structural_entry_path(&root_path, &path)?;
+    if fs::symlink_metadata(&target_path).is_err() {
         return Err("目标路径不存在".to_string());
     }
 
@@ -514,19 +514,38 @@ pub async fn write_project_file(
     path: String,
     content: String,
     encoding: Option<String>,
+    expected: Option<ExpectedFileContent>,
 ) -> Result<(), String> {
     crate::commands::run_background_task("write_project_file", move || {
-        write_project_file_blocking(project_path, path, content, encoding)
+        write_project_file_checked_blocking(project_path, path, content, encoding, expected)
     })
     .await
 }
 
+#[derive(serde::Deserialize)]
+pub struct ExpectedFileContent {
+    content: String,
+    encoding: String,
+}
+
+#[cfg(test)]
 pub fn write_project_file_blocking(
     project_path: String,
     path: String,
     content: String,
     encoding: Option<String>,
 ) -> Result<(), String> {
+    write_project_file_checked_blocking(project_path, path, content, encoding, None)
+}
+
+fn write_project_file_checked_blocking(
+    project_path: String,
+    path: String,
+    content: String,
+    encoding: Option<String>,
+    expected: Option<ExpectedFileContent>,
+) -> Result<(), String> {
+    use std::io::{Seek, SeekFrom, Write};
     let root_path = normalize_input_path(&project_path);
     if !root_path.exists() {
         return Err("项目目录不存在".to_string());
@@ -545,8 +564,40 @@ pub fn write_project_file_blocking(
         return Err("当前文件为只读，无法保存".to_string());
     }
 
+    // 编码失败不得触碰原文件；比较与写入使用同一个受锁保护的句柄，
+    // 防止前端预检和写入两次 IPC 之间的外部修改被静默覆盖。
     let bytes = encode_text_bytes(&content, encoding.as_deref())?;
-    fs::write(&target_path, bytes).map_err(|e| format!("保存文件失败: {}", e))?;
+    let expected_bytes = expected
+        .map(|value| encode_text_bytes(&value.content, Some(&value.encoding)))
+        .transpose()?;
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // 允许读者，拒绝其他写入、删除与路径替换，直到比较和写入完成。
+        options.share_mode(1);
+    }
+    let mut file = options
+        .open(&target_path)
+        .map_err(|e| format!("打开文件进行保存失败: {e}"))?;
+    file.try_lock()
+        .map_err(|e| format!("文件正在被其他操作保存: {e}"))?;
+    if let Some(expected_bytes) = expected_bytes {
+        let mut current = Vec::new();
+        file.read_to_end(&mut current)
+            .map_err(|e| format!("校验文件版本失败: {e}"))?;
+        if current != expected_bytes {
+            return Err("file-write-conflict".into());
+        }
+    }
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("定位文件失败: {e}"))?;
+    file.write_all(&bytes)
+        .map_err(|e| format!("保存文件失败: {e}"))?;
+    file.set_len(bytes.len() as u64)
+        .map_err(|e| format!("更新文件长度失败: {e}"))?;
+    file.sync_data().map_err(|e| format!("同步文件失败: {e}"))?;
     Ok(())
 }
 
@@ -621,9 +672,10 @@ pub fn copy_external_entry_blocking(
 
     let dest_dir = resolve_existing_directory_path(&destination_directory)?;
 
+    // 复制也必须保留末级链接，不能先解析成其实体再递归复制。
     let normalized_sources = source_paths
         .iter()
-        .map(|path| normalize_input_path(path))
+        .map(|path| PathBuf::from(path.trim()))
         .collect::<Vec<_>>();
     copy_entries_into_directory(&normalized_sources, &dest_dir, new_name.as_deref())
 }
@@ -709,7 +761,7 @@ pub fn copy_project_entries_blocking(
     let dest_dir = resolve_create_parent_path(&root_path, &destination_directory)?;
     let normalized_sources = source_paths
         .iter()
-        .map(|path| resolve_entry_path(&root_path, path))
+        .map(|path| resolve_structural_entry_path(&root_path, path))
         .collect::<Result<Vec<_>, _>>()?;
 
     copy_entries_into_directory(&normalized_sources, &dest_dir, None)
@@ -740,7 +792,7 @@ pub fn move_project_entries_blocking(
     let dest_dir = resolve_create_parent_path(&root_path, &destination_directory)?;
     let normalized_sources = source_paths
         .iter()
-        .map(|path| resolve_entry_path(&root_path, path))
+        .map(|path| resolve_structural_entry_path(&root_path, path))
         .collect::<Result<Vec<_>, _>>()?;
 
     move_entries_into_directory(&normalized_sources, &dest_dir)
@@ -752,7 +804,7 @@ fn build_unique_copy_path(
     source_path: &Path,
 ) -> Result<PathBuf, String> {
     let mut target_path = dest_dir.join(file_name);
-    if !target_path.exists() {
+    if fs::symlink_metadata(&target_path).is_err() {
         return Ok(target_path);
     }
 
@@ -774,7 +826,7 @@ fn build_unique_copy_path(
     for attempt in 1..1000 {
         let new_name = format!("{} ({}){}", stem, attempt, extension);
         target_path = dest_dir.join(&new_name);
-        if !target_path.exists() {
+        if fs::symlink_metadata(&target_path).is_err() {
             return Ok(target_path);
         }
     }
@@ -783,6 +835,7 @@ fn build_unique_copy_path(
 }
 
 fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    reject_copy_link(source)?;
     fs::create_dir_all(destination).map_err(|e| format!("创建目录失败: {}", e))?;
 
     for entry in fs::read_dir(source).map_err(|e| format!("读取目录失败: {}", e))? {
@@ -790,6 +843,7 @@ fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), Str
         let entry_path = entry.path();
         let entry_name = entry.file_name();
         let target_path = destination.join(&entry_name);
+        reject_copy_link(&entry_path)?;
 
         if entry_path.is_dir() {
             copy_directory_recursive(&entry_path, &target_path)?;
@@ -813,9 +867,12 @@ fn copy_entries_into_directory(
     };
 
     for source_path in source_paths {
-        if !source_path.exists() {
+        if fs::symlink_metadata(source_path).is_err() {
             continue;
         }
+        reject_copy_link(source_path)?;
+        let normalized_source = normalize_input_path(&display_path(source_path));
+        let source_path = &normalized_source;
 
         if source_path.is_dir() && dest_dir.starts_with(source_path) {
             return Err("不能复制文件夹到其自身或子目录".to_string());
@@ -831,7 +888,7 @@ fn copy_entries_into_directory(
 
         let target_path = if let Some(target_name) = validated_single_target_name.as_deref() {
             let explicit_target_path = dest_dir.join(target_name);
-            if explicit_target_path.exists() {
+            if fs::symlink_metadata(&explicit_target_path).is_ok() {
                 return Err("A file or folder with the same name already exists".to_string());
             }
             explicit_target_path
@@ -872,7 +929,7 @@ fn move_entries_into_directory(
         .collect::<Vec<_>>();
 
     for source_path in &sources {
-        if !source_path.exists() {
+        if fs::symlink_metadata(source_path).is_err() {
             return Err(format!("要移动的项目不存在: {}", display_path(source_path)));
         }
         if source_path
@@ -928,6 +985,43 @@ fn resolve_entry_path(root_path: &Path, path: &str) -> Result<PathBuf, String> {
     }
 
     Ok(target)
+}
+
+// 删除、重命名和移动修改的是目录项本身；只能解析父目录，不能跟随末级链接。
+fn resolve_structural_entry_path(root_path: &Path, path: &str) -> Result<PathBuf, String> {
+    let requested = Path::new(path.trim());
+    let name = requested
+        .file_name()
+        .ok_or_else(|| "不允许修改项目根目录".to_string())?;
+    let parent = requested
+        .parent()
+        .ok_or_else(|| "无法定位目标路径的父目录".to_string())?;
+    let parent =
+        fs::canonicalize(parent).map_err(|error| format!("无法解析目标父目录: {error}"))?;
+    let target = crate::path_utils::normalize_path_buf(parent).join(name);
+    if !target.starts_with(root_path) {
+        return Err("不允许访问项目目录之外的路径".to_string());
+    }
+    if target == root_path {
+        return Err("不允许修改项目根目录".to_string());
+    }
+    Ok(target)
+}
+
+fn reject_copy_link(path: &Path) -> Result<(), String> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|error| format!("读取复制源失败: {error}"))?;
+    let mut is_link = metadata.file_type().is_symlink();
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // junction 和其他重解析点也不能递归跟随，避免越界和循环复制。
+        is_link |= metadata.file_attributes() & 0x400 != 0;
+    }
+    if is_link {
+        return Err("暂不支持复制符号链接或目录链接，请复制其原始文件或目录".to_string());
+    }
+    Ok(())
 }
 
 fn resolve_create_parent_path(root_path: &Path, parent_path: &str) -> Result<PathBuf, String> {
@@ -1354,6 +1448,121 @@ fn compare_entries(left: &FileTreeEntry, right: &FileTreeEntry) -> Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_directory_link(link: &Path, target: &Path) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let status = std::process::Command::new("cmd.exe")
+                .args(["/D", "/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .creation_flags(0x08000000)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "create test directory junction");
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    fn remove_directory_link(link: &Path) {
+        #[cfg(windows)]
+        fs::remove_dir(link).unwrap();
+        #[cfg(unix)]
+        fs::remove_file(link).unwrap();
+    }
+
+    #[test]
+    fn structural_operations_preserve_link_entry_and_real_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = normalize_input_path(temp.path().to_str().unwrap());
+        let real = root.join("real");
+        let link = root.join("link");
+        let destination = root.join("destination");
+        fs::create_dir_all(&real).unwrap();
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(real.join("proof.txt"), "keep").unwrap();
+        make_directory_link(&link, &real);
+        // 删除操作取得的必须是链接本身，而非被链接的 real 目录。
+        assert_eq!(
+            resolve_structural_entry_path(&root, link.to_str().unwrap()).unwrap(),
+            link
+        );
+        let renamed =
+            rename_project_entry(display_path(&root), display_path(&link), "renamed".into())
+                .unwrap();
+        assert!(fs::symlink_metadata(&link).is_err());
+        assert_eq!(normalize_input_path(&renamed), real);
+        let moved = move_project_entries_blocking(
+            display_path(&root),
+            vec![renamed],
+            display_path(&destination),
+        )
+        .unwrap();
+        let moved_link = PathBuf::from(&moved[0]);
+        assert_eq!(moved_link, destination.join("renamed"));
+        remove_directory_link(&moved_link);
+        assert_eq!(fs::read_to_string(real.join("proof.txt")).unwrap(), "keep");
+    }
+
+    #[test]
+    fn structural_paths_keep_root_and_parent_link_boundaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("project");
+        let outside = temp.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("file.txt"), "keep").unwrap();
+        let root = normalize_input_path(root.to_str().unwrap());
+        let link = root.join("outside-link");
+        make_directory_link(&link, &outside);
+        assert!(resolve_structural_entry_path(&root, root.to_str().unwrap()).is_err());
+        assert!(
+            resolve_structural_entry_path(&root, link.join("file.txt").to_str().unwrap()).is_err()
+        );
+        assert_eq!(
+            resolve_structural_entry_path(&root, link.to_str().unwrap()).unwrap(),
+            link
+        );
+        remove_directory_link(&link);
+        assert!(outside.join("file.txt").exists());
+    }
+
+    #[test]
+    fn copies_reject_links_including_recursive_directory_cycles() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = normalize_input_path(temp.path().to_str().unwrap());
+        let source = root.join("source");
+        let destination = root.join("destination");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&destination).unwrap();
+        let link = source.join("cycle");
+        make_directory_link(&link, &source);
+        assert!(copy_project_entries_blocking(
+            display_path(&root),
+            vec![display_path(&link)],
+            display_path(&destination)
+        )
+        .is_err());
+        assert!(copy_project_entries_blocking(
+            display_path(&root),
+            vec![display_path(&source)],
+            display_path(&destination)
+        )
+        .is_err());
+        assert!(copy_external_entry_blocking(
+            display_path(&root),
+            vec![display_path(&link)],
+            display_path(&destination),
+            None
+        )
+        .is_err());
+        assert!(!destination.join("source/cycle").exists());
+        remove_directory_link(&link);
+    }
     use tauri::ipc::{InvokeResponseBody, IpcResponse};
 
     #[test]
@@ -1715,6 +1924,84 @@ mod tests {
                 .unwrap();
         assert_eq!(content.content, "中文");
         assert_eq!(content.encoding, "gbk");
+    }
+
+    #[test]
+    fn write_project_file_rejects_stale_content_without_overwriting_external_edits() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("conflict.txt");
+        fs::write(&file_path, "external edit").unwrap();
+        let result = write_project_file_checked_blocking(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "local edit".into(),
+            Some("utf-8".into()),
+            Some(ExpectedFileContent {
+                content: "original".into(),
+                encoding: "utf-8".into(),
+            }),
+        );
+        assert_eq!(result.unwrap_err(), "file-write-conflict");
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "external edit");
+    }
+
+    #[test]
+    fn write_project_file_compares_bytes_and_preserves_bom_and_shorter_writes() {
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("checked.txt");
+        fs::write(&file_path, b"\xEF\xBB\xBFvery long original").unwrap();
+        let result = write_project_file_checked_blocking(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "new".into(),
+            Some("utf-8-bom".into()),
+            Some(ExpectedFileContent {
+                content: "very long original".into(),
+                encoding: "utf-8-bom".into(),
+            }),
+        );
+        result.unwrap();
+        assert_eq!(fs::read(&file_path).unwrap(), b"\xEF\xBB\xBFnew");
+        // 另一窗口仍持有旧基线时不能覆盖刚刚写入的版本。
+        let stale = write_project_file_checked_blocking(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "stale write".into(),
+            Some("utf-8-bom".into()),
+            Some(ExpectedFileContent {
+                content: "very long original".into(),
+                encoding: "utf-8-bom".into(),
+            }),
+        );
+        assert_eq!(stale.unwrap_err(), "file-write-conflict");
+        assert_eq!(fs::read(&file_path).unwrap(), b"\xEF\xBB\xBFnew");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn write_project_file_refuses_an_existing_external_writer() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let file_path = directory.path().join("busy.txt");
+        fs::write(&file_path, "original").unwrap();
+        let _external = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(7)
+            .open(&file_path)
+            .unwrap();
+        assert!(write_project_file_checked_blocking(
+            display_path(directory.path()),
+            display_path(&file_path),
+            "new".into(),
+            Some("utf-8".into()),
+            Some(ExpectedFileContent {
+                content: "original".into(),
+                encoding: "utf-8".into()
+            }),
+        )
+        .is_err());
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "original");
     }
 
     #[test]

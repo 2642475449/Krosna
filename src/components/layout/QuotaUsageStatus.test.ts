@@ -62,11 +62,13 @@ test("a balance-only response renders zero as a known balance without an unavail
   expect(markup).not.toContain("did not report quota");
   expect(markup).toContain(">0<");
 });
-test("Codex compact text and bar both report the exhausted weekly constraint", () => {
+test("Codex compact rings show both the five-hour and exhausted weekly constraints", () => {
   const limits: CodexRateLimits = { session: null, weekly: null, quotaWindows: [window(300, 5), window(10080, 100)], status: "ok", error: null, updatedAt: Date.now(), accountId: null, accountLabel: null };
   const markup = renderToStaticMarkup(createElement(QuotaUsageStatus, { agentId: "codex", limits, isLoading: false, error: null, onRefresh: () => {} }));
-  expect(markup).toContain("0% Weekly");
-  expect(markup).toContain("width:0%");
+  expect(markup).toContain("5 hours · 95% remaining");
+  expect(markup).toContain("Weekly · 0% remaining");
+  expect(markup).toContain('stroke-dasharray="95 5"');
+  expect(markup).toContain('stroke-dasharray="0 100"');
 });
 test("a gateway budget with no dollar amounts remains a valid quota window", () => {
   const markup = renderToStaticMarkup(createElement(QuotaDetailsContent, { details: { quotaWindows: [{ ...window(0, 80), label: "monthlySpend" }] } }));
@@ -108,4 +110,19 @@ test("OpenCode popover opens with Go windows and Zen explanation, and refresh re
     host.remove();
     vi.unstubAllGlobals();
   }
+});
+
+test.each([
+  ["free", 15, "15 minutes"], ["plus", 300, "5 hours"], ["pro", 43200, "30 days"],
+])("compact %s quota shows its duration and keeps plan and model metadata in descriptions", (planType, minutes, period) => {
+  const limits: CodexRateLimits = {
+    session: null, weekly: null, quotaWindows: [{ ...window(minutes, 20), bucketName: "GPT model" }],
+    planType, status: "ok", error: null, updatedAt: Date.now(), accountId: null, accountLabel: null,
+  };
+  const markup = renderToStaticMarkup(createElement(QuotaUsageStatus, { agentId: "codex", limits, isLoading: false, error: null, onRefresh: () => {} }));
+  expect(markup).toContain(planType[0].toUpperCase() + planType.slice(1));
+  expect(markup).toContain(`GPT model · ${period}`);
+  const visibleText = markup.replace(/<[^>]*>/g, "");
+  expect(visibleText).toContain(period);
+  expect(visibleText).not.toMatch(/Codex|GPT model|Free|Plus|Pro/);
 });

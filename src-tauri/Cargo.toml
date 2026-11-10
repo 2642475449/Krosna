@@ -8,6 +8,12 @@ license = "MIT"
 name = "krosna_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+# 开发和测试共享精简配置，避免增量缓存长期累积占满磁盘。
+# 保留回溯行号；需要查看变量时可临时覆盖 CARGO_PROFILE_DEV_DEBUG=2。
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
 [profile.release]
 opt-level = "z"
 lto = true

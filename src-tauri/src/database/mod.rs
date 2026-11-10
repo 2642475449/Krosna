@@ -94,6 +94,10 @@ fn default_terminal_renderer() -> String {
     "auto".into()
 }
 
+fn default_terminal_shell() -> String {
+    "powershell".into()
+}
+
 fn default_terminal_scrollback() -> i64 {
     5_000
 }
@@ -234,6 +238,8 @@ pub struct PersistentSettingsRecord {
     pub terminal_scrollback: i64,
     #[serde(default = "default_terminal_renderer")]
     pub terminal_renderer: String,
+    #[serde(default = "default_terminal_shell")]
+    pub default_terminal_shell: String,
     #[serde(default = "default_agent_permission_defaults")]
     pub agent_permission_defaults: serde_json::Value,
     pub notification_enabled: bool,
@@ -318,6 +324,7 @@ impl Default for PersistentSettingsRecord {
             terminal_line_height: 1.0,
             terminal_scrollback: default_terminal_scrollback(),
             terminal_renderer: default_terminal_renderer(),
+            default_terminal_shell: default_terminal_shell(),
             agent_permission_defaults: default_agent_permission_defaults(),
             notification_enabled: true,
             notification_sound_enabled: true,
@@ -974,6 +981,11 @@ impl Database {
             read_setting(&conn, "terminal.scrollback")?.unwrap_or(settings.terminal_scrollback);
         settings.terminal_renderer =
             read_setting(&conn, "terminal.renderer")?.unwrap_or(settings.terminal_renderer);
+        settings.default_terminal_shell = read_setting(&conn, "terminal.defaultShell")?
+            .unwrap_or(settings.default_terminal_shell);
+        if settings.default_terminal_shell != "cmd" {
+            settings.default_terminal_shell = default_terminal_shell();
+        }
         settings.agent_permission_defaults = read_setting(&conn, "agents.permissionDefaults")?
             .unwrap_or(settings.agent_permission_defaults);
         settings.notification_enabled =
@@ -1004,7 +1016,8 @@ impl Database {
             .unwrap_or_else(|| infer_asr_auth_mode(&settings.asr_api_key));
         settings.asr_model = read_setting(&conn, "voice.model")?.unwrap_or(settings.asr_model);
         settings.asr_region = read_setting(&conn, "voice.region")?.unwrap_or(settings.asr_region);
-        settings.asr_language = read_setting(&conn, "voice.language")?.unwrap_or(settings.asr_language);
+        settings.asr_language =
+            read_setting(&conn, "voice.language")?.unwrap_or(settings.asr_language);
         settings.voice_polish_enabled =
             read_setting(&conn, "voice.polishEnabled")?.unwrap_or(settings.voice_polish_enabled);
         settings.voice_polish_model =
@@ -1019,8 +1032,8 @@ impl Database {
             read_setting(&conn, "voice.polishRegion")?.unwrap_or(settings.voice_polish_region);
         settings.voice_polish_style =
             read_setting(&conn, "voice.polishStyle")?.unwrap_or(settings.voice_polish_style);
-        settings.voice_polish_instructions =
-            read_setting(&conn, "voice.polishInstructions")?.unwrap_or(settings.voice_polish_instructions);
+        settings.voice_polish_instructions = read_setting(&conn, "voice.polishInstructions")?
+            .unwrap_or(settings.voice_polish_instructions);
         settings.voice_shortcut =
             read_setting(&conn, "voice.shortcut")?.unwrap_or(settings.voice_shortcut);
         settings.keyboard_shortcuts =
@@ -1071,11 +1084,16 @@ impl Database {
         settings: &PersistentSettingsRecord,
         changed_fields: &[String],
     ) -> Result<PersistentSettingsRecord, String> {
-        let mut current = serde_json::to_value(self.load_persistent_settings()?).map_err(|error| error.to_string())?;
+        let mut current = serde_json::to_value(self.load_persistent_settings()?)
+            .map_err(|error| error.to_string())?;
         let requested = serde_json::to_value(settings).map_err(|error| error.to_string())?;
-        let target = current.as_object_mut().ok_or("Invalid persistent settings")?;
+        let target = current
+            .as_object_mut()
+            .ok_or("Invalid persistent settings")?;
         for field in changed_fields {
-            let value = requested.get(field).ok_or_else(|| format!("Unknown persistent settings field: {field}"))?;
+            let value = requested
+                .get(field)
+                .ok_or_else(|| format!("Unknown persistent settings field: {field}"))?;
             target.insert(field.clone(), value.clone());
         }
         let merged = serde_json::from_value(current).map_err(|error| error.to_string())?;
@@ -1233,12 +1251,25 @@ impl Database {
             )?;
         }
         write_setting(&conn, "editor.fontSize", &settings.editor_font_size)?;
-        if let Some(width) = settings.auxiliary_dock_width.filter(|width| width.is_finite()) {
-            write_setting(&conn, "layout.auxiliaryDockWidth", &width.clamp(220.0, 880.0))?;
+        if let Some(width) = settings
+            .auxiliary_dock_width
+            .filter(|width| width.is_finite())
+        {
+            write_setting(
+                &conn,
+                "layout.auxiliaryDockWidth",
+                &width.clamp(220.0, 880.0),
+            )?;
         }
         if let Some(widths) = &settings.auxiliary_dock_widths {
-            let widths: BTreeMap<_, _> = widths.iter()
-                .filter(|(kind, width)| matches!(kind.as_str(), "task-monitor" | "file" | "review" | "terminal" | "task") && width.is_finite())
+            let widths: BTreeMap<_, _> = widths
+                .iter()
+                .filter(|(kind, width)| {
+                    matches!(
+                        kind.as_str(),
+                        "task-monitor" | "file" | "review" | "terminal" | "task"
+                    ) && width.is_finite()
+                })
                 .map(|(kind, width)| (kind.clone(), width.clamp(220.0, 880.0)))
                 .collect();
             write_setting(&conn, "layout.auxiliaryDockWidths", &widths)?;
@@ -1252,6 +1283,11 @@ impl Database {
         write_setting(&conn, "terminal.lineHeight", &settings.terminal_line_height)?;
         write_setting(&conn, "terminal.scrollback", &settings.terminal_scrollback)?;
         write_setting(&conn, "terminal.renderer", &settings.terminal_renderer)?;
+        write_setting(
+            &conn,
+            "terminal.defaultShell",
+            &settings.default_terminal_shell,
+        )?;
         write_setting(
             &conn,
             "agents.permissionDefaults",
@@ -1321,7 +1357,11 @@ impl Database {
         )?;
         write_setting(&conn, "voice.polishRegion", &settings.voice_polish_region)?;
         write_setting(&conn, "voice.polishStyle", &settings.voice_polish_style)?;
-        write_setting(&conn, "voice.polishInstructions", &settings.voice_polish_instructions)?;
+        write_setting(
+            &conn,
+            "voice.polishInstructions",
+            &settings.voice_polish_instructions,
+        )?;
         write_setting(&conn, "voice.shortcut", &settings.voice_shortcut)?;
         write_setting(&conn, "keyboard.shortcuts", &settings.keyboard_shortcuts)?;
         write_setting(&conn, "voice.inputTarget", &settings.voice_input_target)?;
@@ -1743,6 +1783,33 @@ mod tests {
         ScheduledTaskSchedule,
     };
 
+    #[test]
+    fn default_terminal_shell_round_trips_and_supports_legacy_settings() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        assert_eq!(
+            database.load_persistent_settings()?.default_terminal_shell,
+            "powershell"
+        );
+        let settings = PersistentSettingsRecord {
+            default_terminal_shell: "cmd".into(),
+            ..PersistentSettingsRecord::default()
+        };
+        database
+            .save_general_persistent_settings_patch(&settings, &["defaultTerminalShell".into()])?;
+        assert_eq!(
+            database.load_persistent_settings()?.default_terminal_shell,
+            "cmd"
+        );
+        let mut legacy = serde_json::to_value(settings).map_err(|error| error.to_string())?;
+        if let Some(object) = legacy.as_object_mut() {
+            object.remove("defaultTerminalShell");
+        }
+        let restored: PersistentSettingsRecord =
+            serde_json::from_value(legacy).map_err(|error| error.to_string())?;
+        assert_eq!(restored.default_terminal_shell, "powershell");
+        Ok(())
+    }
+
     fn scheduled_task_record() -> ScheduledTaskRecord {
         ScheduledTaskRecord {
             id: "scheduled-task-a".to_string(),
@@ -1776,7 +1843,10 @@ mod tests {
         database.record_quick_command_use("E:/A", "build", 200)?;
         database.record_quick_command_use("E:/A", "preview", 150)?;
         database.record_quick_command_use("E:/B", "build", 300)?;
-        assert_eq!(database.record_quick_command_use("E:/A", "build", 100)?, 200);
+        assert_eq!(
+            database.record_quick_command_use("E:/A", "build", 100)?,
+            200
+        );
         // 通用设置保存不能将最近使用记录替换为旧快照。
         database.save_general_persistent_settings(&PersistentSettingsRecord::default())?;
         let usage = database.load_quick_command_usage("E:/A")?;
@@ -1820,7 +1890,9 @@ mod tests {
             ("E:/A", "build", 0),
             ("E:/A", "build", 9_007_199_254_740_992),
         ] {
-            assert!(database.record_quick_command_use(path, id, timestamp).is_err());
+            assert!(database
+                .record_quick_command_use(path, id, timestamp)
+                .is_err());
         }
         assert!(database.load_quick_command_usage("E:/A")?.is_empty());
         Ok(())
@@ -1848,14 +1920,15 @@ mod tests {
         if let Some(object) = legacy.as_object_mut() {
             object.remove("asrLanguage");
         }
-        let restored: PersistentSettingsRecord = serde_json::from_value(legacy)
-            .map_err(|error| error.to_string())?;
+        let restored: PersistentSettingsRecord =
+            serde_json::from_value(legacy).map_err(|error| error.to_string())?;
         assert_eq!(restored.asr_language, "auto");
         Ok(())
     }
 
     #[test]
-    fn auxiliary_dock_content_widths_round_trip_and_preserve_missing_values() -> Result<(), String> {
+    fn auxiliary_dock_content_widths_round_trip_and_preserve_missing_values() -> Result<(), String>
+    {
         use std::collections::BTreeMap;
 
         let database = Database::open_in_memory();
@@ -1874,16 +1947,30 @@ mod tests {
             ("file".into(), 620.0),
             ("review".into(), 880.0),
         ]));
-        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_widths, expected);
+        assert_eq!(
+            database.load_persistent_settings()?.auxiliary_dock_widths,
+            expected
+        );
         settings.auxiliary_dock_widths = None;
         database.save_general_persistent_settings(&settings)?;
-        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_widths, expected);
+        assert_eq!(
+            database.load_persistent_settings()?.auxiliary_dock_widths,
+            expected
+        );
         settings.auxiliary_dock_widths = Some(BTreeMap::new());
-        database.save_general_persistent_settings_patch(&settings, &["auxiliaryDockWidths".into()])?;
-        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_widths, Some(BTreeMap::new()));
+        database
+            .save_general_persistent_settings_patch(&settings, &["auxiliaryDockWidths".into()])?;
+        assert_eq!(
+            database.load_persistent_settings()?.auxiliary_dock_widths,
+            Some(BTreeMap::new())
+        );
         let mut legacy = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
-        legacy.as_object_mut().unwrap().remove("auxiliaryDockWidths");
-        let restored: PersistentSettingsRecord = serde_json::from_value(legacy).map_err(|error| error.to_string())?;
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("auxiliaryDockWidths");
+        let restored: PersistentSettingsRecord =
+            serde_json::from_value(legacy).map_err(|error| error.to_string())?;
         assert_eq!(restored.auxiliary_dock_widths, None);
         Ok(())
     }
@@ -1891,17 +1978,26 @@ mod tests {
     #[test]
     fn auxiliary_dock_width_round_trips_and_preserves_older_settings() -> Result<(), String> {
         let database = Database::open_in_memory();
-        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, None);
+        assert_eq!(
+            database.load_persistent_settings()?.auxiliary_dock_width,
+            None
+        );
         let mut settings = PersistentSettingsRecord {
             auxiliary_dock_width: Some(250.5),
             ..PersistentSettingsRecord::default()
         };
         database.save_general_persistent_settings(&settings)?;
-        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, Some(250.5));
+        assert_eq!(
+            database.load_persistent_settings()?.auxiliary_dock_width,
+            Some(250.5)
+        );
 
         settings.auxiliary_dock_width = None;
         database.save_general_persistent_settings(&settings)?;
-        assert_eq!(database.load_persistent_settings()?.auxiliary_dock_width, Some(250.5));
+        assert_eq!(
+            database.load_persistent_settings()?.auxiliary_dock_width,
+            Some(250.5)
+        );
 
         let mut legacy = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
         if let Some(object) = legacy.as_object_mut() {
@@ -1924,11 +2020,16 @@ mod tests {
         let mut stale_window = initial;
         stale_window.terminal_font_size = 22;
         stale_window.voice_shortcut = "Ctrl+Alt+V".into();
-        let saved = database.save_general_persistent_settings_patch(&stale_window,
-            &["terminalFontSize".into(), "voiceShortcut".into()])?;
+        let saved = database.save_general_persistent_settings_patch(
+            &stale_window,
+            &["terminalFontSize".into(), "voiceShortcut".into()],
+        )?;
         assert_eq!(saved.language, "en");
         assert_eq!(saved.terminal_font_size, 22);
-        assert_eq!(database.load_persistent_settings()?.voice_shortcut, "Ctrl+Alt+V");
+        assert_eq!(
+            database.load_persistent_settings()?.voice_shortcut,
+            "Ctrl+Alt+V"
+        );
         Ok(())
     }
 
@@ -1939,9 +2040,16 @@ mod tests {
         database.save_persistent_settings(&initial)?;
         let mut changed = initial.clone();
         changed.language = "en".into();
-        assert!(database.save_general_persistent_settings_patch(&changed,
-            &["language".into(), "unknownField".into()]).is_err());
-        assert_eq!(database.load_persistent_settings()?.language, initial.language);
+        assert!(database
+            .save_general_persistent_settings_patch(
+                &changed,
+                &["language".into(), "unknownField".into()]
+            )
+            .is_err());
+        assert_eq!(
+            database.load_persistent_settings()?.language,
+            initial.language
+        );
         Ok(())
     }
 
@@ -1949,16 +2057,24 @@ mod tests {
     fn keyboard_shortcuts_round_trip_and_support_older_settings() -> Result<(), String> {
         let database = Database::open_in_memory();
         let mut settings = PersistentSettingsRecord::default();
-        settings.keyboard_shortcuts.insert("newSession".into(), "Ctrl+Alt+N".into());
-        settings.keyboard_shortcuts.insert("closeTab".into(), String::new());
+        settings
+            .keyboard_shortcuts
+            .insert("newSession".into(), "Ctrl+Alt+N".into());
+        settings
+            .keyboard_shortcuts
+            .insert("closeTab".into(), String::new());
         database.save_general_persistent_settings(&settings)?;
-        assert_eq!(database.load_persistent_settings()?.keyboard_shortcuts, settings.keyboard_shortcuts);
+        assert_eq!(
+            database.load_persistent_settings()?.keyboard_shortcuts,
+            settings.keyboard_shortcuts
+        );
 
         let mut legacy = serde_json::to_value(&settings).map_err(|error| error.to_string())?;
         if let Some(object) = legacy.as_object_mut() {
             object.remove("keyboardShortcuts");
         }
-        let restored: PersistentSettingsRecord = serde_json::from_value(legacy).map_err(|error| error.to_string())?;
+        let restored: PersistentSettingsRecord =
+            serde_json::from_value(legacy).map_err(|error| error.to_string())?;
         assert!(restored.keyboard_shortcuts.is_empty());
         Ok(())
     }
@@ -2062,7 +2178,10 @@ mod tests {
     fn git_auto_fetch_settings_are_opt_in_and_round_trip() {
         let mut legacy = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         legacy.as_object_mut().unwrap().remove("gitAutoFetch");
-        legacy.as_object_mut().unwrap().remove("gitAutoFetchIntervalMinutes");
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("gitAutoFetchIntervalMinutes");
         let restored: PersistentSettingsRecord = serde_json::from_value(legacy).unwrap();
         assert!(!restored.git_auto_fetch);
         assert_eq!(restored.git_auto_fetch_interval_minutes, 5);
@@ -2264,7 +2383,8 @@ mod tests {
         settings.voice_polish_auth_mode = "api".into();
         settings.voice_polish_region = "singapore".into();
         settings.voice_polish_style = "structured".into();
-        settings.voice_polish_instructions = "中文使用简体，其他语言保持原样。\n保留 API 名称。".into();
+        settings.voice_polish_instructions =
+            "中文使用简体，其他语言保持原样。\n保留 API 名称。".into();
         database
             .save_general_persistent_settings(&settings)
             .unwrap();
@@ -2276,7 +2396,10 @@ mod tests {
         assert_eq!(restored.voice_polish_auth_mode, "api");
         assert_eq!(restored.voice_polish_region, "singapore");
         assert_eq!(restored.voice_polish_style, "structured");
-        assert_eq!(restored.voice_polish_instructions, settings.voice_polish_instructions);
+        assert_eq!(
+            restored.voice_polish_instructions,
+            settings.voice_polish_instructions
+        );
 
         let mut old_record = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         old_record

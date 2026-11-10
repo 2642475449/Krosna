@@ -2242,6 +2242,20 @@ html, body, #root {
 .app-agent-session-status[data-state="permission"] { color: var(--cs-warning); }
 .app-agent-session-status[data-state="completed"] { color: var(--cs-success); }
 .app-agent-session-status[data-state="error"] { color: var(--cs-error); }
+.app-agent-session-status .ant-badge.ant-badge-status {
+  display: inline-flex;
+  align-items: center;
+}
+.app-agent-session-status .ant-badge.ant-badge-status .ant-badge-status-dot,
+.app-task-monitor-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.app-agent-session-status .ant-badge.ant-badge-status .ant-badge-status-dot {
+  top: 0;
+}
 .app-session-meta:empty { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .app-agent-session-status .anticon-spin,
@@ -2853,7 +2867,7 @@ html, body, #root {
 .app-task-monitor-close { position: absolute; top: 0; right: 0; bottom: 0; display: flex; width: 24px; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: transparent; color: var(--cs-text-tertiary); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 120ms ease, color 120ms ease; }
 .app-task-monitor-close:hover { color: var(--cs-text-primary); background: var(--cs-bg-hover); }
 .app-task-monitor-row:hover .app-task-monitor-close, .app-task-monitor-row:focus-within .app-task-monitor-close { opacity: 1; pointer-events: auto; }
-.app-task-monitor-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--cs-text-tertiary); }
+.app-task-monitor-dot { background: var(--cs-text-tertiary); }
 .app-task-monitor-dot[data-status="starting"], .app-task-monitor-dot[data-status="running"] { background: transparent; border: 1.5px solid var(--cs-text-tertiary); border-top-color: transparent; }
 .app-task-monitor-dot[data-status="running"], .app-task-monitor-dot[data-status="starting"] { animation: app-task-monitor-spin 1s linear infinite; }
 /* 等待输入与空闲状态留白，不作为待处理提醒展示。 */
@@ -3464,3 +3478,15 @@ html, body, #root {
 .app-launcher-command { min-width: 0; flex: 1; padding: 0; border: 0; background: transparent; color: var(--cs-text-secondary); text-align: left; }
 .app-launcher-command code { display: block; font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: inherit; white-space: normal; overflow-wrap: anywhere; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
 @media (max-width: 520px) { .app-launcher-header { flex-wrap: wrap; } .app-launcher-footer { flex-wrap: wrap; } .app-launcher-command { flex-basis: 100%; } }
+
+/* 状态栏额度横向收纳，窄窗口下保留详情入口且不抬高底栏。 */
+.app-statusbar-quotas {
+  scrollbar-width: none;
+}
+.app-statusbar-quotas::-webkit-scrollbar {
+  display: none;
+}
+.app-statusbar-quotas > button:focus-visible {
+  outline: 2px solid var(--cs-primary);
+  outline-offset: -2px;
+}

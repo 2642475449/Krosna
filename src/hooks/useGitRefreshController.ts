@@ -54,7 +54,9 @@ export function useGitRefreshController(
   const activeOperationIdsRef = useRef(new Set<string>());
   const operationSequenceRef = useRef(0);
   const pendingRefreshRef = useRef(false);
-  const isMountedRef = useRef(true);
+  const isMountedRef = useRef(false);
+  const generationRef = useRef(0);
+  const refreshingGenerationRef = useRef<number | null>(null);
   const executeRefreshRef = useRef<() => Promise<void>>(async () => undefined);
   const [isOperating, setIsOperating] = useState(false);
 
@@ -81,10 +83,12 @@ export function useGitRefreshController(
   }, []);
 
   // 执行刷新（带冷却保护）
-  const executeRefresh = useCallback(async () => {
-    // 守卫条件：冷却中、有操作在执行、组件已卸载
+  const executeRefresh = useCallback(async (): Promise<void> => {
+    if (executeRefreshRef.current !== executeRefresh) return;
+    // 同一生命周期内合并刷新；切项目后旧请求不再拥有控制器状态。
     if (
       isCoolingDownRef.current ||
+      refreshingGenerationRef.current !== null ||
       activeOperationIdsRef.current.size > 0 ||
       !isMountedRef.current
     ) {
@@ -93,16 +97,24 @@ export function useGitRefreshController(
     }
 
     pendingRefreshRef.current = false;
+    const generation = generationRef.current;
+    refreshingGenerationRef.current = generation;
     try {
       await onRefresh();
     } catch (error) {
-      console.error("[GitRefreshController] Refresh failed:", error);
+      if (generationRef.current === generation && isMountedRef.current) {
+        console.error("[GitRefreshController] Refresh failed:", error);
+      }
     }
+
+    if (generationRef.current !== generation || !isMountedRef.current) return;
+    refreshingGenerationRef.current = null;
 
     // 开始冷却期
     isCoolingDownRef.current = true;
     clearCooldownTimer();
     cooldownTimerRef.current = window.setTimeout(() => {
+      if (generationRef.current !== generation || !isMountedRef.current) return;
       isCoolingDownRef.current = false;
       cooldownTimerRef.current = null;
       if (
@@ -118,6 +130,7 @@ export function useGitRefreshController(
 
   // 请求刷新（带防抖）
   const requestRefresh = useCallback(() => {
+    if (executeRefreshRef.current !== executeRefresh) return;
     clearDebounceTimer();
     debounceTimerRef.current = window.setTimeout(() => {
       debounceTimerRef.current = null;
@@ -127,6 +140,7 @@ export function useGitRefreshController(
 
   // 立即刷新（跳过防抖，用于手动刷新按钮）
   const refreshNow = useCallback(() => {
+    if (executeRefreshRef.current !== executeRefresh) return;
     clearDebounceTimer();
     void executeRefresh();
   }, [clearDebounceTimer, executeRefresh]);
@@ -153,7 +167,12 @@ export function useGitRefreshController(
 
   // 初始化：挂载时执行一次刷新 + 设置轮询
   useEffect(() => {
+    generationRef.current += 1;
     isMountedRef.current = true;
+    isCoolingDownRef.current = false;
+    refreshingGenerationRef.current = null;
+    pendingRefreshRef.current = false;
+    setIsOperating(false);
 
     // 首次刷新
     void executeRefresh();
@@ -164,7 +183,10 @@ export function useGitRefreshController(
     }, pollingInterval);
 
     return () => {
+      generationRef.current += 1;
       isMountedRef.current = false;
+      isCoolingDownRef.current = false;
+      refreshingGenerationRef.current = null;
       pendingRefreshRef.current = false;
       activeOperationIdsRef.current.clear();
       clearDebounceTimer();

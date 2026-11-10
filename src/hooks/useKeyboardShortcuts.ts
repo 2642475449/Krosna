@@ -59,7 +59,11 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       const isTerminalTarget = isTerminalShortcutTarget(e.target);
 
       // 全局快捷键在 Monaco 编辑器中也生效
-      if (!globalActions.some((action) => matches(e, action)) && shouldIgnoreShortcut(e)) {
+      // 鼠标侧键不会输入文字，语音绑定应在输入框和编辑器上同样生效。
+      const isMouseVoiceShortcut = !("key" in e) &&
+        handlers.enableVoiceShortcut !== false &&
+        !!handlers.voiceShortcut && matchesShortcut(e, handlers.voiceShortcut);
+      if (!isMouseVoiceShortcut && !globalActions.some((action) => matches(e, action)) && shouldIgnoreShortcut(e)) {
         return;
       }
 

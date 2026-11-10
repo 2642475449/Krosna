@@ -129,3 +129,26 @@ it("holds mouse voice input until the matching button or modifier is released", 
   window.dispatchEvent(new Event("blur"));
   expect(onVoiceShortcutRelease).toHaveBeenCalledTimes(3);
 });
+
+it.each(["input", "textarea", "select", "monaco", "contenteditable"])(
+  "starts mouse voice input over %s without filtering it as keyboard text input",
+  (area) => {
+    class EditableTarget {
+      tagName = ["monaco", "contenteditable"].includes(area) ? "DIV" : area.toUpperCase();
+      isContentEditable = area === "contenteditable";
+      closest(selector: string) { return area === "monaco" && selector === ".monaco-editor" ? this : null; }
+    }
+    vi.stubGlobal("HTMLElement", EditableTarget);
+    const onVoiceShortcutPress = vi.fn();
+    const onVoiceShortcutRelease = vi.fn();
+    useKeyboardShortcuts({ voiceShortcut: "MouseBack", onVoiceShortcutPress, onVoiceShortcutRelease });
+    const down = new Event("mousedown", { cancelable: true });
+    Object.assign(down, { button: 3, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false });
+    Object.defineProperty(down, "target", { value: new EditableTarget() });
+    document.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(onVoiceShortcutPress).toHaveBeenCalledTimes(1);
+    mouse("mouseup", 3);
+    expect(onVoiceShortcutRelease).toHaveBeenCalledTimes(1);
+  },
+);

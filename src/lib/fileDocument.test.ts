@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFileDocument, getFileDocument, retainFileDocument } from "./fileDocument";
+import { createFileDocument, getFileDocument, retainFileDocument, getUnsavedFileDocuments } from "./fileDocument";
 import { inspectProjectFile, readProjectFile, writeProjectFile } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -27,6 +27,46 @@ beforeEach(() => {
 });
 
 describe("shared file documents", () => {
+  it("sends the exact disk baseline to the backend even when the preview strips ANSI", async () => {
+    disk = "\u001b[31moriginal\u001b[0m";
+    const document = createFileDocument(project, path);
+    await document.load();
+    document.setContent("local edit");
+    expect(await document.save()).toBe(true);
+    expect(writeProjectFile).toHaveBeenCalledWith(project, path, "local edit", "utf-8",
+      { content: "\u001b[31moriginal\u001b[0m", encoding: "utf-8" });
+  });
+
+  it("keeps local edits and marks a conflict when the backend rejects a stale write", async () => {
+    const document = createFileDocument(project, path);
+    await document.load();
+    document.setContent("local edit");
+    vi.mocked(writeProjectFile).mockRejectedValueOnce("file-write-conflict");
+    expect(await document.save()).toBe(false);
+    expect(document.store.getState()).toMatchObject({ content: "local edit", savedContent: "original", conflict: true, error: null });
+    expect(disk).toBe("original");
+  });
+
+  it("checks the current disk baseline even for an explicit overwrite", async () => {
+    const document = createFileDocument(project, path);
+    await document.load();
+    document.setContent("local edit");
+    disk = "external edit";
+    mtime++;
+    expect(await document.save(true)).toBe(true);
+    expect(writeProjectFile).toHaveBeenCalledWith(project, path, "local edit", "utf-8",
+      { content: "external edit", encoding: "utf-8" });
+  });
+
+  it("includes auxiliary and unmounted dirty documents in the close registry", async () => {
+    const document = getFileDocument(project, "D:/repo/close-registry.md");
+    await document.load();
+    document.setContent("unmounted draft");
+    expect(getUnsavedFileDocuments()).toContainEqual({ projectPath: project, path: "D:/repo/close-registry.md", document });
+    await document.save();
+    expect(getUnsavedFileDocuments().some((item) => item.document === document)).toBe(false);
+  });
+
   it("shares unsaved edits across Windows path spellings and deduplicates loads", async () => {
     const first = getFileDocument(project, path);
     const second = getFileDocument("d:\\REPO\\", "d:\\repo\\REPORT.md");

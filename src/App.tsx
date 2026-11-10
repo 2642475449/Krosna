@@ -23,6 +23,7 @@ import { persistentSettingsRevision } from "./lib/persistentSettingsSync";
 import { persistentSettingsSync, getRuntimePersistentSettingsSnapshot as getPersistentSettingsSnapshot } from "./store/slices/persistentSettingsRuntime";
 import { useShortcutStore } from "./store/slices/shortcutSlice";
 import { useAuxiliaryDockStore } from "./store/auxiliaryDock";
+import { startPersistentSettingsUpdates } from "./store/slices/persistentSettingsUpdates";
 import { normalizeShortcutOverrides } from "./lib/appShortcuts";
 import {
   initializePersistentSettings,
@@ -85,6 +86,7 @@ function isPersistentExplorerContextMenuUpdate(
 
 function App() {
   const keyboardShortcuts = useShortcutStore((s) => s.overrides);
+  const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
   const auxiliaryDockWidths = useAuxiliaryDockStore((s) => s.widths);
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
@@ -187,6 +189,7 @@ function App() {
       terminalLineHeight,
       terminalScrollback,
       terminalRenderer,
+      defaultTerminalShell,
       terminalQuickCommands,
       defaultAgentId,
       gitAutoFetch,
@@ -260,6 +263,7 @@ function App() {
       terminalLineHeight,
       terminalScrollback,
       terminalRenderer,
+      defaultTerminalShell,
       terminalQuickCommands,
       defaultAgentId,
       gitAutoFetch,
@@ -534,6 +538,11 @@ function App() {
       unlisten?.();
     };
   }, [persistentSettingsReady]);
+
+  useEffect(() => {
+    if (isVoiceOverlayWindow || !persistentSettingsReady) return;
+    return startPersistentSettingsUpdates();
+  }, [isVoiceOverlayWindow, persistentSettingsReady]);
 
   useEffect(() => {
     if (!persistentSettingsReady) return;

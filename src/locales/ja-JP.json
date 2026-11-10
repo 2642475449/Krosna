@@ -102,7 +102,18 @@
     "remember": "選択を記憶する",
     "actionFailed": "操作を完了できません：{{error}}",
     "trayShow": "ウィンドウを表示",
-    "trayQuit": "Krosna を終了"
+    "trayQuit": "Krosna を終了",
+    "unsavedTitle": "未保存のファイルがあります",
+    "unsavedDescription": "保存に失敗したか、ディスク上の変更と競合するファイルがあります。このウィンドウは閉じません。問題を解決して保存を再試行するか、変更を明示的に破棄してください。",
+    "saveAndClose": "保存して閉じる",
+    "discardAndClose": "変更を破棄して閉じる",
+    "saveDocuments": "保存を再試行",
+    "discardChanges": "変更を破棄",
+    "preparingExit": "終了を準備中",
+    "preparingClose": "ファイルを保存中",
+    "preparingCloseDescription": "このウィンドウのファイルの保存が完了するまでお待ちください。",
+    "preparingExitDescription": "すべての作業ウィンドウでファイルの保存が完了するまでお待ちください。",
+    "exitSaveFailed": "未保存のファイルがあるか、保存状態を確認できないウィンドウがあるため終了を中止しました。該当ウィンドウのファイルを処理してから再試行してください。"
   },
   "taskMonitor": {
     "title": "タスク監視",

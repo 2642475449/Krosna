@@ -43,6 +43,31 @@ pub struct PersistentExplorerContextMenuUpdate {
     pub explorer_context_menu_enabled: bool,
 }
 
+#[derive(Clone, serde::Serialize)]
+struct PersistentSettingsUpdate {
+    revision: u64,
+    settings: serde_json::Map<String, serde_json::Value>,
+}
+
+fn general_settings_patch(
+    settings: &PersistentSettingsRecord,
+    fields: Option<&[String]>,
+) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let value = serde_json::to_value(settings).map_err(|error| error.to_string())?;
+    let mut patch = value
+        .as_object()
+        .cloned()
+        .ok_or("Invalid persistent settings")?;
+    // 这些字段由独立命令维护，不能广播通用保存请求中未真正落库的快照。
+    patch.retain(|field, _| {
+        !matches!(
+            field.as_str(),
+            "lastProjectPath" | "explorerContextMenuEnabled" | "terminalQuickCommands"
+        ) && fields.map_or(true, |fields| fields.contains(field))
+    });
+    Ok(patch)
+}
+
 #[tauri::command]
 pub fn initialize_persistent_settings(
     database: State<'_, Arc<Database>>,
@@ -72,13 +97,21 @@ pub fn save_persistent_settings(
 ) -> Result<u64, String> {
     // 保存、修订号和广播在同一把锁内，避免跨窗口命令交错后发出旧快照。
     let mut revision = SETTINGS_REVISION.lock();
-    let settings = if let Some(fields) = changed_fields {
-        database.save_general_persistent_settings_patch(&settings, &fields)?
+    if let Some(fields) = changed_fields.as_ref() {
+        database.save_general_persistent_settings_patch(&settings, fields)?;
     } else {
         database.save_general_persistent_settings(&settings)?;
-        settings
-    };
+    }
+    // 使用数据库实际保存后的值，不能让发送方的过期字段污染其他窗口。
+    let settings = database.load_persistent_settings()?;
     *revision = revision.saturating_add(1);
+    let _ = app.emit(
+        "persistent-settings-updated",
+        PersistentSettingsUpdate {
+            revision: *revision,
+            settings: general_settings_patch(&settings, changed_fields.as_deref())?,
+        },
+    );
     if let Err(error) = crate::commands::background::update_tray_language(&app, &settings.language)
     {
         log::warn!("Failed to update tray language: {error}");
@@ -150,4 +183,43 @@ pub fn set_explorer_context_menu_enabled(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::general_settings_patch;
+    use crate::database::PersistentSettingsRecord;
+
+    #[test]
+    fn global_update_contains_only_saved_requested_fields() -> Result<(), String> {
+        let settings = PersistentSettingsRecord {
+            language: "en".into(),
+            notification_enabled: false,
+            default_terminal_shell: "cmd".into(),
+            ..PersistentSettingsRecord::default()
+        };
+        let fields = vec![
+            "language".into(),
+            "notificationEnabled".into(),
+            "defaultTerminalShell".into(),
+            "lastProjectPath".into(),
+            "terminalQuickCommands".into(),
+        ];
+        let patch = general_settings_patch(&settings, Some(&fields))?;
+        assert_eq!(patch.len(), 3);
+        assert_eq!(
+            patch.get("notificationEnabled"),
+            Some(&serde_json::json!(false))
+        );
+        assert_eq!(
+            patch.get("defaultTerminalShell"),
+            Some(&serde_json::json!("cmd"))
+        );
+        assert!(!patch.contains_key("lightTheme"));
+        let full = general_settings_patch(&settings, None)?;
+        assert!(!full.contains_key("lastProjectPath"));
+        assert!(!full.contains_key("explorerContextMenuEnabled"));
+        assert!(!full.contains_key("terminalQuickCommands"));
+        Ok(())
+    }
 }

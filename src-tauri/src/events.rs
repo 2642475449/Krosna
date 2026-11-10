@@ -5,6 +5,8 @@ use tauri::{AppHandle, Emitter};
 pub const SCHEDULED_TASKS_CHANGED_EVENT: &str = "krosna:scheduled-tasks-changed";
 pub const WORKSPACE_CLOSE_REQUESTED_EVENT: &str = "krosna:workspace-close-requested";
 pub const BACKGROUND_SETTINGS_CHANGED_EVENT: &str = "krosna:background-settings-changed";
+pub const WORKSPACE_EXIT_PREPARE_EVENT: &str = "krosna:workspace-exit-prepare";
+pub const WORKSPACE_EXIT_CANCELLED_EVENT: &str = "krosna:workspace-exit-cancelled";
 pub const PROJECT_ICON_PREFERENCE_UPDATED_EVENT: &str = "project-icon-preference-updated";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

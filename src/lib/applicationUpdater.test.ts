@@ -82,6 +82,62 @@ test("clears a failed installation marker", () => {
   expect(consumeInstalledUpdateVersion(storage, "1.8.23")).toBeNull();
 });
 
+test("keeps repeated automatic check failures silent and allows a later check", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    vi.mocked(checkApplicationUpdate).mockRejectedValue(new Error("Network unavailable"));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(checkForApplicationUpdate()).resolves.toMatchObject({
+        status: "error",
+        error: "Network unavailable",
+      });
+      expect(useApplicationUpdateStore.getState()).toMatchObject({
+        phase: "idle", error: null, errorStage: null, modalOpen: false,
+      });
+    }
+    vi.mocked(checkApplicationUpdate).mockResolvedValue(null);
+    await expect(checkForApplicationUpdate()).resolves.toMatchObject({ status: "up-to-date" });
+    expect(checkApplicationUpdate).toHaveBeenCalledTimes(3);
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("shows errors when the user manually checks for updates", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    vi.mocked(checkApplicationUpdate).mockRejectedValue(new Error("Network unavailable"));
+    await expect(checkForApplicationUpdate({ manual: true })).resolves.toMatchObject({ status: "error" });
+    expect(useApplicationUpdateStore.getState()).toMatchObject({
+      phase: "error", error: "Network unavailable", errorStage: "check", modalOpen: true,
+    });
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("shows errors when a manual check joins a pending automatic check", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    let rejectCheck!: (error: Error) => void;
+    vi.mocked(checkApplicationUpdate).mockImplementation(() => new Promise((_, reject) => {
+      rejectCheck = reject;
+    }));
+    const automatic = checkForApplicationUpdate();
+    await vi.waitFor(() => expect(checkApplicationUpdate).toHaveBeenCalledTimes(1));
+    const manual = checkForApplicationUpdate({ manual: true });
+    rejectCheck(new Error("Network unavailable"));
+    const results = await Promise.all([automatic, manual]);
+    expect(results.map((result) => result.status)).toEqual(["error", "error"]);
+    expect(checkApplicationUpdate).toHaveBeenCalledTimes(1);
+    expect(useApplicationUpdateStore.getState()).toMatchObject({
+      phase: "error", error: "Network unavailable", errorStage: "check", modalOpen: true,
+    });
+  } finally {
+    log.mockRestore();
+  }
+});
+
 test("keeps one update resource while downloading and exposes byte progress", async () => {
   const update = {
     currentVersion: "1.8.22",

@@ -102,7 +102,18 @@
     "remember": "Remember my choice",
     "actionFailed": "Unable to complete the action: {{error}}",
     "trayShow": "Show windows",
-    "trayQuit": "Quit Krosna"
+    "trayQuit": "Quit Krosna",
+    "unsavedTitle": "Some files are still unsaved",
+    "unsavedDescription": "Some files could not be saved or conflict with disk changes. This window will stay open. Resolve the problem and retry saving, or explicitly discard your changes.",
+    "saveAndClose": "Save and close",
+    "discardAndClose": "Discard and close",
+    "saveDocuments": "Retry saving",
+    "discardChanges": "Discard changes",
+    "preparingExit": "Preparing to quit",
+    "preparingClose": "Saving files",
+    "preparingCloseDescription": "Waiting for this workspace to finish saving its files.",
+    "preparingExitDescription": "Waiting for every workspace to save its files.",
+    "exitSaveFailed": "Quitting was cancelled because a workspace has unsaved files or could not confirm its save state. Resolve the unsaved files in that window and try again."
   },
   "taskMonitor": {
     "title": "Task Monitor",

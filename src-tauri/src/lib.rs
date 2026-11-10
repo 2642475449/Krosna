@@ -1,6 +1,6 @@
 mod agent_paths;
-mod brand_migration;
 mod antigravity_usage;
+mod brand_migration;
 mod claude_rate_limits;
 mod claude_usage;
 mod codex_rate_limits;
@@ -17,12 +17,12 @@ mod pty;
 mod qoder_config;
 mod qoder_usage;
 mod remote_ssh;
-mod ssh_config;
 pub mod runtime_cli;
 mod runtime_context;
 mod runtime_output;
 mod runtime_skill;
 mod scheduled_tasks;
+mod ssh_config;
 mod usage_cache;
 mod usage_process;
 mod usage_quota;
@@ -120,6 +120,7 @@ pub fn run() {
         .manage(window_registry.clone())
         .manage(voice_overlay_state.clone())
         .manage(voice_shortcut_state.clone())
+        .manage(commands::background::WorkspaceExitState::default())
         .manage(live_asr_sessions)
         .manage(ContentSearchState::default())
         .manage(SearchIndexState::default())
@@ -173,7 +174,10 @@ pub fn run() {
                         &voice_shortcut_state,
                     );
                     manager.cleanup_all();
-                    window.app_handle().state::<Arc<remote_ssh::RemoteSshManager>>().disconnect_all();
+                    window
+                        .app_handle()
+                        .state::<Arc<remote_ssh::RemoteSshManager>>()
+                        .disconnect_all();
                     window.app_handle().exit(0);
                 }
             }
@@ -251,6 +255,7 @@ pub fn run() {
             commands::background::set_background_settings,
             commands::background::complete_workspace_close,
             commands::background::exit_background_application,
+            commands::background::acknowledge_workspace_exit,
             commands::quick_commands::load_quick_commands,
             commands::quick_commands::load_quick_command_usage,
             commands::quick_commands::record_quick_command_use,
