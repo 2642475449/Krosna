@@ -352,7 +352,7 @@ html, body, #root {
   margin-top: 0;
   border: 0;
   border-right: 1px solid color-mix(in srgb, var(--cs-border-card) 65%, transparent);
-  border-radius: 7px 7px 0 0;
+  border-radius: 0;
   background: transparent;
   color: var(--cs-text-secondary);
   transition: background-color 140ms ease, color 140ms ease;
