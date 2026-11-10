@@ -7,6 +7,7 @@ import { presentationRenderer } from "@file-viewer/renderer-presentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openInAssociatedApplication, readProjectOfficePreview } from "@/lib/api";
+import { useAppStore } from "@/store";
 
 interface OfficeFilePreviewProps {
   projectPath: string;
@@ -23,6 +24,8 @@ const OFFICE_RENDERERS = [
 
 export default function OfficeFilePreview({ projectPath, path }: OfficeFilePreviewProps) {
   const { i18n, t } = useTranslation();
+  // 使用应用解析后的主题，避免系统深色偏好覆盖用户选择的浅色主题。
+  const previewTheme = useAppStore((state) => state.activeTheme().startsWith("dark-") ? "dark" : "light");
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +119,7 @@ export default function OfficeFilePreview({ projectPath, path }: OfficeFilePrevi
           filename={fileName}
           options={{
             locale: i18n.resolvedLanguage ?? "auto",
-            theme: "system",
+            theme: previewTheme,
             rendererMode: "replace",
             renderers: OFFICE_RENDERERS,
             toolbar: false,
