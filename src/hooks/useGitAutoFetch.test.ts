@@ -24,7 +24,7 @@ beforeEach(() => {
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
-it("does not fetch until opted in and honors the selected interval", async () => {
+it("respects disabling auto-fetch and honors the selected interval when enabled", async () => {
   await act(async () => root.render(createElement(Probe)));
   expect(gitFetch).not.toHaveBeenCalled();
   await act(async () => useAppStore.getState().setGitAutoFetch(true, 3));

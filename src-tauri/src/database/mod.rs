@@ -134,6 +134,10 @@ fn default_remote_notifications() -> serde_json::Value {
     serde_json::Value::Object(Default::default())
 }
 
+fn default_git_auto_fetch() -> bool {
+    true
+}
+
 fn default_git_auto_fetch_interval_minutes() -> u32 {
     5
 }
@@ -294,7 +298,7 @@ pub struct PersistentSettingsRecord {
     pub default_agent_id: Option<String>,
     #[serde(default = "default_git_commit_message_profiles")]
     pub git_commit_message_profiles: serde_json::Value,
-    #[serde(default)]
+    #[serde(default = "default_git_auto_fetch")]
     pub git_auto_fetch: bool,
     #[serde(default = "default_git_auto_fetch_interval_minutes")]
     pub git_auto_fetch_interval_minutes: u32,
@@ -357,7 +361,7 @@ impl Default for PersistentSettingsRecord {
             voice_trigger_visible: true,
             terminal_quick_commands: serde_json::Value::Array(vec![]),
             default_agent_id: None,
-            git_auto_fetch: false,
+            git_auto_fetch: default_git_auto_fetch(),
             git_auto_fetch_interval_minutes: default_git_auto_fetch_interval_minutes(),
             git_commit_message_profiles: default_git_commit_message_profiles(),
             default_git_commit_message_profile_id: default_git_commit_message_profile_id(),
@@ -1046,7 +1050,8 @@ impl Database {
             .unwrap_or(settings.terminal_quick_commands);
         settings.default_agent_id =
             read_setting(&conn, "agents.defaultAgentId")?.unwrap_or(settings.default_agent_id);
-        settings.git_auto_fetch = read_setting(&conn, "git.autoFetch")?.unwrap_or(false);
+        settings.git_auto_fetch =
+            read_setting(&conn, "git.autoFetch")?.unwrap_or(settings.git_auto_fetch);
         settings.git_auto_fetch_interval_minutes =
             read_setting::<u32>(&conn, "git.autoFetchIntervalMinutes")?
                 .unwrap_or(5)
@@ -2175,7 +2180,8 @@ mod tests {
     }
 
     #[test]
-    fn git_auto_fetch_settings_are_opt_in_and_round_trip() {
+    fn git_auto_fetch_settings_default_to_enabled_and_preserve_opt_out() {
+        assert!(PersistentSettingsRecord::default().git_auto_fetch);
         let mut legacy = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
         legacy.as_object_mut().unwrap().remove("gitAutoFetch");
         legacy
@@ -2183,15 +2189,19 @@ mod tests {
             .unwrap()
             .remove("gitAutoFetchIntervalMinutes");
         let restored: PersistentSettingsRecord = serde_json::from_value(legacy).unwrap();
-        assert!(!restored.git_auto_fetch);
+        assert!(restored.git_auto_fetch);
         assert_eq!(restored.git_auto_fetch_interval_minutes, 5);
         let database = Database::open_in_memory();
+        assert!(database.load_persistent_settings().unwrap().git_auto_fetch);
         let mut settings = PersistentSettingsRecord::default();
-        settings.git_auto_fetch = true;
+        settings.git_auto_fetch = false;
         settings.git_auto_fetch_interval_minutes = 20;
+        let restored: PersistentSettingsRecord =
+            serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert!(!restored.git_auto_fetch);
         database.save_persistent_settings(&settings).unwrap();
         let restored = database.load_persistent_settings().unwrap();
-        assert!(restored.git_auto_fetch);
+        assert!(!restored.git_auto_fetch);
         assert_eq!(restored.git_auto_fetch_interval_minutes, 20);
     }
 

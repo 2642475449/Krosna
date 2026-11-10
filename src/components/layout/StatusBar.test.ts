@@ -73,7 +73,7 @@ test("all Antigravity model groups and all returned periods appear in the status
   expect(markup).toContain("monthly");
   const visibleText = markup.replace(/<[^>]*>/g, "");
   expect(visibleText).not.toMatch(/Gemini|Claude|GPT|Argon|claudeGpt|argon/);
-  expect(visibleText).toContain("4 hours");
+  expect(visibleText).not.toMatch(/4 hours|monthly|sessionShort|weeklyShort/);
   expect(visibleText).toContain("96");
   expect(visibleText).toContain("42");
 });

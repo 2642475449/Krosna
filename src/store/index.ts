@@ -322,7 +322,7 @@ export function applyPersistentSettingsToStore(settings: PersistentSettings) {
     defaultTerminalShell: settings.defaultTerminalShell === "cmd" ? "cmd" : "powershell",
     terminalQuickCommands: normalizeQuickCommands(settings.terminalQuickCommands),
     defaultAgentId: normalizeDefaultAgentId(settings.defaultAgentId),
-    gitAutoFetch: settings.gitAutoFetch ?? false,
+    gitAutoFetch: settings.gitAutoFetch ?? true,
     gitAutoFetchIntervalMinutes: Math.min(60, Math.max(1, Math.round(settings.gitAutoFetchIntervalMinutes || 5))),
     gitCommitMessageProfiles,
     defaultGitCommitMessageProfileId: normalizeDefaultGitCommitMessageProfileId(
@@ -763,7 +763,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       defaultTerminalShell: "powershell",
       terminalQuickCommands: [],
       defaultAgentId: null,
-      gitAutoFetch: false,
+      gitAutoFetch: true,
       gitAutoFetchIntervalMinutes: 5,
       gitCommitMessageProfiles: createDefaultGitCommitMessageProfiles(),
       defaultGitCommitMessageProfileId: DEFAULT_GIT_COMMIT_MESSAGE_PROFILE_ID,

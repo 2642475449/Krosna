@@ -1589,7 +1589,7 @@ it("persistent settings normalize network proxy values", () => {
 });
 
 describe("git automatic fetch settings", () => {
-  it("persists opt-in and interval and defaults old settings to disabled", () => {
+  it("defaults old settings to enabled and preserves an explicit opt-out and interval", () => {
     const original = getPersistentSettingsSnapshot();
     try {
       useAppStore.getState().setGitAutoFetch(true, 20);
@@ -1598,10 +1598,16 @@ describe("git automatic fetch settings", () => {
       expect(saved.gitAutoFetchIntervalMinutes).toBe(20);
       applyPersistentSettingsToStore(saved);
       expect(useAppStore.getState().gitAutoFetchIntervalMinutes).toBe(20);
+      useAppStore.getState().setGitAutoFetch(false);
+      const disabled = getPersistentSettingsSnapshot();
+      expect(disabled.gitAutoFetch).toBe(false);
+      applyPersistentSettingsToStore(disabled);
+      expect(useAppStore.getState().gitAutoFetch).toBe(false);
+      expect(useAppStore.getState().gitAutoFetchIntervalMinutes).toBe(20);
       const legacy = { ...saved } as Partial<typeof saved>;
       delete legacy.gitAutoFetch; delete legacy.gitAutoFetchIntervalMinutes;
       applyPersistentSettingsToStore(legacy as typeof saved);
-      expect(useAppStore.getState().gitAutoFetch).toBe(false);
+      expect(useAppStore.getState().gitAutoFetch).toBe(true);
       expect(useAppStore.getState().gitAutoFetchIntervalMinutes).toBe(5);
     } finally { applyPersistentSettingsToStore(original); }
   });

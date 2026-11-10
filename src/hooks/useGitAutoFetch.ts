@@ -3,7 +3,7 @@ import { useAppStore } from "@/store";
 import { useGitRemoteStore } from "@/store/slices/gitRemote";
 import { gitRepoInfo } from "@/lib/api";
 
-/** Remote polling has its own opt-in schedule; local refresh never starts it. */
+/** Remote polling has its own configurable schedule; local refresh never starts it. */
 export function useGitAutoFetch(path: string | null) {
   const enabled = useAppStore((s) => s.gitAutoFetch);
   const minutes = useAppStore((s) => s.gitAutoFetchIntervalMinutes);

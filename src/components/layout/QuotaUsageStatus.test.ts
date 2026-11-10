@@ -114,7 +114,7 @@ test("OpenCode popover opens with Go windows and Zen explanation, and refresh re
 
 test.each([
   ["free", 15, "15 minutes"], ["plus", 300, "5 hours"], ["pro", 43200, "30 days"],
-])("compact %s quota shows its duration and keeps plan and model metadata in descriptions", (planType, minutes, period) => {
+])("compact %s quota keeps duration, plan and model metadata in descriptions only", (planType, minutes, period) => {
   const limits: CodexRateLimits = {
     session: null, weekly: null, quotaWindows: [{ ...window(minutes, 20), bucketName: "GPT model" }],
     planType, status: "ok", error: null, updatedAt: Date.now(), accountId: null, accountLabel: null,
@@ -123,6 +123,7 @@ test.each([
   expect(markup).toContain(planType[0].toUpperCase() + planType.slice(1));
   expect(markup).toContain(`GPT model · ${period}`);
   const visibleText = markup.replace(/<[^>]*>/g, "");
-  expect(visibleText).toContain(period);
+  expect(visibleText).not.toContain(period);
+  expect(visibleText).toBe("80");
   expect(visibleText).not.toMatch(/Codex|GPT model|Free|Plus|Pro/);
 });

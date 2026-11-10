@@ -15,9 +15,9 @@ test.each([
   expect(markup).toContain(tone);
 });
 
-test("shows only the period while retaining the model name in hover and accessible descriptions", () => {
+test("shows only the value while retaining the model and period in hover and accessible descriptions", () => {
   const markup = renderToStaticMarkup(createElement(QuotaUsageRing, { label: "5h", descriptionLabel: "Gemini · 5h", remaining: 96 }));
-  expect(markup.replace(/<[^>]*>/g, "")).toBe("5h96");
+  expect(markup.replace(/<[^>]*>/g, "")).toBe("96");
   expect(markup).toContain('title="Gemini · 5h · 96% remaining"');
   expect(markup).toContain('aria-label="Gemini · 5h · 96% remaining"');
 });
