@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { listenPtyEvent } from "@/lib/api/ptyEvents";
 import i18n from "@/i18n";
 import { closePty, ptyInput, spawnPty } from "@/lib/api";
 import { useAppStore } from "@/store";
@@ -44,7 +44,7 @@ export function completeRunner(sessionId: string, code: number | null, exited = 
 }
 
 function ensureExitListener() {
-  exitListener ??= listen<{ session_id: string; code: number | null }>("pty-exit", ({ payload }) => {
+  exitListener ??= listenPtyEvent("pty-exit", ({ payload }) => {
     completeRunner(payload.session_id, payload.code, true);
   }).catch((error: unknown) => { exitListener = undefined; throw error; });
   return exitListener;

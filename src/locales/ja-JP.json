@@ -3256,6 +3256,7 @@
     "cancelReconnect": "再接続をキャンセル"
   },
   "filePreview": {
+    "tooLargeGitDiff": "差分のファイルがプレビュー上限の {{limit}} MiB（各バージョン）を超えています。外部の Git ツールで確認してください。",
     "tooLargeText": "テキストファイルがプレビュー上限の {{limit}} MiB を超えています。外部アプリで開いてください。",
     "tooLargeImage": "画像がプレビュー上限の {{limit}} MiB を超えています。外部アプリで開いてください。"
   },

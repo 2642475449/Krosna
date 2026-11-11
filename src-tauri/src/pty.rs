@@ -15,23 +15,15 @@ use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
-#[derive(Serialize, Clone)]
-pub struct PtyOutputPayload {
-    pub session_id: String,
-    pub data: String,
-}
-
-#[derive(Serialize, Clone)]
-pub struct PtyExitPayload {
-    pub session_id: String,
-    pub code: Option<i32>,
-}
+mod output_flow;
+mod output_transport;
+use output_flow::{OutputHub, PtyExitPayload};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -376,6 +368,7 @@ fn forward_pty_output(receiver: Receiver<String>, mut emit: impl FnMut(String) -
 
 struct PtySession {
     instance_id: u64,
+    output_cancelled: Arc<AtomicBool>,
     project_path: String,
     agent_id: String,
     input: PtyInput,
@@ -397,6 +390,7 @@ fn windows_taskkill_tree_args(pid: u32) -> [String; 4] {
 
 impl Drop for PtySession {
     fn drop(&mut self) {
+        self.output_cancelled.store(true, Ordering::Release);
         self.input.cancel();
         if self.exit_code.is_some() {
             return;
@@ -420,6 +414,7 @@ impl Drop for PtySession {
 
 pub struct PtyManager {
     sessions: Mutex<HashMap<String, PtySession>>,
+    pub output: OutputHub,
     next_instance_id: AtomicU64,
     active_turns: Mutex<HashMap<String, ActiveAgentTurn>>,
     ingest_config: Arc<HookIngestConfig>,
@@ -443,6 +438,7 @@ impl PtyManager {
     pub fn new(ingest_config: Arc<HookIngestConfig>) -> Arc<Self> {
         Arc::new(Self {
             sessions: Mutex::new(HashMap::new()),
+            output: OutputHub::default(),
             next_instance_id: AtomicU64::new(1),
             active_turns: Mutex::new(HashMap::new()),
             ingest_config,
@@ -588,8 +584,10 @@ impl PtyManager {
             child_pid,
             runtime_metadata,
         );
+        let output_cancelled = Arc::new(AtomicBool::new(false));
         let session = PtySession {
             instance_id,
+            output_cancelled: output_cancelled.clone(),
             project_path: path.clone(),
             agent_id,
             input,
@@ -650,16 +648,8 @@ impl PtyManager {
                     return false;
                 }
                 output_log.lock().append(&data);
-                if let Err(error) = app_clone.emit(
-                    "pty-output",
-                    PtyOutputPayload {
-                        session_id: sid.clone(),
-                        data,
-                    },
-                ) {
-                    log::warn!("Failed to emit PTY output for {sid}: {error}");
-                }
-                true
+                manager.output.send_output(&app_clone, &sid, &data, &output_cancelled);
+                !output_cancelled.load(Ordering::Acquire)
             });
             let Some(mut exited_session) = manager.take_session_instance(&sid, instance_id) else {
                 return;
@@ -693,8 +683,8 @@ impl PtyManager {
                     metadata: serde_json::json!({}),
                 },
             );
-            let _ = app_clone.emit(
-                "pty-exit",
+            manager.output.send_exit(
+                &app_clone,
                 PtyExitPayload {
                     session_id: sid,
                     code,
@@ -1447,6 +1437,7 @@ mod tests {
     fn input_test_session(instance_id: u64, input: PtyInput) -> PtySession {
         PtySession {
             instance_id,
+            output_cancelled: Arc::new(AtomicBool::new(false)),
             project_path: "synthetic-input-test".into(),
             agent_id: "test".into(),
             input,
@@ -1674,6 +1665,7 @@ mod tests {
             "size-test".to_string(),
             PtySession {
                 instance_id: 7,
+                output_cancelled: Arc::new(AtomicBool::new(false)),
                 project_path: String::new(),
                 agent_id: "test".to_string(),
                 input: PtyInput::new(writer).unwrap(),
@@ -1725,6 +1717,7 @@ mod tests {
             "exit-test".to_string(),
             PtySession {
                 instance_id: 1,
+                output_cancelled: Arc::new(AtomicBool::new(false)),
                 project_path: String::new(),
                 agent_id: "cmd".to_string(),
                 input: PtyInput::new(writer).unwrap(),

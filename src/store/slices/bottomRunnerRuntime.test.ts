@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => ({ spawnPty: mocks.spawn, closePty: mocks.close, ptyInput: mocks.input,
   recordQuickCommandUse: vi.fn(async (_path: string, _id: string, timestamp: number) => timestamp),
 }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async (_: string, callback: typeof mocks.exit) => {
   mocks.exit = callback;
   return () => {};

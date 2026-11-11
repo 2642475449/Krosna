@@ -255,13 +255,7 @@ fn read_tree_blob(
             ))
         }
     };
-    let blob = repo.find_blob(entry.id()).map_err(|error| {
-        format!(
-            "Reading committed file content {} failed: {}",
-            file_path, error
-        )
-    })?;
-    Ok(blob.content().to_vec())
+    super::preview::read_blob(repo, entry.id())
 }
 
 #[tauri::command]
@@ -437,6 +431,20 @@ mod tests {
             None => repo
                 .commit(Some("HEAD"), signature, signature, message, &tree, &[])
                 .unwrap(),
+        }
+    }
+
+    #[test]
+    fn history_preview_rejects_oversized_current_and_parent_blobs() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = Repository::init(root.path()).unwrap();
+        let signature = Signature::now("Test", "test@example.com").unwrap();
+        let large = "x".repeat(super::super::preview::MAX_GIT_PREVIEW_BYTES + 1);
+        let first = commit_file(&repo, &signature, "large.txt", &large, "large");
+        let second = commit_file(&repo, &signature, "large.txt", "small", "small");
+        for oid in [first, second] {
+            let result = git_graph_file_diff_sync(root.path().to_string_lossy().into_owned(), oid.to_string(), "large.txt".into(), None);
+            assert_eq!(result.unwrap_err(), "FILE_PREVIEW_TOO_LARGE:git:8");
         }
     }
 

@@ -8,6 +8,7 @@ pub mod diff;
 pub mod error;
 pub mod graph;
 pub mod ignore;
+mod preview;
 pub mod remote;
 pub mod status;
 pub mod types;

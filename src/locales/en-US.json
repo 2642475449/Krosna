@@ -3256,6 +3256,7 @@
     "cancelReconnect": "Cancel reconnect"
   },
   "filePreview": {
+    "tooLargeGitDiff": "A version of this file exceeds the {{limit}} MiB diff preview limit. View it in an external Git tool.",
     "tooLargeText": "This text file exceeds the {{limit}} MiB preview limit. Open it in an external application.",
     "tooLargeImage": "This image exceeds the {{limit}} MiB preview limit. Open it in an external application."
   },

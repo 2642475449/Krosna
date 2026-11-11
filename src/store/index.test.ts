@@ -1360,6 +1360,42 @@ describe("git diff tab previews", () => {
     isBinary: false,
   });
 
+  it("releases replaced preview bodies and every document after closing all tabs", () => {
+    const store = createAppStore();
+    const projectPath = "D:/workspace/memory-test";
+    store.setState({ currentProject: { path: projectPath, name: "memory-test" },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() } });
+    const pinned = store.getState().openGitDiffTab(createDiff("pinned.ts"));
+    for (let index = 0; index < 100; index++) {
+      const id = store.getState().openGitDiffTab({ ...createDiff(`file-${index}.ts`),
+        originalContent: `before ${index}`, modifiedContent: `after ${index}`,
+        originalImage: `data:image/png;base64,${index}`,
+      }, { preview: true });
+      expect(Object.keys(store.getState().gitDiffDocuments).sort()).toEqual([pinned!, id!].sort());
+    }
+    for (const id of store.getState().openTabs) store.getState().closeTab(id);
+    expect(store.getState().openTabs).toEqual([]);
+    expect(store.getState().gitDiffDocuments).toEqual({});
+  });
+
+  it("preserves a preview body while another pane still references it", () => {
+    const store = createAppStore();
+    const projectPath = "D:/workspace/memory-test";
+    store.setState({ currentProject: { path: projectPath, name: "memory-test" },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() } });
+    const first = store.getState().openGitDiffTab(createDiff("shared.ts"), { preview: true })!;
+    const originalPane = store.getState().activePaneId!;
+    store.getState().splitTab(first, "right", originalPane, "copy");
+    const next = store.getState().openGitDiffTab(createDiff("next.ts"), { preview: true })!;
+    expect(store.getState().gitDiffDocuments[first]).toBeDefined();
+    expect(store.getState().panesById[originalPane].tabIds).toContain(first);
+    store.getState().closeTab(first, originalPane);
+    expect(store.getState().gitDiffDocuments[first]).toBeUndefined();
+    expect(store.getState().gitDiffDocuments[next]).toBeDefined();
+    store.getState().closeTab(next);
+    expect(store.getState().gitDiffDocuments).toEqual({});
+  });
+
   it("reuses one preview tab when different changed files are single-clicked", () => {
     const store = createAppStore();
     const projectPath = "D:/workspace/demo";

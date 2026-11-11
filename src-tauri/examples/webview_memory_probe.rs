@@ -1,6 +1,7 @@
 //! 隔离的 WebView2 诊断宿主，不启动主应用、数据库、CLI 或任何插件。
 //! 示例：cargo run --example webview_memory_probe -- --duration-seconds 30
 //! 可选：--url http://127.0.0.1:1420/diagnostics.html --debug-port 9223
+//! 输出通道对照：--output-transport eval 或 web-message（20,000 条、每条 4 KiB）。
 
 #[cfg(windows)]
 mod probe {
@@ -16,6 +17,7 @@ mod probe {
         windows: u8,
         unthrottled: bool,
         visible: bool,
+        output_transport: Option<String>,
     }
 
     fn invalid(message: &str) -> io::Error {
@@ -31,10 +33,20 @@ mod probe {
             windows: 1,
             unthrottled: false,
             visible: false,
+            output_transport: None,
         };
         let mut arguments = std::env::args().skip(1);
         while let Some(argument) = arguments.next() {
             match argument.as_str() {
+                "--output-transport" => {
+                    let mode = arguments
+                        .next()
+                        .ok_or_else(|| invalid("Missing transport"))?;
+                    if mode != "eval" && mode != "web-message" {
+                        return Err(invalid("Transport must be eval or web-message").into());
+                    }
+                    result.output_transport = Some(mode);
+                }
                 "--visible" => result.visible = true,
                 "--unthrottled" => result.unthrottled = true,
                 "--windows" => {
@@ -158,6 +170,21 @@ mod probe {
                             .focused(false)
                             .skip_taskbar(!options.visible)
                             .inner_size(800.0, 600.0);
+                    if options.output_transport.is_some() {
+                        builder = builder.initialization_script(r#"
+                            let count = 0, chars = 0, ordered = true;
+                            window.__memoryProbeReceive = (data) => {
+                                ordered &&= data.sequence === count;
+                                count++; chars += data.text.length;
+                                if (count === 20000) window.chrome.webview.postMessage({
+                                    probeComplete: true, count, chars, ordered
+                                });
+                            };
+                            window.chrome.webview.addEventListener('message', (event) => {
+                                window.__memoryProbeReceive(event.data);
+                            });
+                        "#);
+                    }
                     let mut browser_arguments = Vec::new();
                     if let Some(port) = options.debug_port {
                         browser_arguments.push(format!(
@@ -199,6 +226,42 @@ mod probe {
                             eprintln!("memory_probe native_diagnostics_error={error}");
                         }
                     })?;
+                    if let Some(transport) = options.output_transport.clone() {
+                        window.with_webview(|platform| unsafe {
+                            let core = platform.controller().CoreWebView2().expect("probe core");
+                            let handler = webview2_com::WebMessageReceivedEventHandler::create(Box::new(|_, args| {
+                                if let Some(args) = args {
+                                    let mut value = Default::default();
+                                    args.WebMessageAsJson(&mut value)?;
+                                    let value = webview2_com::take_pwstr(value);
+                                    eprintln!("memory_probe received={value}");
+                                }
+                                Ok(())
+                            }));
+                            let mut token = 0;
+                            core.add_WebMessageReceived(&handler, &mut token).expect("probe listener");
+                        })?;
+                        thread::spawn(move || {
+                            thread::sleep(Duration::from_secs(2));
+                            for sequence in 0..20000 {
+                                let json = serde_json::json!({ "sequence": sequence, "text": "x".repeat(4096) }).to_string();
+                                if transport == "eval" {
+                                    let _ = window.eval(&format!("window.__memoryProbeReceive({json})"));
+                                } else {
+                                    let _ = window.with_webview(move |platform| unsafe {
+                                        let json = webview2_com::CoTaskMemPWSTR::from(json.as_str());
+                                        let result = platform.controller().CoreWebView2()
+                                            .and_then(|core| core.PostWebMessageAsJson(*json.as_ref().as_pcwstr()));
+                                        if let Err(error) = result { eprintln!("memory_probe send_error={error}"); }
+                                    });
+                                }
+                                if sequence % 20 == 19 {
+                                    thread::sleep(Duration::from_millis(10));
+                                }
+                            }
+                            eprintln!("memory_probe sent=20000 transport={transport}");
+                        });
+                    }
                 }
                 Ok(())
             })

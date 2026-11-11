@@ -32,6 +32,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
   getClaudeCliInfo,
+  listenPtyEvent,
   ensureAgentStatusHook,
   sendSessionNotification,
   sendRemoteNotification,
@@ -1350,7 +1351,7 @@ function AppLayout() {
   }, [updateSession]);
 
   useEffect(() => {
-    const unlistenPromise = listen<{ session_id: string; data: string }>("pty-output", (event) => {
+    const unlistenPromise = listenPtyEvent("pty-output", (event) => {
       const sessionId = event.payload.session_id;
       const detected = detectClaudeRuntimeState(event.payload.data);
       if (!detected) return;

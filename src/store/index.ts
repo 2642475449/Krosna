@@ -1087,6 +1087,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           const now = Date.now();
           const existingTab = nextWorkspace.tabsById[tabId];
           const nextPreview = existingTab ? existingTab.preview && preview : preview;
+          const nextDiffDocuments = { ...state.gitDiffDocuments };
 
           if (preview) {
             const existingPreviewId = pane.tabIds.find((id) => {
@@ -1095,7 +1096,11 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
             });
             if (existingPreviewId) {
               pane.tabIds = pane.tabIds.filter((id) => id !== existingPreviewId);
-              delete nextWorkspace.tabsById[existingPreviewId];
+              // 同一预览可能仍被另一个分屏引用；最后一个视图离开时连正文一起释放。
+              if (!Object.values(nextWorkspace.panesById).some((item) => item.tabIds.includes(existingPreviewId))) {
+                delete nextWorkspace.tabsById[existingPreviewId];
+                delete nextDiffDocuments[existingPreviewId];
+              }
               pane.history = pane.history.filter((id) => id !== existingPreviewId);
               if (pane.activeTabId === existingPreviewId) {
                 pane.activeTabId = null;
@@ -1134,7 +1139,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           return {
             ...syncProjectState(state, projectPath, state.sessions, nextWorkspace),
             gitDiffDocuments: {
-              ...state.gitDiffDocuments,
+              ...nextDiffDocuments,
               [tabId]: {
                 ...document,
                 tabId,

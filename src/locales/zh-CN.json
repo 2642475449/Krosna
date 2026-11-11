@@ -3256,6 +3256,7 @@
     "cancelReconnect": "取消重连"
   },
   "filePreview": {
+    "tooLargeGitDiff": "该文件的某个版本超过差异预览的 {{limit}} MiB 上限，请使用外部 Git 工具查看。",
     "tooLargeText": "文本超过内置预览的 {{limit}} MiB 上限，请使用外部应用打开。",
     "tooLargeImage": "图片超过内置预览的 {{limit}} MiB 上限，请使用外部应用打开。"
   },

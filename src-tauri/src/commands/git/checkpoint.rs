@@ -768,6 +768,7 @@ fn read_checkpoint_entry(
             .unwrap_or_else(|| "unknown".to_string());
         return Err(format!("Checkpoint entry type is not previewable: {kind}"));
     }
+    super::preview::check_blob_size(repo, entry.id())?;
     let blob = repo
         .find_blob(entry.id())
         .map_err(|error| error.to_string())?;
@@ -1359,6 +1360,20 @@ mod tests {
         let mut command = Command::new("sh");
         command.args(["-c", "sleep 5"]);
         command
+    }
+
+    #[test]
+    fn checkpoint_preview_rejects_large_blobs_before_loading_their_content() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = Repository::init(root.path()).unwrap();
+        let blob = repo.blob(&vec![b'x'; super::super::preview::MAX_GIT_PREVIEW_BYTES + 1]).unwrap();
+        let mut builder = repo.treebuilder(None).unwrap();
+        builder.insert("large.txt", blob, 0o100644).unwrap();
+        let tree = repo.find_tree(builder.write().unwrap()).unwrap();
+        let signature = git2::Signature::now("Test", "test@example.com").unwrap();
+        let commit = repo.commit(None, &signature, &signature, "large", &tree, &[]).unwrap();
+        assert!(matches!(read_checkpoint_entry(&repo, &commit.to_string(), "large.txt"),
+            Err(error) if error == "FILE_PREVIEW_TOO_LARGE:git:8"));
     }
 
     #[test]

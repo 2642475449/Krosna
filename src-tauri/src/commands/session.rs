@@ -390,7 +390,22 @@ fn resolve_generated_session_title(result: Result<String, String>) -> Result<Str
     sanitize_ai_session_title(&output).ok_or_else(|| "Claude 返回了无效标题".to_string())
 }
 
-/// 调整 PTY 大小
+/// 当前窗口订阅 PTY 输出，并共享解析确认额度。
+#[tauri::command]
+pub fn pty_output_subscribe(window: tauri::WebviewWindow, subscription_id: String, manager: State<'_, Arc<PtyManager>>) -> Result<(), String> {
+    manager.output.subscribe_output(window.label(), subscription_id)
+}
+
+#[tauri::command]
+pub fn pty_output_unsubscribe(window: tauri::WebviewWindow, subscription_id: String, manager: State<'_, Arc<PtyManager>>) {
+    manager.output.unsubscribe_output(window.label(), Some(&subscription_id));
+}
+
+#[tauri::command]
+pub fn pty_output_ack(window: tauri::WebviewWindow, subscription_id: String, delivery_id: u64, manager: State<'_, Arc<PtyManager>>) {
+    manager.output.acknowledge_output(window.label(), &subscription_id, delivery_id);
+}
+
 #[tauri::command]
 pub fn pty_resize(
     session_id: String,

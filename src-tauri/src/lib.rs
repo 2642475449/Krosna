@@ -140,6 +140,7 @@ pub fn run() {
             if matches!(event, WindowEvent::Destroyed) {
                 let registry = window.state::<Arc<WindowRegistry>>();
                 let manager = window.state::<Arc<PtyManager>>();
+                manager.output.unsubscribe_output(window.label(), None);
                 let voice_overlay_state = window.state::<Arc<VoiceOverlayState>>();
                 let voice_shortcut_state = window.state::<Arc<VoiceShortcutState>>();
                 let closing_context = registry.get_context(window.label());
@@ -272,6 +273,9 @@ pub fn run() {
             commands::session::spawn_pty,
             commands::session::set_runtime_runner_context,
             commands::session::pty_input,
+            commands::session::pty_output_subscribe,
+            commands::session::pty_output_unsubscribe,
+            commands::session::pty_output_ack,
             commands::session::infer_agent_user_response,
             commands::session::infer_agent_interrupt,
             commands::session::submit_agent_turn_input,

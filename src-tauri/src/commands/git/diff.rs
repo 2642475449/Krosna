@@ -9,64 +9,6 @@ use super::utils::{
     open_repo, resolve_worktree_file_path, with_git_repository_access, GitRepositoryAccess,
 };
 
-const BINARY_CONTENT_ERROR: &str = "__KROSNA_BINARY_GIT_CONTENT__";
-
-/// Read file content from HEAD.
-fn read_head_content(repo: &git2::Repository, file_path: &str) -> Result<Option<String>, String> {
-    let head = match repo.head() {
-        Ok(head) => head,
-        Err(_) => return Ok(None),
-    };
-    let commit = head
-        .peel_to_commit()
-        .map_err(|e| format!("获取 HEAD 提交失败: {}", e))?;
-    let tree = commit
-        .tree()
-        .map_err(|e| format!("读取 HEAD 树失败: {}", e))?;
-    let entry = match tree.get_path(Path::new(file_path)) {
-        Ok(entry) => entry,
-        Err(_) => return Ok(None),
-    };
-    let object = entry
-        .to_object(repo)
-        .map_err(|e| format!("读取 HEAD 对象失败: {}", e))?;
-    let blob = object
-        .as_blob()
-        .ok_or_else(|| format!("HEAD 文件内容不可读取: {}", file_path))?;
-    decode_text_content(blob.content().to_vec())
-        .map(Some)
-        .map_err(|_| BINARY_CONTENT_ERROR.to_string())
-}
-
-/// Read file content from index.
-fn read_index_content(repo: &git2::Repository, file_path: &str) -> Result<Option<String>, String> {
-    let index = repo.index().map_err(|e| format!("读取索引失败: {}", e))?;
-    let Some(entry) = index.get_path(Path::new(file_path), 0) else {
-        return Ok(None);
-    };
-    let blob = repo
-        .find_blob(entry.id)
-        .map_err(|e| format!("读取索引 Blob 失败: {}", e))?;
-    decode_text_content(blob.content().to_vec())
-        .map(Some)
-        .map_err(|_| BINARY_CONTENT_ERROR.to_string())
-}
-
-/// Read file content from worktree.
-fn read_worktree_content(
-    repo: &git2::Repository,
-    file_path: &str,
-) -> Result<Option<String>, String> {
-    let absolute_path = resolve_worktree_file_path(repo, file_path)?;
-    if !absolute_path.exists() {
-        return Ok(None);
-    }
-    let bytes = std::fs::read(&absolute_path).map_err(|e| format!("读取工作树文件失败: {}", e))?;
-    decode_text_content(bytes)
-        .map(Some)
-        .map_err(|_| BINARY_CONTENT_ERROR.to_string())
-}
-
 fn read_head_bytes(repo: &git2::Repository, file_path: &str) -> Result<Option<Vec<u8>>, String> {
     let head = match repo.head() {
         Ok(head) => head,
@@ -82,13 +24,7 @@ fn read_head_bytes(repo: &git2::Repository, file_path: &str) -> Result<Option<Ve
         Ok(entry) => entry,
         Err(_) => return Ok(None),
     };
-    let object = entry
-        .to_object(repo)
-        .map_err(|e| format!("读取 HEAD 对象失败: {}", e))?;
-    let blob = object
-        .as_blob()
-        .ok_or_else(|| format!("HEAD 文件内容不可读取: {}", file_path))?;
-    Ok(Some(blob.content().to_vec()))
+    super::preview::read_blob(repo, entry.id()).map(Some)
 }
 
 fn read_index_bytes(repo: &git2::Repository, file_path: &str) -> Result<Option<Vec<u8>>, String> {
@@ -96,10 +32,7 @@ fn read_index_bytes(repo: &git2::Repository, file_path: &str) -> Result<Option<V
     let Some(entry) = index.get_path(Path::new(file_path), 0) else {
         return Ok(None);
     };
-    let blob = repo
-        .find_blob(entry.id)
-        .map_err(|e| format!("读取索引 Blob 失败: {}", e))?;
-    Ok(Some(blob.content().to_vec()))
+    super::preview::read_blob(repo, entry.id).map(Some)
 }
 
 fn read_worktree_bytes(
@@ -110,17 +43,15 @@ fn read_worktree_bytes(
     if !absolute_path.exists() {
         return Ok(None);
     }
-    std::fs::read(&absolute_path)
-        .map(Some)
-        .map_err(|e| format!("读取工作树文件失败: {}", e))
+    super::preview::read_file(&absolute_path).map(Some)
 }
 
-fn read_image_diff_content(
+fn read_diff_content(
     repo: &git2::Repository,
     file_path: &str,
     old_file_path: Option<&str>,
     staged: bool,
-) -> Result<Option<GitDiffContentResult>, String> {
+) -> Result<GitDiffContentResult, String> {
     let original_path = old_file_path.unwrap_or(file_path);
     let (original_bytes, modified_bytes, original_label, modified_label) = if staged {
         (
@@ -151,41 +82,23 @@ fn read_image_diff_content(
         .as_deref()
         .and_then(|bytes| git_image_data_url(file_path, bytes));
 
-    if original_image.is_none() && modified_image.is_none() {
-        return Ok(None);
-    }
-
-    Ok(Some(GitDiffContentResult {
-        file_path: file_path.to_string(),
-        original_content: String::new(),
-        modified_content: String::new(),
-        is_binary: true,
-        content_kind: Some("image".to_string()),
-        original_image,
-        modified_image,
-        original_label,
-        modified_label,
-    }))
-}
-
-fn binary_diff_content(file_path: String, staged: bool) -> GitDiffContentResult {
-    let (original_label, modified_label) = if staged {
-        ("HEAD".to_string(), "Index".to_string())
+    let has_image = original_image.is_some() || modified_image.is_some();
+    let (original_content, modified_content, is_binary, kind) = if has_image {
+        (String::new(), String::new(), true, "image")
     } else {
-        ("HEAD".to_string(), "Worktree".to_string())
+        match (
+            decode_text_content(original_bytes.unwrap_or_default()),
+            decode_text_content(modified_bytes.unwrap_or_default()),
+        ) {
+            (Ok(original), Ok(modified)) => (original, modified, false, "text"),
+            _ => (String::new(), String::new(), true, "binary"),
+        }
     };
-
-    GitDiffContentResult {
-        file_path,
-        original_content: String::new(),
-        modified_content: String::new(),
-        is_binary: true,
-        content_kind: Some("binary".to_string()),
-        original_image: None,
-        modified_image: None,
-        original_label,
-        modified_label,
-    }
+    Ok(GitDiffContentResult {
+        file_path: file_path.to_string(), original_content, modified_content, is_binary,
+        content_kind: Some(kind.to_string()), original_image, modified_image,
+        original_label, modified_label,
+    })
 }
 
 /// Get diff for a file.
@@ -289,57 +202,7 @@ pub fn git_diff_content_blocking(
         if let Some(old_path) = old_file_path.as_deref() {
             resolve_worktree_file_path(&repo, old_path)?;
         }
-        let original_path = old_file_path.as_deref().unwrap_or(&file_path);
-
-        if let Some(image_diff) =
-            read_image_diff_content(&repo, &file_path, old_file_path.as_deref(), staged)?
-        {
-            return Ok(image_diff);
-        }
-
-        let content_result = (|| {
-            if staged {
-                Ok((
-                    read_head_content(&repo, original_path)?.unwrap_or_default(),
-                    read_index_content(&repo, &file_path)?.unwrap_or_default(),
-                    "HEAD".to_string(),
-                    "索引".to_string(),
-                ))
-            } else {
-                let index_content = read_index_content(&repo, original_path)?;
-                let has_index_content = index_content.is_some();
-                let original_content = match index_content {
-                    Some(content) => content,
-                    None => read_head_content(&repo, original_path)?.unwrap_or_default(),
-                };
-                Ok((
-                    original_content,
-                    read_worktree_content(&repo, &file_path)?.unwrap_or_default(),
-                    if has_index_content { "索引" } else { "HEAD" }.to_string(),
-                    "工作树".to_string(),
-                ))
-            }
-        })();
-
-        match content_result {
-            Ok((original_content, modified_content, original_label, modified_label)) => {
-                Ok(GitDiffContentResult {
-                    file_path,
-                    original_content,
-                    modified_content,
-                    is_binary: false,
-                    content_kind: Some("text".to_string()),
-                    original_image: None,
-                    modified_image: None,
-                    original_label,
-                    modified_label,
-                })
-            }
-            Err(error) if error == BINARY_CONTENT_ERROR => {
-                Ok(binary_diff_content(file_path, staged))
-            }
-            Err(error) => Err(error),
-        }
+        read_diff_content(&repo, &file_path, old_file_path.as_deref(), staged)
     })
 }
 
@@ -841,6 +704,30 @@ mod tests {
         let signature = Signature::now("Krosna Test", "krosna@example.com").unwrap();
         repo.commit(Some("HEAD"), &signature, &signature, "binary", &tree, &[])
             .unwrap();
+    }
+
+    #[test]
+    fn preview_budget_applies_to_worktree_index_and_head() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = Repository::init(root.path()).unwrap();
+        let path = root.path().join("large.txt");
+        let project = root.path().to_string_lossy().into_owned();
+        let preview = |staged| git_diff_content_blocking(project.clone(), "large.txt".into(), None, staged);
+        fs::write(&path, vec![b'x'; super::super::preview::MAX_GIT_PREVIEW_BYTES + 1]).unwrap();
+        assert_eq!(preview(false).unwrap_err(), "FILE_PREVIEW_TOO_LARGE:git:8");
+        add_to_index(&repo, "large.txt");
+        fs::write(&path, "small worktree").unwrap();
+        assert_eq!(preview(true).unwrap_err(), "FILE_PREVIEW_TOO_LARGE:git:8");
+        assert_eq!(preview(false).unwrap_err(), "FILE_PREVIEW_TOO_LARGE:git:8");
+        commit_index(&repo);
+        add_to_index(&repo, "large.txt");
+        assert_eq!(preview(true).unwrap_err(), "FILE_PREVIEW_TOO_LARGE:git:8");
+        // 暂存区与工作区均小于上限时，不读取较大的 HEAD，正常显示未暂存预览。
+        fs::write(&path, "small changed 工作树").unwrap();
+        let result = preview(false).unwrap();
+        assert_eq!(result.original_content, "small worktree");
+        assert_eq!(result.modified_content, "small changed 工作树");
+        assert!(!result.is_binary);
     }
 
     #[test]

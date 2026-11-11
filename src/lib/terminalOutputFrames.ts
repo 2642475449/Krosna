@@ -332,6 +332,9 @@ export function createTerminalOutputFrameGate(
       }
     },
     getBufferedChars: () => queuedChars + scanner.getBufferedChars(),
+    // 未完成的控制序列需要后续输入才能闭合，不能占满传输额度后等待自己。
+    // 扫描器另有 MAX_FRAME_CHARS 硬上限；ACK 只等待尚未提交的完整帧。
+    getPendingWriteChars: () => options.enabled ? queuedChars : 0,
     hasNativeCursor: () => nativeCursorShown,
     markUserInput() {
       if (disposed) return;

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+export { listenPtyEvent } from "./ptyEvents";
 import type { PtyGridSize } from "../terminalSizeReconcile";
 export { resolveTerminalLink } from "./terminalLinks";
 export type { TerminalLinkResolution, TerminalLinkTarget } from "./terminalLinks";
@@ -1487,13 +1488,20 @@ export async function gitDiff(projectPath: string, filePath: string): Promise<Gi
   return await invoke("git_diff", { projectPath, filePath });
 }
 
+async function rethrowPreviewError(error: unknown): Promise<never> {
+  // 仅错误路径需要翻译，避免所有 IPC 使用方都提前加载国际化资源。
+  const { getFilePreviewErrorMessage } = await import("../filePreviewError");
+  throw getFilePreviewErrorMessage(error);
+}
+
 export async function gitDiffContent(
   projectPath: string,
   filePath: string,
   staged: boolean,
   oldFilePath?: string | null
 ): Promise<GitDiffContentResult> {
-  return await invoke("git_diff_content", { projectPath, filePath, oldFilePath, staged });
+  return await invoke<GitDiffContentResult>("git_diff_content", { projectPath, filePath, oldFilePath, staged })
+    .catch(rethrowPreviewError);
 }
 
 export async function gitCommit(
@@ -1768,12 +1776,12 @@ export async function gitGraphFileDiff(
   filePath: string,
   oldFilePath?: string | null,
 ): Promise<GitDiffContentResult> {
-  return await invoke("git_graph_file_diff", {
+  return await invoke<GitDiffContentResult>("git_graph_file_diff", {
     projectPath,
     oid,
     filePath,
     oldFilePath: oldFilePath ?? null,
-  });
+  }).catch(rethrowPreviewError);
 }
 
 export async function gitWatchStart(projectPath: string): Promise<void> {
@@ -1868,7 +1876,8 @@ export async function checkpointFileDiff(
   turnId: string,
   filePath: string,
 ): Promise<GitDiffContentResult> {
-  return await invoke("checkpoint_file_diff", { projectPath, turnId, filePath });
+  return await invoke<GitDiffContentResult>("checkpoint_file_diff", { projectPath, turnId, filePath })
+    .catch(rethrowPreviewError);
 }
 
 export async function checkpointFileHunks(

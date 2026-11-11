@@ -10,6 +10,7 @@ describe("file preview size errors", () => {
     expect(getFilePreviewErrorMessage(new Error("FILE_PREVIEW_TOO_LARGE:image:16"))).toBe("filePreview.tooLargeImage (16 MiB)");
     expect(translate).toHaveBeenCalledWith("filePreview.tooLargeImage", { limit: 16 });
     expect(isFilePreviewSizeLimitError("FILE_PREVIEW_TOO_LARGE:text:16")).toBe(true);
+    expect(getFilePreviewErrorMessage("FILE_PREVIEW_TOO_LARGE:git:8")).toBe("filePreview.tooLargeGitDiff (8 MiB)");
   });
 
   it("preserves ordinary and malformed errors without hiding useful failure details", () => {

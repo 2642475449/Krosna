@@ -23,6 +23,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import {
   inferAgentUserResponse,
+  listenPtyEvent,
   inferAgentInterrupt,
   ptyInput,
   ptyResize,
@@ -91,6 +92,7 @@ import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { terminalInputErrorKey } from "@/lib/terminalInputError";
 import { createTerminalRevealRepaint, terminalRenderingPool } from "@/lib/terminalRendering";
 import { createTerminalOutputMonitor } from "@/lib/terminalOutputMonitor";
+import { createTerminalOutputAcknowledgements } from "@/lib/terminalOutputAcknowledgements";
 import { useTerminalDiagnosticsStore } from "@/store/slices/terminalDiagnosticsSlice";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
 import { installTerminalTextSelection } from "@/lib/terminalTextSelection";
@@ -1155,6 +1157,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     });
 
     const setDiagnostics = useTerminalDiagnosticsStore.getState().setTerminalDiagnostics;
+    const outputAcknowledgements = createTerminalOutputAcknowledgements({
+      buffered: () => imeOutputGate.getBufferedChars() + outputFrameGate.getPendingWriteChars() > 0,
+      afterParsed: (done) => term.write("", done),
+    });
     const outputMonitor = createTerminalOutputMonitor({
       bufferedChars: () => imeOutputGate.getBufferedChars() + outputFrameGate.getBufferedChars(),
       onSnapshot: (snapshot) => setDiagnostics(runtimeId, { sessionId, ...snapshot }),
@@ -1186,6 +1192,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           },
         );
       });
+      outputAcknowledgements.schedule();
     });
     const outputFrameGate = createTerminalOutputFrameGate(
       (data, synchronizedFrame) => {
@@ -1548,11 +1555,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     document.addEventListener("visibilitychange", onCompositionVisibilityChange);
 
     // Listen for PTY output from Rust
-    const outputPromise = listen<{ session_id: string; data: string }>(
+    const outputPromise = listenPtyEvent(
       "pty-output",
       (event) => {
         if (event.payload.session_id === sessionId) {
-          outputFrameGate.write(event.payload.data);
+          return outputAcknowledgements.track(() => outputFrameGate.write(event.payload.data));
         }
       }
     );
@@ -1571,7 +1578,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       },
     );
     // Listen for PTY exit
-    const exitPromise = listen<{ session_id: string; code: number | null }>(
+    const exitPromise = listenPtyEvent(
       "pty-exit",
       (event) => {
         if (event.payload.session_id === sessionId) {
@@ -1674,6 +1681,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       parsedDisposable.dispose();
       outputFrameGate.dispose();
       outputMonitor.dispose();
+      outputAcknowledgements.dispose();
       setDiagnostics(runtimeId, null);
       if (outputFrameGateRef.current === outputFrameGate) outputFrameGateRef.current = null;
       pasteGate.dispose();
