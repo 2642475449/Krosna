@@ -88,6 +88,7 @@ import {
   writeTerminalOutputWithCursorRefresh,
 } from "@/lib/terminalOutputFrames";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
+import { terminalInputErrorKey } from "@/lib/terminalInputError";
 import { createTerminalRevealRepaint, terminalRenderingPool } from "@/lib/terminalRendering";
 import { createTerminalOutputMonitor } from "@/lib/terminalOutputMonitor";
 import { useTerminalDiagnosticsStore } from "@/store/slices/terminalDiagnosticsSlice";
@@ -322,11 +323,19 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     return () => window.clearTimeout(verificationTimeout);
   }, [currentSession?.agentId, sessionId, setTerminalCompletionIntegration]);
 
+  const reportInputError = useCallback((error: unknown) => {
+    const key = terminalInputErrorKey(error);
+    if (!key) { console.error(error); return; }
+    if (key === "terminal.inputClosed" && !terminalRef.current) return;
+    message.error({ key: `terminal-input:${sessionId}:${key}`, content: t(key) });
+  }, [sessionId, t]);
+
   const reportPasteError = useCallback((error: unknown) => {
+    if (terminalInputErrorKey(error)) { reportInputError(error); return; }
     console.error("Terminal paste failed:", error);
     const key = error instanceof Error ? error.message : String(error);
     message.error(t(key.startsWith("terminal.clipboard") ? key : "terminal.clipboardPasteFailed"));
-  }, [t]);
+  }, [reportInputError, t]);
 
   const pasteIntoTerminal = useCallback(async (
     term: XTerm | null,
@@ -523,11 +532,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           term?.selectAll();
           break;
         case "clear-input":
-          ptyInput(sessionId, "\x15").catch(console.error);
+          ptyInput(sessionId, "\x15").catch(reportInputError);
           break;
       }
     },
-    [contextMenuSelection, currentSession, installedAgents, pasteIntoTerminal, sessionId, t]
+    [contextMenuSelection, currentSession, installedAgents, pasteIntoTerminal, reportInputError, sessionId, t]
   );
 
   const closeSideQuestionComposer = useCallback(() => {
@@ -1053,6 +1062,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     let webglContextLossListener: { dispose(): void } | null = null;
     let fallbackAnimationFrame: number | null = null;
     let isTerminalDisposed = false;
+    const reportRuntimeInputError = (error: unknown) => {
+      if (isTerminalDisposed && terminalInputErrorKey(error) === "terminal.inputClosed") return;
+      reportInputError(error);
+    };
     let intersectsViewport = true;
     let rendererFailed = false;
 
@@ -1152,7 +1165,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       },
     });
 
-    // 帧保护在 IME 门控之前，兜底定时器也不会绕过输入法的输出暂停。
+    // 帧保护在 IME 门控之前；输入法暂停另有容量和时间预算，防止长期积压。
     let frameNeedsCursorRefresh = false;
     const imeOutputGate = createTerminalImeOutputGate((data) => {
       const refreshCursor = frameNeedsCursorRefresh;
@@ -1211,7 +1224,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const titleDisposable = term.onTitleChange((title) => interruptTracker.observeTitle(title));
     const programStatusDisposable = term.parser.registerOscHandler(7501, (data) => {
       if (data === "?") {
-        void enqueueInput(() => ptyInput(sessionId, "\x1b]7501;?\x1b\\")).catch(console.error);
+        void enqueueInput(() => ptyInput(sessionId, "\x1b]7501;?\x1b\\")).catch(reportRuntimeInputError);
       } else interruptTracker.observeProgramStatus(data);
       return true;
     });
@@ -1298,11 +1311,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
               });
             }
           };
-          void enqueueInput(sendInput).catch(console.error);
+          void enqueueInput(sendInput).catch(reportRuntimeInputError);
           return;
         }
         if (!hasTerminalPromptText(submissionCapture.submittedText)) {
-          void enqueueInput(() => ptyInput(sessionId, data)).catch(console.error);
+          void enqueueInput(() => ptyInput(sessionId, data)).catch(reportRuntimeInputError);
           return;
         }
 
@@ -1319,8 +1332,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
             }
           } catch (error) {
             // The backend only rejects when the PTY input itself could not be delivered.
-            console.error(error);
-            updateSession(sessionId, { status: "error" });
+            reportRuntimeInputError(error);
+            if (!isTerminalDisposed) updateSession(sessionId, { status: "error" });
           }
         });
         return;
@@ -1330,7 +1343,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         void enqueueInput(sendInput).catch(reportPasteError);
       } else {
         // 系统语音会连续触发逐字输入；即使队列空闲也必须排队，避免并发 IPC 写入乱序。
-        void enqueueInput(sendInput).catch(console.error);
+        void enqueueInput(sendInput).catch(reportRuntimeInputError);
       }
     };
     const pasteGate = createTerminalPasteGate({
@@ -1403,7 +1416,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         }
         event.preventDefault();
         event.stopPropagation();
-        ptyInput(sessionId, "\x15").catch(console.error);
+        ptyInput(sessionId, "\x15").catch(reportRuntimeInputError);
         return false; // don't send raw \x0c to PTY
       }
 
@@ -1415,7 +1428,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           !matchesShortcut(event, getAppShortcut(useShortcutStore.getState().overrides, "clearInput"))) return;
       event.preventDefault();
       event.stopPropagation();
-      ptyInput(sessionId, "\x15").catch(console.error);
+      ptyInput(sessionId, "\x15").catch(reportRuntimeInputError);
     };
     container.addEventListener("mousedown", handleMouseShortcut, true);
 
@@ -1525,7 +1538,14 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     if (textarea) {
       textarea.addEventListener("compositionstart", onCompositionStart);
       textarea.addEventListener("compositionend", onCompositionEnd);
+      // 窗口/标签切走时部分输入法不会发送 compositionend，仍须释放暂停输出。
+      textarea.addEventListener("blur", onCompositionEnd);
     }
+    const onCompositionVisibilityChange = () => {
+      if (document.visibilityState === "hidden") onCompositionEnd();
+    };
+    window.addEventListener("blur", onCompositionEnd);
+    document.addEventListener("visibilitychange", onCompositionVisibilityChange);
 
     // Listen for PTY output from Rust
     const outputPromise = listen<{ session_id: string; data: string }>(
@@ -1642,7 +1662,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       if (textarea) {
         textarea.removeEventListener("compositionstart", onCompositionStart);
         textarea.removeEventListener("compositionend", onCompositionEnd);
+        textarea.removeEventListener("blur", onCompositionEnd);
       }
+      window.removeEventListener("blur", onCompositionEnd);
+      document.removeEventListener("visibilitychange", onCompositionVisibilityChange);
       imeOutputGate.dispose();
       unsubscribeSession();
       interruptTracker.dispose();
@@ -1690,6 +1713,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     scheduleImagePreviewDismissal,
     pasteIntoTerminal,
     reportPasteError,
+    reportInputError,
   ]);
 
   useEffect(() => {

@@ -18,10 +18,13 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
-import { cancelContentSearch, readProjectFile, searchProjectText } from "@/lib/api";
+import { cancelContentSearch, openInAssociatedApplication, readProjectFile, searchProjectText } from "@/lib/api";
 import { requestFileNavigation } from "@/lib/fileNavigation";
+import { getFilePreviewErrorMessage, isFilePreviewSizeLimitError } from "@/lib/filePreviewError";
+import { message } from "@/lib/toast";
 import {
   adjustSearchWindow,
+  contentSearchHighlightRange,
   type SearchWindowBounds,
   DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO,
   MAX_GLOBAL_SEARCH_SPLIT_RATIO,
@@ -80,13 +83,14 @@ function buildGroups(matches: ContentSearchMatch[]): SearchResultGroup[] {
 }
 
 function HighlightedLine({ match }: { match: ContentSearchMatch }) {
-  const start = Math.max(0, match.startColumn - 1);
-  const end = Math.max(start, match.endColumn - 1);
+  const { start, end } = contentSearchHighlightRange(match);
   return (
     <span className="app-global-search-line-text">
+      {(match.lineTextStartColumn ?? 1) > 1 && "…"}
       {match.lineText.slice(0, start)}
       <mark>{match.lineText.slice(start, end)}</mark>
       {match.lineText.slice(end)}
+      {match.lineTextTruncated && "…"}
     </span>
   );
 }
@@ -372,7 +376,7 @@ function GlobalTextSearchDialog({
   );
 
   const previewPath = selectedMatch?.path;
-  const [preview, setPreview] = useState<{ path: string; content: string; error: string | null } | null>(null);
+  const [preview, setPreview] = useState<{ path: string; content: string; error: string | null; sizeLimited: boolean } | null>(null);
   useEffect(() => {
     if (!open || !previewPath || !currentProject) {
       setPreview(null);
@@ -383,13 +387,19 @@ function GlobalTextSearchDialog({
     void readProjectFile(currentProject.path, previewPath).then((file) => {
       if (disposed) return;
       setPreview({ path: previewPath, content: file.content,
-        error: file.kind === "text" ? null : t("globalSearch.previewUnavailable") });
+        error: file.kind === "text" ? null : t("globalSearch.previewUnavailable"), sizeLimited: false });
     }).catch((reason: unknown) => {
       if (disposed) return;
-      setPreview({ path: previewPath, content: "", error: String(reason) });
+      setPreview({ path: previewPath, content: "", error: getFilePreviewErrorMessage(reason), sizeLimited: isFilePreviewSizeLimitError(reason) });
     });
     return () => { disposed = true; };
   }, [open, previewPath, currentProject?.path, t]);
+  const openExternalPreview = useCallback(async () => {
+    if (!previewPath) return;
+    try { await openInAssociatedApplication(previewPath); }
+    catch (reason) { message.error(reason instanceof Error ? reason.message : t("fileTabs.openFailed")); }
+  }, [previewPath, t]);
+  const previewSizeLimited = preview?.path === previewPath && preview?.sizeLimited;
   const previewTarget = useMemo(() => selectedMatch ? {
     lineNumber: selectedMatch.lineNumber,
     startColumn: selectedMatch.startColumn,
@@ -609,9 +619,9 @@ function GlobalTextSearchDialog({
                     <Button
                       type="primary"
                       size="small"
-                      onClick={() => handleOpenMatch(selectedMatch, false)}
+                      onClick={() => { if (previewSizeLimited) void openExternalPreview(); else handleOpenMatch(selectedMatch, false); }}
                     >
-                      {t("globalSearch.open")}
+                      {t(previewSizeLimited ? "common.openInAssociatedApp" : "globalSearch.open")}
                     </Button>
                   </div>
                 </div>
@@ -619,7 +629,10 @@ function GlobalTextSearchDialog({
                   {!preview || preview.path !== selectedMatch.path ? (
                     <div className="app-global-search-empty"><Spin /></div>
                   ) : preview.error ? (
-                    <div className="app-global-search-empty" role="alert">{preview.error}</div>
+                    <div className="app-global-search-empty flex-col gap-3" role="alert">
+                      <p>{preview.error}</p>
+                      {preview.sizeLimited && <Button onClick={() => { void openExternalPreview(); }}>{t("common.openInAssociatedApp")}</Button>}
+                    </div>
                   ) : (
                     <Suspense fallback={<div className="app-global-search-empty"><Spin /></div>}>
                       <MonacoTextEditor

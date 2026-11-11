@@ -16,6 +16,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, State};
 
+#[path = "session_title.rs"]
+mod title_generation;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeCliInfo {
@@ -219,12 +222,13 @@ pub fn set_runtime_runner_context(
 
 /// 向 PTY 写入数据
 #[tauri::command]
-pub fn pty_input(
+pub async fn pty_input(
     session_id: String,
     data: String,
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<(), String> {
-    manager.write_input(&session_id, &data)
+    let (_, _, input) = manager.prepare_input(&session_id)?;
+    input.write_async(data).await
 }
 
 /// Clear a permission/input wait only when the renderer's baseline still
@@ -272,12 +276,10 @@ pub async fn submit_agent_turn_input(
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<AgentTurnStartResult, String> {
     let manager = manager.inner().clone();
-    let (project_path, agent_id) = manager
-        .session_context(&session_id)
-        .ok_or_else(|| "Session is not active".to_string())?;
+    let (project_path, agent_id, input) = manager.prepare_input(&session_id)?;
 
     if agent_id == "powershell" || agent_id == "cmd" {
-        manager.write_input(&session_id, &data)?;
+        input.write_async(data).await?;
         return Ok(AgentTurnStartResult {
             turn: None,
             completed_previous: None,
@@ -339,7 +341,7 @@ pub async fn submit_agent_turn_input(
 
     // The baseline exists before Enter reaches the agent, so pre-existing dirty changes
     // cannot be attributed to this turn.
-    manager.write_input(&session_id, &data)?;
+    input.write_async(data).await?;
     if let Some(review) = checkpoint_result.completed_previous.clone() {
         let _ = app.emit("checkpoint-review-ready", review);
     }
@@ -376,11 +378,11 @@ pub async fn generate_session_title(
         return sanitize_fallback_session_title(&prompt, false)
             .ok_or_else(|| "无法从当前输入提炼标题".to_string());
     }
-    tauri::async_runtime::spawn_blocking(move || {
+    let key = title_generation::request_key(&prompt, &path);
+    title_generation::generate_once(key, move || {
         resolve_generated_session_title(run_ai_title_generation(&prompt, &path))
     })
     .await
-    .map_err(|error| format!("标题生成任务失败: {error}"))?
 }
 
 fn resolve_generated_session_title(result: Result<String, String>) -> Result<String, String> {

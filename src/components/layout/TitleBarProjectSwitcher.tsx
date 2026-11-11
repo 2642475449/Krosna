@@ -66,7 +66,7 @@ function TitleBarProjectSwitcher() {
     };
     if (useAppStore.persist.hasHydrated()) initialize();
     return useAppStore.persist.onFinishHydration(initialize);
-  }, [open]);
+  }, []);
 
   useEffect(() => {
     let disposed = false;

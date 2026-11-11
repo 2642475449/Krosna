@@ -716,6 +716,8 @@ export interface ContentSearchMatch {
   endLineNumber: number;
   endColumn: number;
   lineText: string;
+  lineTextStartColumn?: number;
+  lineTextTruncated?: boolean;
   contextBefore: string[];
   contextAfter: string[];
 }
@@ -1224,6 +1226,7 @@ export interface CheckpointRestoreResult {
 }
 
 export interface GitConflictDetail {
+  revision: string;
   filePath: string;
   hasConflict: boolean;
   oursContent: string | null;

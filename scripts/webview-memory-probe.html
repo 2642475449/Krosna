@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Isolated WebView memory probe</title>
+  </head>
+  <body>
+    <h1>Isolated WebView memory probe</h1>
+    <p>Synthetic data only. Use a temporary WebView user data directory for comparable trials.</p>
+    <pre id="status">Starting…</pre>
+    <script type="module">
+      import { createProjectScopedStorage, mergeProjectScopedPersistedState } from "/src/lib/projectScopedStorage.ts";
+      import { startStorageDiagnostics } from "/src/lib/storageDiagnostics.ts";
+
+      // 仅服务隔离实验，不引入应用入口、不修改真实设置键。
+      const KEY = "krosna-memory-probe";
+      const params = new URLSearchParams(location.search);
+      const number = (key, fallback, min, max) => {
+        const value = params.has(key) ? Number(params.get(key)) : fallback;
+        return Math.max(min, Math.min(max, Number.isFinite(value) ? Math.round(value) : fallback));
+      };
+      const mode = ["baseline", "deduplicated", "idle"].includes(params.get("mode")) ? params.get("mode") : "idle";
+      const profile = params.get("profile") === "changing" ? "changing" : "stable";
+      const writer = (params.get("writer") || "one").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "one";
+      const config = {
+        mode, profile, writer,
+        payloadKiB: number("payloadKiB", 256, 1, 1024),
+        intervalMs: number("intervalMs", 50, 10, 10_000),
+        durationMs: number("durationMs", 60_000, 1_000, 1_800_000),
+        sameProject: params.get("sameProject") === "1",
+        storageKey: KEY,
+      };
+      const start = performance.now();
+      const state = {
+        schemaVersion: 1, config, startedAt: Date.now(), elapsedMs: 0,
+        status: "running", done: false, runtimeUpdates: 0, persistAttempts: 0,
+        genuineChanges: 0, errors: 0, storageErrors: 0,
+        inputChars: 0, persistDurationMs: 0, maxPersistDurationMs: 0,
+        samples: [], summary: null,
+      };
+      window.__KROSNA_MEMORY_PROBE__ = state;
+      let diagnostics = null;
+      let writerTimer;
+      let sampleTimer;
+      let finishTimer;
+      let finished = false;
+      const status = document.getElementById("status");
+      const display = () => {
+        status.textContent = JSON.stringify({ mode, profile, writer, status: state.status,
+          elapsedMs: Math.round(state.elapsedMs), runtimeUpdates: state.runtimeUpdates,
+          persistAttempts: state.persistAttempts, errors: state.errors }, null, 2);
+      };
+      const sample = () => {
+        state.elapsedMs = performance.now() - start;
+        state.samples.push({ elapsedMs: state.elapsedMs, runtimeUpdates: state.runtimeUpdates,
+          persistAttempts: state.persistAttempts, genuineChanges: state.genuineChanges,
+          errors: state.errors, diagnostics: diagnostics?.snapshot() ?? null });
+        if (state.samples.length > 60) state.samples.shift();
+        display();
+      };
+      const finish = (reason) => {
+        if (finished) return;
+        finished = true;
+        clearInterval(writerTimer);
+        clearInterval(sampleTimer);
+        clearTimeout(finishTimer);
+        removeEventListener("pagehide", onPageHide);
+        diagnostics?.stop();
+        state.done = true;
+        state.status = reason;
+        sample();
+        state.summary = { elapsedMs: state.elapsedMs, runtimeUpdates: state.runtimeUpdates,
+          persistAttempts: state.persistAttempts, genuineChanges: state.genuineChanges,
+          errors: state.errors, storageErrors: state.storageErrors,
+          inputChars: state.inputChars, persistDurationMs: state.persistDurationMs,
+          maxPersistDurationMs: state.maxPersistDurationMs,
+          diagnostics: diagnostics?.snapshot() ?? null };
+      };
+      const onPageHide = () => finish("page-hidden");
+      addEventListener("pagehide", onPageHide);
+
+      try {
+        diagnostics = startStorageDiagnostics({ enabled: true });
+        const storage = localStorage;
+        const scoped = mode === "deduplicated" ? createProjectScopedStorage(storage) : {
+          getItem: (key) => storage.getItem(key),
+          removeItem: (key) => storage.removeItem(key),
+          // 旧实现：每次 persist 都读、合并、写；即便本窗口提交内容完全相同。
+          setItem: (key, value) => storage.setItem(key, mergeProjectScopedPersistedState(storage.getItem(key), value)),
+        };
+        const projectPath = `/synthetic-memory-probe/${config.sameProject ? "shared" : writer}`;
+        const session = { id: `synthetic-${writer}`, name: "Synthetic session 0", revision: 0,
+          probePadding: "x".repeat(config.payloadKiB * 1024) };
+        const envelope = { version: 5, state: { __writerProjectPath: projectPath,
+          projectSessions: { [projectPath]: [session] }, projectArchivedSessions: { [projectPath]: [] },
+          projectWorkspaces: { [projectPath]: { tabsById: {}, panesById: {} } },
+          projectAttentionItems: { [projectPath]: [] } } };
+        const persist = () => {
+          const before = performance.now();
+          state.persistAttempts++;
+          try {
+            const serialized = JSON.stringify(envelope);
+            state.inputChars = serialized.length;
+            scoped.setItem(KEY, serialized);
+          } catch {
+            // 仅保留计数，不记录异常详情或完整存储内容。
+            state.errors++;
+            state.storageErrors++;
+          } finally {
+            const elapsed = performance.now() - before;
+            state.persistDurationMs += elapsed;
+            state.maxPersistDurationMs = Math.max(state.maxPersistDurationMs, elapsed);
+          }
+        };
+        // 三个模式使用同样初始快照；idle 初始化一次后不再发起存储操作。
+        persist();
+        sample();
+        if (mode !== "idle") writerTimer = setInterval(() => {
+          state.runtimeUpdates++;
+          if (profile === "changing") {
+            const revision = Math.floor((performance.now() - start) / 1000);
+            if (revision !== session.revision) {
+              session.revision = revision;
+              session.name = `Synthetic session ${revision}`;
+              state.genuineChanges++;
+            }
+          }
+          persist();
+        }, config.intervalMs);
+        sampleTimer = setInterval(sample, 2000);
+        finishTimer = setTimeout(() => finish("completed"), config.durationMs);
+      } catch {
+        state.errors++;
+        finish("setup-failed");
+      }
+    </script>
+  </body>
+</html>

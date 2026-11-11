@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 const MAX_EDITABLE_TEXT_FILE_BYTES: u64 = 1024 * 1024;
+const MAX_PREVIEWABLE_TEXT_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_PREVIEWABLE_IMAGE_FILE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_PREVIEWABLE_PDF_FILE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_PREVIEWABLE_OFFICE_FILE_BYTES: u64 = 64 * 1024 * 1024;
 const PREVIEWABLE_OFFICE_EXTENSIONS: [&str; 16] = [
@@ -337,6 +339,38 @@ pub async fn read_project_file(
     .await
 }
 
+// 读取本身也有硬限，不能只依赖读取前可能过期的 metadata。
+fn read_limited_preview(reader: impl Read, limit: u64, kind: &str) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    reader
+        .take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("读取预览失败: {error}"))?;
+    if bytes.len() as u64 > limit {
+        return Err(format!(
+            "FILE_PREVIEW_TOO_LARGE:{kind}:{}",
+            limit / (1024 * 1024)
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_preview_bytes(path: &Path, limit: u64, kind: &str) -> Result<Vec<u8>, String> {
+    let file = fs::File::open(path).map_err(|error| format!("打开预览失败: {error}"))?;
+    if file
+        .metadata()
+        .map_err(|error| format!("读取文件元数据失败: {error}"))?
+        .len()
+        > limit
+    {
+        return Err(format!(
+            "FILE_PREVIEW_TOO_LARGE:{kind}:{}",
+            limit / (1024 * 1024)
+        ));
+    }
+    read_limited_preview(file, limit, kind)
+}
+
 pub fn read_project_file_blocking(
     project_path: String,
     path: String,
@@ -361,7 +395,7 @@ pub fn read_project_file_blocking(
     }
     let size_bytes = metadata.len();
     let large_file = size_bytes > MAX_EDITABLE_TEXT_FILE_BYTES;
-    let raw_bytes = fs::read(&target_path).map_err(|e| format!("读取文件失败: {}", e))?;
+    let raw_bytes = read_preview_bytes(&target_path, MAX_PREVIEWABLE_TEXT_FILE_BYTES, "text")?;
     let (content, encoding) = decode_text_bytes(&raw_bytes);
 
     Ok(ProjectFileContent {
@@ -409,7 +443,7 @@ pub fn read_project_image_blocking(
     }
 
     let metadata = fs::metadata(&target_path).map_err(|e| format!("读取文件元数据失败: {}", e))?;
-    let bytes = fs::read(&target_path).map_err(|e| format!("读取图片失败: {}", e))?;
+    let bytes = read_preview_bytes(&target_path, MAX_PREVIEWABLE_IMAGE_FILE_BYTES, "image")?;
     let mime_type = image_mime_type(&target_path)?;
     let data_url = format!("data:{};base64,{}", mime_type, encode_base64(&bytes));
 
@@ -584,8 +618,18 @@ fn write_project_file_checked_blocking(
     file.try_lock()
         .map_err(|e| format!("文件正在被其他操作保存: {e}"))?;
     if let Some(expected_bytes) = expected_bytes {
+        if file
+            .metadata()
+            .map_err(|error| format!("校验文件版本失败: {error}"))?
+            .len()
+            != expected_bytes.len() as u64
+        {
+            return Err("file-write-conflict".into());
+        }
         let mut current = Vec::new();
-        file.read_to_end(&mut current)
+        (&mut file)
+            .take(expected_bytes.len() as u64 + 1)
+            .read_to_end(&mut current)
             .map_err(|e| format!("校验文件版本失败: {e}"))?;
         if current != expected_bytes {
             return Err("file-write-conflict".into());
@@ -1927,6 +1971,61 @@ mod tests {
     }
 
     #[test]
+    fn text_and_image_previews_reject_oversized_files_before_reading_them() {
+        let directory = tempfile::tempdir().unwrap();
+        for (name, kind, limit) in [
+            ("large.txt", "text", MAX_PREVIEWABLE_TEXT_FILE_BYTES),
+            ("large.png", "image", MAX_PREVIEWABLE_IMAGE_FILE_BYTES),
+        ] {
+            let path = directory.path().join(name);
+            fs::File::create(&path).unwrap().set_len(limit + 1).unwrap();
+            let result = if kind == "text" {
+                read_project_file_blocking(display_path(directory.path()), display_path(&path))
+                    .map(|_| ())
+            } else {
+                read_project_image_blocking(display_path(directory.path()), display_path(&path))
+                    .map(|_| ())
+            };
+            assert_eq!(
+                result.unwrap_err(),
+                format!("FILE_PREVIEW_TOO_LARGE:{kind}:16")
+            );
+        }
+    }
+
+    #[test]
+    fn preview_reader_accepts_exact_boundary_and_rejects_growth_after_inspection() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("growing.txt");
+        fs::write(&path, vec![b'a'; 32]).unwrap();
+        assert_eq!(
+            read_limited_preview(fs::File::open(&path).unwrap(), 32, "text")
+                .unwrap()
+                .len(),
+            32
+        );
+        let reader = fs::File::open(&path).unwrap();
+        assert_eq!(reader.metadata().unwrap().len(), 32);
+        fs::write(&path, vec![b'a'; 64]).unwrap();
+        assert!(read_limited_preview(reader, 32, "text")
+            .unwrap_err()
+            .starts_with("FILE_PREVIEW_TOO_LARGE:text:"));
+    }
+
+    #[test]
+    fn large_but_previewable_text_remains_readonly_and_keeps_its_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("readonly.txt");
+        let text = "x".repeat(MAX_EDITABLE_TEXT_FILE_BYTES as usize + 1);
+        fs::write(&path, &text).unwrap();
+        let result =
+            read_project_file_blocking(display_path(directory.path()), display_path(&path))
+                .unwrap();
+        assert!(result.read_only && result.large_file);
+        assert_eq!(result.content, text);
+    }
+
+    #[test]
     fn write_project_file_rejects_stale_content_without_overwriting_external_edits() {
         let directory = tempfile::tempdir().unwrap();
         let file_path = directory.path().join("conflict.txt");
@@ -1943,6 +2042,26 @@ mod tests {
         );
         assert_eq!(result.unwrap_err(), "file-write-conflict");
         assert_eq!(fs::read_to_string(&file_path).unwrap(), "external edit");
+    }
+
+    #[test]
+    fn save_version_check_rejects_a_suddenly_large_file_without_reading_it_all() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("grown.txt");
+        let length = 32 * 1024 * 1024;
+        fs::File::create(&path).unwrap().set_len(length).unwrap();
+        let result = write_project_file_checked_blocking(
+            display_path(directory.path()),
+            display_path(&path),
+            "new".into(),
+            None,
+            Some(ExpectedFileContent {
+                content: "old".into(),
+                encoding: "utf-8".into(),
+            }),
+        );
+        assert_eq!(result.unwrap_err(), "file-write-conflict");
+        assert_eq!(fs::metadata(path).unwrap().len(), length);
     }
 
     #[test]

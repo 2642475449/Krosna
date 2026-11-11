@@ -121,3 +121,64 @@ it("permits retry after IPC errors and ignores stale image failures", async () =
   useProjectIconsStore.getState().setProjectIconFailed("/project", "new-image");
   expect(useProjectIconsStore.getState().icons["/project"].src).toBeNull();
 });
+
+it("initializes a large icon catalog with one write and never reloads it for menu toggles", async () => {
+  useProjectIconsStore.setState({ initialized: false });
+  const preferences = Object.fromEntries(Array.from({ length: 500 }, (_, index) => [
+    `e:/project-${index}`, { color: index % 12, mode: "auto" as const, revision: index + 1 },
+  ]));
+  vi.mocked(loadProjectIconPreferences).mockResolvedValue(preferences);
+  const write = vi.spyOn(localStorage, "setItem");
+  try {
+    await useProjectIconsStore.getState().setInitialized([]);
+    expect(Object.keys(useProjectIconsStore.getState().preferences)).toHaveLength(500);
+    expect(write).toHaveBeenCalledTimes(1);
+    write.mockClear();
+    await useProjectIconsStore.getState().setInitialized([]);
+    await useProjectIconsStore.getState().setInitialized([]);
+    useProjectIconsStore.getState().setPreference("e:/project-1", { ...preferences["e:/project-1"] });
+    expect(loadProjectIconPreferences).toHaveBeenCalledOnce();
+    expect(write).not.toHaveBeenCalled();
+  } finally { write.mockRestore(); }
+});
+
+it("keeps newer events and lazily loaded images when initialization finishes late", async () => {
+  useProjectIconsStore.setState({ initialized: false });
+  let resolve!: (value: Awaited<ReturnType<typeof loadProjectIconPreferences>>) => void;
+  vi.mocked(loadProjectIconPreferences).mockImplementation(() => new Promise((done) => { resolve = done; }));
+  const pending = useProjectIconsStore.getState().setInitialized([]);
+  const newer = { color: 4, mode: "image" as const, revision: 5, image: "data:image/png;base64,live" };
+  useProjectIconsStore.getState().setPreference("E:/Project", newer);
+  resolve({ "e:/project": { color: 1, mode: "auto", revision: 1 }, "/other": { color: 2, mode: "initials", revision: 2 } });
+  await pending;
+  expect(useProjectIconsStore.getState().preferences["e:/project"]).toEqual(newer);
+  expect(useProjectIconsStore.getState().colors["e:/project"]).toBe(4);
+  expect(useProjectIconsStore.getState().preferences["/other"].color).toBe(2);
+});
+
+it("loads image content only for the visible project that needs it", async () => {
+  useProjectIconsStore.setState({ preferences: {
+    "/shown": { color: 1, mode: "image", revision: 2 },
+    "/hidden": { color: 2, mode: "image", revision: 3 },
+  }, colors: { "/shown": 1, "/hidden": 2 } });
+  vi.mocked(ensureProjectIconPreference).mockResolvedValue({ color: 1, mode: "image", revision: 2, image: "data:image/png;base64,shown" });
+  vi.mocked(detectProjectIcon).mockResolvedValue(null);
+  const write = vi.spyOn(localStorage, "setItem");
+  try {
+    await useProjectIconsStore.getState().setProjectIcon("/shown");
+    expect(ensureProjectIconPreference).toHaveBeenCalledExactlyOnceWith("/shown");
+    expect(useProjectIconsStore.getState().preferences["/shown"].image).toContain("shown");
+    expect(useProjectIconsStore.getState().preferences["/hidden"].image).toBeUndefined();
+    expect(write).not.toHaveBeenCalled();
+  } finally { write.mockRestore(); }
+});
+
+it("allows retry when catalog initialization fails", async () => {
+  useProjectIconsStore.setState({ initialized: false });
+  vi.mocked(loadProjectIconPreferences).mockRejectedValueOnce(new Error("database unavailable")).mockResolvedValueOnce({});
+  await expect(useProjectIconsStore.getState().setInitialized([])).rejects.toThrow("database unavailable");
+  expect(useProjectIconsStore.getState().initialized).toBe(false);
+  await useProjectIconsStore.getState().setInitialized([]);
+  expect(useProjectIconsStore.getState().initialized).toBe(true);
+  expect(loadProjectIconPreferences).toHaveBeenCalledTimes(2);
+});

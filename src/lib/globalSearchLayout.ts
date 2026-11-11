@@ -2,6 +2,17 @@ export const DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO = 42;
 export const MIN_GLOBAL_SEARCH_SPLIT_RATIO = 20;
 export const MAX_GLOBAL_SEARCH_SPLIT_RATIO = 80;
 
+export function contentSearchHighlightRange(match: {
+  lineText: string; lineTextStartColumn?: number; startColumn: number;
+  endColumn: number; lineNumber: number; endLineNumber: number;
+}): { start: number; end: number } {
+  const offset = match.lineTextStartColumn ?? 1;
+  const start = Math.min(match.lineText.length, Math.max(0, match.startColumn - offset));
+  const end = match.endLineNumber > match.lineNumber ? match.lineText.length
+    : Math.min(match.lineText.length, Math.max(start, match.endColumn - offset));
+  return { start, end };
+}
+
 export function clampGlobalSearchSplitRatio(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO;
   return Math.min(

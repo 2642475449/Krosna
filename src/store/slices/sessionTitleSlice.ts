@@ -4,6 +4,23 @@ import { startCodexTitleSync } from "@/lib/codexSessionTitles";
 import { queueSessionTitle, startTitleGeneration } from "@/lib/sessionTitles";
 import type { Session } from "@/types";
 import { syncWorkspaceSnapshot } from "../utils/workspace";
+import { projectPathKey } from "@/lib/openProjects";
+
+const EMPTY_TITLE_SESSIONS: Session[] = [];
+
+function ownedProjectPath(): string | null {
+  const state = useAppStore.getState();
+  if (!state.windowContextReady || state.windowMode !== "project" || !state.windowProject || !state.currentProject
+    || projectPathKey(state.windowProject.path) !== projectPathKey(state.currentProject.path)) return null;
+  return state.windowProject.path;
+}
+
+function ownedSessions(): Session[] {
+  const path = ownedProjectPath();
+  if (!path) return EMPTY_TITLE_SESSIONS;
+  return Object.entries(useAppStore.getState().projectSessions)
+    .find(([entry]) => projectPathKey(entry) === projectPathKey(path))?.[1] ?? EMPTY_TITLE_SESSIONS;
+}
 
 function setSessionTitleState(id: string, change: (session: Session) => Session) {
   useAppStore.setState((state) => {
@@ -47,11 +64,39 @@ export function retrySessionTitle(id: string) {
 
 export function startSessionTitleGeneration() {
   const shared = {
-    sessions: () => Object.values(useAppStore.getState().projectSessions).flat(),
-    update: setSessionTitleState,
-    subscribe: (listener: () => void) => useAppStore.subscribe(listener),
+    // 历史快照可含其他项目，但只有当前项目的所属窗口有权执行、保存标题任务。
+    sessions: ownedSessions,
+    update: (id: string, change: (session: Session) => Session) => {
+      if (ownedSessions().some((session) => session.id === id)) setSessionTitleState(id, change);
+    },
+    subscribe: (listener: () => void) => {
+      let previous = ownedSessions();
+      return useAppStore.subscribe(() => {
+        const sessions = ownedSessions();
+        if (sessions === previous) return;
+        previous = sessions;
+        listener();
+      });
+    },
   };
-  const stopNative = startCodexTitleSync({ ...shared, read: readCodexSessionTitles });
-  const stopGeneration = startTitleGeneration({ ...shared, generate: generateSessionTitle });
-  return () => { stopNative(); stopGeneration(); };
+  let owner: string | null | undefined;
+  let stopped = false;
+  let stopRuntime = () => {};
+  const rebind = () => {
+    if (stopped) return;
+    const path = ownedProjectPath();
+    const next = path ? projectPathKey(path) : null;
+    if (next === owner) return;
+    // 先变更归属，防止初始化重排任务时同步触发 store 订阅而重复启动。
+    owner = next;
+    stopRuntime();
+    stopRuntime = () => {};
+    if (!next) return;
+    const stopNative = startCodexTitleSync({ ...shared, read: readCodexSessionTitles });
+    const stopGeneration = startTitleGeneration({ ...shared, generate: generateSessionTitle });
+    stopRuntime = () => { stopNative(); stopGeneration(); };
+  };
+  const unsubscribe = useAppStore.subscribe(rebind);
+  rebind();
+  return () => { stopped = true; unsubscribe(); stopRuntime(); };
 }

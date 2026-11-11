@@ -161,6 +161,7 @@ pub struct GitDiffHunkResult {
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GitConflictDetail {
+    pub revision: String,
     pub file_path: String,
     pub has_conflict: bool,
     pub ours_content: Option<String>,

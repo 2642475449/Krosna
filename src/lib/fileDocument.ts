@@ -30,7 +30,7 @@ export function fileDocumentKey(projectPath: string, path: string) {
   return JSON.stringify([normalize(projectPath), normalize(path)]);
 }
 
-export function createFileDocument(projectPath: string, path: string) {
+export function createFileDocument(projectPath: string, path: string, onActivityComplete?: () => void) {
   const store = createStore<FileDocumentState>(() => ({
     status: null, loading: true, content: "", savedContent: "", savedDiskContent: "", encoding: null,
     imageSrc: null, pdfData: null, error: null, conflict: false, saving: false, autoSavePaused: false,
@@ -74,6 +74,7 @@ export function createFileDocument(projectPath: string, path: string) {
       } finally {
         store.setState({ loading: false });
         loadInFlight = null;
+        onActivityComplete?.();
       }
     })();
     return loadInFlight;
@@ -94,6 +95,7 @@ export function createFileDocument(projectPath: string, path: string) {
         if (version === generation) store.setState({ error: errorText(error) });
       } finally {
         refreshInFlight = null;
+        onActivityComplete?.();
       }
     })();
     return refreshInFlight;
@@ -155,6 +157,7 @@ export function createFileDocument(projectPath: string, path: string) {
       } finally {
         store.setState({ saving: false });
         saveInFlight = null;
+        onActivityComplete?.();
       }
     })();
     return saveInFlight;
@@ -190,6 +193,7 @@ export function createFileDocument(projectPath: string, path: string) {
   return {
     projectPath, path,
     store, load, refresh, save, pauseAutoSave, discardChanges,
+    isBusy: () => Boolean(loadInFlight || saveInFlight || refreshInFlight),
     setContent(content: string) { store.setState({ content }); },
   };
 }
@@ -202,7 +206,40 @@ export function getUnsavedFileDocuments() {
     return state.saving || state.content !== state.savedContent;
   }).map((document) => ({ projectPath: document.projectPath, path: document.path, document }));
 }
-const leases = new Map<string, { count: number; timer?: ReturnType<typeof setTimeout> }>();
+interface FileDocumentLease {
+  count: number;
+  expiresAt?: number;
+  timer?: ReturnType<typeof setTimeout>;
+  unsubscribe?: () => void;
+}
+const leases = new Map<string, FileDocumentLease>();
+const FILE_DOCUMENT_HANDOFF_MS = 30_000;
+
+function stopDocumentCleanup(lease: FileDocumentLease) {
+  clearTimeout(lease.timer);
+  lease.timer = undefined;
+  lease.unsubscribe?.();
+  lease.unsubscribe = undefined;
+}
+
+function reconsiderDocumentCleanup(key: string, lease: FileDocumentLease) {
+  if (leases.get(key) !== lease || lease.count > 0 || lease.expiresAt === undefined) return;
+  const document = documents.get(key);
+  const remaining = lease.expiresAt - Date.now();
+  if (remaining > 0) {
+    if (lease.timer === undefined) lease.timer = setTimeout(() => {
+      lease.timer = undefined;
+      reconsiderDocumentCleanup(key, lease);
+    }, remaining);
+    return;
+  }
+  const state = document?.store.getState();
+  // 忙碌和未保存草稿由状态订阅、异步完成回调再次检查，不轮询，也不丢弃编辑。
+  if (document?.isBusy() || state?.saving || state?.loading || state?.content !== state?.savedContent) return;
+  stopDocumentCleanup(lease);
+  documents.delete(key);
+  leases.delete(key);
+}
 export function findFileDocument(projectPath: string, path: string) {
   return documents.get(fileDocumentKey(projectPath, path));
 }
@@ -210,7 +247,10 @@ export function getFileDocument(projectPath: string, path: string) {
   const key = fileDocumentKey(projectPath, path);
   let document = documents.get(key);
   if (!document) {
-    document = createFileDocument(projectPath, path);
+    document = createFileDocument(projectPath, path, () => {
+      const lease = leases.get(key);
+      if (lease) reconsiderDocumentCleanup(key, lease);
+    });
     documents.set(key, document);
   }
   return document;
@@ -218,19 +258,20 @@ export function getFileDocument(projectPath: string, path: string) {
 
 export function retainFileDocument(projectPath: string, path: string) {
   const key = fileDocumentKey(projectPath, path);
-  const lease = leases.get(key) ?? { count: 0 };
-  clearTimeout(lease.timer);
+  const lease: FileDocumentLease = leases.get(key) ?? { count: 0 };
+  stopDocumentCleanup(lease);
+  lease.expiresAt = undefined;
   lease.count += 1;
   leases.set(key, lease);
+  let released = false;
   return () => {
+    if (released) return;
+    released = true;
     lease.count -= 1;
     if (lease.count) return;
-    // Keep a short handoff window when promoting a sidebar tab to the workspace.
-    lease.timer = setTimeout(() => {
-      const state = documents.get(key)?.store.getState();
-      if (lease.count || state?.saving || state?.loading || state?.content !== state?.savedContent) return;
-      documents.delete(key);
-      leases.delete(key);
-    }, 30_000);
+    // 主区/辅助区交接时保留短暂缓存；过期后仍忙的文档在结束时继续回收。
+    lease.expiresAt = Date.now() + FILE_DOCUMENT_HANDOFF_MS;
+    lease.unsubscribe = documents.get(key)?.store.subscribe(() => reconsiderDocumentCleanup(key, lease));
+    reconsiderDocumentCleanup(key, lease);
   };
 }

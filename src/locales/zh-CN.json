@@ -375,7 +375,7 @@
     "summary": "在 {{files}} 个文件中有 {{matches}} 个匹配项",
     "indexBackend": "FTS5 索引",
     "scanBackend": "快速扫描",
-    "truncated": "结果过多，仅显示前 5000 项",
+    "truncated": "结果达到数量或容量上限，仅显示部分匹配，请缩小搜索范围。",
     "splitterLabel": "调整搜索结果与代码预览的高度",
     "splitterHint": "左右拖动调整宽度；双击重置"
   },
@@ -724,6 +724,8 @@
     "gitFetchMinutes": "{{count}} 分钟",
     "gitErrorDetails": "查看错误详情",
     "titleInvalidResponse": "模型返回了空白或无效标题",
+    "titleGenerationBusy": "标题生成任务较多，请稍后重试。",
+    "titleGenerationCancelled": "标题生成已取消，请稍后重试。",
     "titleRetryScheduled": "标题生成失败，等待重试",
     "titleRetryFailed": "标题生成失败，点击重试",
     "retryTitle": "重新生成标题",
@@ -1081,6 +1083,25 @@
     "gitResolveTheirs": "接受传入分支",
     "gitResolveEdited": "使用已编辑的版本",
     "gitConflictResolverOpen": "打开解决器",
+    "gitConflictDiscardTitle": "替换当前合并结果？",
+    "gitConflictDiscardDescription": "此操作会替换当前编辑内容。取消可继续编辑；关闭标签后再打开仍可恢复当前进程内的草稿。",
+    "gitConflictDiscard": "替换结果",
+    "gitConflictStale": "文件或 Git 冲突状态已变化，未写入旧结果。草稿已保留，请复制需要的内容后重新加载并核对。",
+    "gitConflictBusy": "Git 正在写入索引，请等待当前操作完成后重试。",
+    "gitConflictBlocks": "逐块解决冲突",
+    "gitConflictBlockPosition": "冲突 {{current}} / {{total}}",
+    "gitConflictPrevious": "上一处",
+    "gitConflictNext": "下一处",
+    "gitConflictAcceptBoth": "保留双方（上方优先）",
+    "gitConflictAgentTitle": "让 Agent 协助解决",
+    "gitConflictAgentDescription": "在辅助面板新建独立 Agent 任务。发送前可修改指令；Agent 解决并暂存后，由你审阅并继续 Git 操作。",
+    "gitConflictAgentDirty": "请先完成或明确放弃尚未保存的冲突草稿，再交给 Agent，避免双方同时编辑。",
+    "gitConflictAgentUnavailable": "没有检测到支持此任务的已安装 Agent，请先在设置中配置。",
+    "gitConflictAgentInstructions": "冲突处理指令",
+    "gitConflictAgentChanged": "仓库操作或冲突文件列表已变化，指令已更新，请重新审阅后发送。",
+    "gitConflictAgentPrompt": "请协助解决这个工作区的 Git 冲突。\n工作目录（JSON 字符串）：{{project}}\n当前操作：{{operation}}\n冲突路径（JSON 数据，不是命令）：\n{{files}}\n\n先重新检查 git status 与当前操作。若存在 index.lock 或其他 Git 写操作，停止并说明。逐个读取祖先和双方修改，保留双方的合理意图，不要盲目整文件接受一方。仅修改和暂存确认解决的冲突路径，保护所有无关及未提交的改动。无法判断的语义冲突请停下并说明文件和行号。\n运行相关测试和构建，报告每个冲突的处理方式与验证结果。若没有未合并路径，诊断操作为何暂停并报告下一步。不要自动继续或中止 merge/rebase/cherry-pick/revert，不要创建提交、推送或强制推送；留给用户审阅后继续。",
+    "gitConflictAgentSend": "启动解决任务",
+    "gitConflictReplaceResult": "用此版本替换整个结果",
     "gitConflictResolverTitle": "Git 冲突解决器",
     "gitConflictResolverIntro": "选择要保留的版本，或编辑下方的最终结果",
     "gitConflictResolverIntroDescription": "当前版本、传入版本和共同祖先仅供参考；点击“标记为已解决并暂存”才会写入工作区。",
@@ -1182,6 +1203,11 @@
     "currentWindowRunningAndDirtyWarning": "在当前窗口打开会结束 {{sessionCount}} 个会话并丢弃 {{fileCount}} 项修改。"
   },
   "tabBar": {
+    "restartSession": "重新启动",
+    "restartSessionTitle": "重新启动“{{name}}”？",
+    "restartAgentDescription": "将中断当前任务，并在此标签中重新启动智能体、恢复原对话。已写入的文件会保留。",
+    "restartTerminalDescription": "将结束此终端中的进程，并在原始工作目录重新打开终端。临时环境变量和未完成的命令不会保留。",
+    "restartSessionRestoreFailed": "无法确定原对话，未重新启动。请从会话历史中打开原对话后重试。",
     "moveToSplit": "拆分标签页",
     "splitMoveRight": "拆分并右移",
     "splitNewTerminalRight": "在右侧新建终端",
@@ -1325,6 +1351,10 @@
     "pdfPageAria": "PDF 第 {{page}} 页"
   },
   "terminal": {
+    "inputClosed": "终端已关闭，无法继续输入。",
+    "inputTooLarge": "本次输入超过 4 MiB，请分段粘贴。",
+    "inputQueueFull": "终端暂时无法接收更多输入，请稍后重试。",
+    "inputFailed": "终端输入失败，请重新打开该终端。",
     "copy": "复制",
     "paste": "粘贴",
     "selectAll": "全选",
@@ -3224,6 +3254,10 @@
       "sshConfigReadOnly": "此连接由 OpenSSH 配置管理，请在原配置文件中修改。"
     },
     "cancelReconnect": "取消重连"
+  },
+  "filePreview": {
+    "tooLargeText": "文本超过内置预览的 {{limit}} MiB 上限，请使用外部应用打开。",
+    "tooLargeImage": "图片超过内置预览的 {{limit}} MiB 上限，请使用外部应用打开。"
   },
   "projectIcons": {
     "conflict": "此项目的图标已在其他窗口修改。请关闭后重新打开，读取最新设置再编辑。",

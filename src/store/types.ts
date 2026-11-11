@@ -19,6 +19,21 @@ import type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
 import type { RemoteAgentId, RemoteConnection, RemoteHost, RemoteHostDraft, RemoteInspection, RemoteSession } from "@/lib/remote";
 import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
 
+export interface GitConflictDraft {
+  detail: import("@/types").GitConflictDetail;
+  result: string;
+  initialResult: string;
+}
+
+export interface GitConflictDraftState {
+  drafts: Record<string, GitConflictDraft>;
+  busy: Record<string, boolean>;
+  setOperationBusy: (projectPath: string, busy: boolean) => boolean;
+  setDraft: (key: string, detail: import("@/types").GitConflictDetail) => void;
+  setResult: (key: string, result: string) => void;
+  clearDraft: (key: string) => void;
+}
+
 export type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
 export type { RemoteNotificationProvider } from "@/lib/remoteNotifications";
 

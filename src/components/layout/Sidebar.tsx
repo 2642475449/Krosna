@@ -279,7 +279,9 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         ? [{
             key: "retry-title",
             label: <span title={session.titleGeneration?.error === "invalid-title"
-              ? t("sidebar.titleInvalidResponse") : session.titleGeneration?.error}>
+              ? t("sidebar.titleInvalidResponse") : session.titleGeneration?.error === "title-generation-busy"
+                ? t("sidebar.titleGenerationBusy") : session.titleGeneration?.error === "title-generation-cancelled"
+                  ? t("sidebar.titleGenerationCancelled") : session.titleGeneration?.error}>
               {t(session.titleGeneration?.status === "generating" || session.titleGeneration?.status === "pending"
                 ? "sidebar.titleGenerating" : session.titleGeneration?.status === "failed"
                   ? session.titleGeneration.nextRetryAt ? "sidebar.titleRetryScheduled" : "sidebar.titleRetryFailed"

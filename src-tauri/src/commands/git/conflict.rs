@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use std::path::Path;
 
 use super::types::GitConflictDetail;
@@ -51,6 +52,7 @@ pub fn git_conflict_detail_blocking(
             return Ok(GitConflictDetail {
                 file_path,
                 has_conflict: false,
+                revision: String::new(),
                 ours_content: None,
                 theirs_content: None,
                 base_content: None,
@@ -60,11 +62,12 @@ pub fn git_conflict_detail_blocking(
 
         // Read merged content from worktree (contains conflict markers)
         let worktree_path = resolve_worktree_file_path(&repo, &file_path)?;
-        let merged_content = if worktree_path.exists() {
-            std::fs::read_to_string(&worktree_path).ok()
-        } else {
-            None
-        };
+        let worktree_bytes = read_conflict_worktree(&worktree_path)?;
+        let revision = conflict_revision(&repo, &index, &file_path, worktree_bytes.as_deref());
+        let merged_content = worktree_bytes
+            .as_deref()
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+            .map(str::to_owned);
 
         // Read ours content from index (stage 2)
         let ours_content = read_index_stage(&repo, &file_path, 2)?;
@@ -78,12 +81,48 @@ pub fn git_conflict_detail_blocking(
         Ok(GitConflictDetail {
             file_path,
             has_conflict: true,
+            revision,
             ours_content,
             theirs_content,
             base_content,
             merged_content,
         })
     })
+}
+
+// 原始字节区分文件缺失、空文件及非 UTF-8 文件，索引版本防止旧标签页覆盖新一轮冲突。
+fn read_conflict_worktree(path: &Path) -> Result<Option<Vec<u8>>, String> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("读取冲突文件失败: {}", error)),
+    }
+}
+
+fn conflict_revision(
+    repo: &git2::Repository,
+    index: &git2::Index,
+    file: &str,
+    bytes: Option<&[u8]>,
+) -> String {
+    let mut hash = Sha256::new();
+    hash.update(format!(
+        "{:?}:{:?}",
+        repo.state(),
+        repo.head().ok().and_then(|head| head.target())
+    ));
+    for stage in 1..=3 {
+        if let Some(entry) = index.get_path(Path::new(file), stage) {
+            hash.update(format!("{}:{}:{}:", stage, entry.id, entry.mode));
+            hash.update(&entry.path);
+        }
+        hash.update([0]);
+    }
+    hash.update([u8::from(bytes.is_some())]);
+    if let Some(bytes) = bytes {
+        hash.update(bytes);
+    }
+    format!("{:x}", hash.finalize())
 }
 
 /// Read a specific stage from the index.
@@ -117,7 +156,7 @@ fn contains_unresolved_conflict_markers(content: &str) -> bool {
         let Some(first) = marker.chars().next() else {
             return false;
         };
-        if !matches!(first, '<' | '=' | '>') {
+        if !matches!(first, '<' | '=' | '>' | '|') {
             return false;
         }
         let marker_length = marker
@@ -144,9 +183,16 @@ pub async fn git_resolve_conflict(
     file_path: String,
     resolution: String,
     content: Option<String>,
+    expected_revision: Option<String>,
 ) -> Result<(), String> {
     crate::commands::run_background_task("git_resolve_conflict", move || {
-        git_resolve_conflict_blocking(project_path, file_path, resolution, content)
+        git_resolve_conflict_blocking(
+            project_path,
+            file_path,
+            resolution,
+            content,
+            expected_revision,
+        )
     })
     .await
 }
@@ -156,10 +202,30 @@ pub fn git_resolve_conflict_blocking(
     file_path: String,
     resolution: String,
     content: Option<String>,
+    expected_revision: Option<String>,
 ) -> Result<(), String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
         let repo = open_repo(&project_path)?;
         let worktree_path = resolve_worktree_file_path(&repo, &file_path)?;
+        // 所有修改前在同一仓库写锁内校验快照。外部进程仍可能在校验之后写入，
+        // Git 协调锁只保护本应用；不可声称对任意外部编辑器提供原子 CAS。
+        if repo.path().join("index.lock").exists() {
+            return Err("git-conflict-busy".into());
+        }
+        let index = repo.index().map_err(|error| error.to_string())?;
+        if !(1..=3).any(|stage| index.get_path(Path::new(&file_path), stage).is_some()) {
+            return Err("git-conflict-stale".into());
+        }
+        if content.is_some() && expected_revision.is_none() {
+            return Err("git-conflict-stale".into());
+        }
+        if let Some(expected) = expected_revision.as_deref() {
+            let bytes = read_conflict_worktree(&worktree_path)?;
+            if conflict_revision(&repo, &index, &file_path, bytes.as_deref()) != expected {
+                return Err("git-conflict-stale".into());
+            }
+        }
+        drop(index);
         if matches!(resolution.as_str(), "ours" | "theirs") {
             let index = repo.index().map_err(|e| e.to_string())?;
             let file = Path::new(&file_path);
@@ -460,7 +526,7 @@ pub fn git_abort_merge_blocking(project_path: String) -> Result<(), String> {
 mod tests {
     use super::{
         abort_args_for_state, contains_unresolved_conflict_markers, continue_args_for_state,
-        git_command, git_resolve_conflict_blocking, open_repo,
+        git_command, git_conflict_detail_blocking, git_resolve_conflict_blocking, open_repo,
     };
 
     fn conflict_git(path: &std::path::Path, args: &[&str]) {
@@ -483,6 +549,120 @@ mod tests {
             "let marker = \"<<<<<<< not a Git marker\";\n"
         ));
         assert!(!contains_unresolved_conflict_markers("<<<<<<<six\n"));
+    }
+
+    fn conflicted_repo() -> tempfile::TempDir {
+        let temp = tempfile::TempDir::new().unwrap();
+        let path = temp.path();
+        conflict_git(path, &["init"]);
+        conflict_git(path, &["config", "user.name", "Test"]);
+        conflict_git(path, &["config", "user.email", "test@example.invalid"]);
+        conflict_git(path, &["config", "core.autocrlf", "false"]);
+        std::fs::write(path.join("file.txt"), "base\n").unwrap();
+        conflict_git(path, &["add", "."]);
+        conflict_git(path, &["commit", "-m", "base"]);
+        conflict_git(path, &["branch", "-M", "main"]);
+        conflict_git(path, &["checkout", "-b", "topic"]);
+        std::fs::write(path.join("file.txt"), "topic\n").unwrap();
+        conflict_git(path, &["commit", "-am", "topic"]);
+        conflict_git(path, &["checkout", "main"]);
+        std::fs::write(path.join("file.txt"), "main\n").unwrap();
+        conflict_git(path, &["commit", "-am", "main"]);
+        let result = git_command()
+            .args(["merge", "topic"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        temp
+    }
+
+    #[test]
+    fn stale_resolution_preserves_external_edits_and_index() {
+        let temp = conflicted_repo();
+        let project = temp.path().to_str().unwrap().to_owned();
+        let detail = git_conflict_detail_blocking(project.clone(), "file.txt".into()).unwrap();
+        std::fs::write(temp.path().join("file.txt"), "external changes\n").unwrap();
+        for resolution in ["edited", "ours", "theirs"] {
+            let result = git_resolve_conflict_blocking(
+                project.clone(),
+                "file.txt".into(),
+                resolution.into(),
+                if resolution == "edited" {
+                    Some("old draft\n".into())
+                } else {
+                    None
+                },
+                Some(detail.revision.clone()),
+            );
+            assert_eq!(result.unwrap_err(), "git-conflict-stale");
+        }
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("file.txt")).unwrap(),
+            "external changes\n"
+        );
+        assert!(open_repo(&project)
+            .unwrap()
+            .index()
+            .unwrap()
+            .has_conflicts());
+    }
+
+    #[test]
+    fn current_snapshot_resolves_but_cannot_be_reused_after_staging() {
+        let temp = conflicted_repo();
+        let project = temp.path().to_str().unwrap().to_owned();
+        let detail = git_conflict_detail_blocking(project.clone(), "file.txt".into()).unwrap();
+        git_resolve_conflict_blocking(
+            project.clone(),
+            "file.txt".into(),
+            "edited".into(),
+            Some("combined\n".into()),
+            Some(detail.revision.clone()),
+        )
+        .unwrap();
+        assert!(!open_repo(&project)
+            .unwrap()
+            .index()
+            .unwrap()
+            .has_conflicts());
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("file.txt")).unwrap(),
+            "combined\n"
+        );
+        let result = git_resolve_conflict_blocking(
+            project,
+            "file.txt".into(),
+            "edited".into(),
+            Some("stale\n".into()),
+            Some(detail.revision),
+        );
+        assert_eq!(result.unwrap_err(), "git-conflict-stale");
+    }
+
+    #[test]
+    fn rejects_missing_snapshot_and_diff3_markers_without_writing() {
+        let temp = conflicted_repo();
+        let project = temp.path().to_str().unwrap().to_owned();
+        let detail = git_conflict_detail_blocking(project.clone(), "file.txt".into()).unwrap();
+        let before = std::fs::read(temp.path().join("file.txt")).unwrap();
+        assert!(git_resolve_conflict_blocking(
+            project.clone(),
+            "file.txt".into(),
+            "edited".into(),
+            Some("overwrite\n".into()),
+            None
+        )
+        .is_err());
+        assert!(git_resolve_conflict_blocking(
+            project,
+            "file.txt".into(),
+            "edited".into(),
+            Some("||||||| base\n".into()),
+            Some(detail.revision)
+        )
+        .is_err());
+        assert_eq!(std::fs::read(temp.path().join("file.txt")).unwrap(), before);
     }
 
     #[test]
@@ -521,6 +701,7 @@ mod tests {
                     "file.txt".into(),
                     chosen_side.into(),
                     None,
+                    None,
                 )
                 .unwrap();
                 let repo = open_repo(path.to_str().unwrap()).unwrap();
@@ -530,6 +711,7 @@ mod tests {
                     path.to_str().unwrap().to_string(),
                     "file.txt".into(),
                     chosen_side.into(),
+                    None,
                     None,
                 )
                 .is_err());

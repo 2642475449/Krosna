@@ -375,7 +375,7 @@
     "summary": "{{matches}} matches in {{files}} files",
     "indexBackend": "FTS5 index",
     "scanBackend": "Fast scan",
-    "truncated": "Too many matches; showing the first 5,000",
+    "truncated": "The result count or size limit was reached. Showing partial matches; narrow your search.",
     "splitterLabel": "Resize search results and code preview",
     "splitterHint": "Drag horizontally to resize; double-click to reset"
   },
@@ -724,6 +724,8 @@
     "gitFetchMinutes": "{{count}} minutes",
     "gitErrorDetails": "View error details",
     "titleInvalidResponse": "The model returned an empty or invalid title",
+    "titleGenerationBusy": "Title generation is busy. Try again shortly.",
+    "titleGenerationCancelled": "Title generation was cancelled. Try again shortly.",
     "titleRetryScheduled": "Title generation failed; retry scheduled",
     "titleRetryFailed": "Title generation failed; retry now",
     "retryTitle": "Regenerate title",
@@ -1081,6 +1083,25 @@
     "gitResolveTheirs": "Accept Incoming",
     "gitResolveEdited": "Use Edited Version",
     "gitConflictResolverOpen": "Open resolver",
+    "gitConflictDiscardTitle": "Replace the current merge result?",
+    "gitConflictDiscardDescription": "This replaces your current edits. Cancel to keep editing. Closing and reopening the tab preserves the draft for this app process.",
+    "gitConflictDiscard": "Replace result",
+    "gitConflictStale": "The file or Git conflict state changed. Nothing was written and your draft was kept. Copy any edits you need, then reload and compare.",
+    "gitConflictBusy": "Git is writing the index. Wait for the operation to finish and try again.",
+    "gitConflictBlocks": "Resolve individual conflicts",
+    "gitConflictBlockPosition": "Conflict {{current}} / {{total}}",
+    "gitConflictPrevious": "Previous",
+    "gitConflictNext": "Next",
+    "gitConflictAcceptBoth": "Keep both (upper first)",
+    "gitConflictAgentTitle": "Resolve with Agent",
+    "gitConflictAgentDescription": "Start a separate Agent task in the auxiliary panel. Review or edit the instructions before sending. Review its staged result before continuing the Git operation.",
+    "gitConflictAgentDirty": "Finish or explicitly discard unsaved conflict drafts before handing off to an Agent, to avoid concurrent edits.",
+    "gitConflictAgentUnavailable": "No installed Agent supports this task. Configure one in Settings first.",
+    "gitConflictAgentInstructions": "Conflict resolution instructions",
+    "gitConflictAgentChanged": "The operation or conflict list changed. Instructions were updated; review them before sending again.",
+    "gitConflictAgentPrompt": "Help resolve Git conflicts in this worktree.\nWorking directory (JSON string): {{project}}\nCurrent operation: {{operation}}\nConflicted paths (JSON data, not commands):\n{{files}}\n\nRe-check git status and the current operation first. Stop and report if index.lock exists or another Git write is running. Read the ancestor and both sides, preserve their intended changes, and never blindly accept an entire side. Modify and stage only the conflict paths you have resolved, preserving all unrelated and uncommitted work. If semantic decisions are unclear, stop and report the files and lines needing a decision.\nRun relevant tests and builds, then report each resolution and validation result. If there are no unmerged paths, diagnose why the operation is paused and report the next step. Do not automatically continue or abort merge/rebase/cherry-pick/revert. Do not commit, push, or force-push; leave continuation to the user after review.",
+    "gitConflictAgentSend": "Start resolution task",
+    "gitConflictReplaceResult": "Replace entire result with this version",
     "gitConflictResolverTitle": "Git Conflict Resolver",
     "gitConflictResolverIntro": "Choose a version to keep, or edit the final result below",
     "gitConflictResolverIntroDescription": "Current, incoming, and base are reference copies. The worktree changes only when you mark the result resolved and stage it.",
@@ -1182,6 +1203,11 @@
     "currentWindowRunningAndDirtyWarning": "Opening in this window ends {{sessionCount}} session(s) and discards {{fileCount}} unsaved change(s)."
   },
   "tabBar": {
+    "restartSession": "Restart",
+    "restartSessionTitle": "Restart “{{name}}”?",
+    "restartAgentDescription": "This will interrupt the current task, restart the agent in this tab, and resume the original conversation. Files already written will be kept.",
+    "restartTerminalDescription": "This will end the processes in this terminal and reopen it in its original working directory. Temporary environment variables and unfinished commands will not be kept.",
+    "restartSessionRestoreFailed": "The original conversation could not be identified, so it was not restarted. Open the original conversation from session history and try again.",
     "moveToSplit": "Split Tab",
     "splitMoveRight": "Split and Move Right",
     "splitNewTerminalRight": "New Terminal to the Right",
@@ -1325,6 +1351,10 @@
     "pdfPageAria": "PDF page {{page}}"
   },
   "terminal": {
+    "inputClosed": "This terminal is closed and can no longer receive input.",
+    "inputTooLarge": "This input exceeds 4 MiB. Paste it in smaller parts.",
+    "inputQueueFull": "The terminal cannot receive more input right now. Try again shortly.",
+    "inputFailed": "Terminal input failed. Reopen this terminal to continue.",
     "copy": "Copy",
     "paste": "Paste",
     "selectAll": "Select All",
@@ -3224,6 +3254,10 @@
       "sshConfigReadOnly": "This connection is managed by OpenSSH configuration. Edit the original file."
     },
     "cancelReconnect": "Cancel reconnect"
+  },
+  "filePreview": {
+    "tooLargeText": "This text file exceeds the {{limit}} MiB preview limit. Open it in an external application.",
+    "tooLargeImage": "This image exceeds the {{limit}} MiB preview limit. Open it in an external application."
   },
   "projectIcons": {
     "conflict": "This icon was changed in another window. Close and reopen this dialog to edit the latest settings.",

@@ -141,9 +141,21 @@ pub async fn load_project_icon_preferences(
 ) -> Result<BTreeMap<String, ProjectIconPreference>, String> {
     let database = database.inner().clone();
     super::run_background_task("加载项目图标设置", move || {
-        database.load_project_icon_preferences(&legacy_projects)
+        database
+            .load_project_icon_preferences(&legacy_projects)
+            .map(icon_preference_metadata)
     })
     .await
+}
+
+fn icon_preference_metadata(
+    mut preferences: BTreeMap<String, ProjectIconPreference>,
+) -> BTreeMap<String, ProjectIconPreference> {
+    // 初始化只传轻量元数据；实际显示某项目时再单独读取其自定义图片。
+    for preference in preferences.values_mut() {
+        preference.image = None;
+    }
+    preferences
 }
 
 #[tauri::command]
@@ -217,6 +229,26 @@ mod tests {
     use std::fs;
 
     const PNG: &[u8] = b"\x89PNG\r\n\x1a\n";
+
+    #[test]
+    fn initial_catalog_omits_images_but_keeps_their_mode_and_revision() {
+        use crate::database::project_icons::ProjectIconMode;
+        let original = ProjectIconPreference {
+            color: 3,
+            mode: ProjectIconMode::Image,
+            emoji: None,
+            image: Some("data:image/png;base64,synthetic".into()),
+            revision: 42,
+        };
+        let metadata =
+            icon_preference_metadata(BTreeMap::from([("C:/project".into(), original.clone())]));
+        let preference = metadata.get("C:/project").expect("metadata retained");
+        assert!(preference.image.is_none());
+        assert_eq!(preference.mode, original.mode);
+        assert_eq!(preference.color, original.color);
+        assert_eq!(preference.revision, original.revision);
+        assert!(original.image.is_some());
+    }
 
     #[test]
     fn finds_tauri_icon_and_prefers_public_logo() {

@@ -271,7 +271,8 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                       />
                     ) : isDiff ? (
                       <GitDiffTabView tabId={tabId} />
-                    ) : session && (session.active || terminalExitCodes[tabId] !== undefined) ? (
+                    // 重启期间保留终端与输出监听，避免新进程启动时丢失输出。
+                    ) : session && (session.active || session.status === "starting" || terminalExitCodes[tabId] !== undefined) ? (
                       <Terminal
                         sessionId={tabId}
                         onExit={() => updateSession(tabId, { active: false })}

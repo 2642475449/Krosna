@@ -21,6 +21,7 @@ import MarkdownPreview from "@/components/markdown/MarkdownPreview";
 import { replaceMarkdownSourceBlock } from "@/components/markdown/markdownSourceBlocks";
 import { revealExplorerPath } from "@/lib/explorer";
 import { supportsOfficePreview } from "@/lib/officePreview";
+import { getFilePreviewErrorMessage, isFilePreviewSizeLimitError } from "@/lib/filePreviewError";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
 
@@ -164,6 +165,7 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
   const promoteTab = useAppStore((s) => s.promoteTab);
   const tab = useAppStore((s) => tabId ? s.tabsById[tabId] : undefined);
   const { document, status, loading, content, imageSrc, pdfData, error, conflict, isDirty } = useFileDocument(projectPath, path, isActive);
+  const errorMessage = error ? getFilePreviewErrorMessage(error) : null;
   const kind = status?.kind ?? inferFileKind(path);
   const readOnly = status?.readOnly ?? true;
   const sizeBytes = status?.sizeBytes ?? null;
@@ -396,6 +398,21 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
     );
   }
 
+  if (isFilePreviewSizeLimitError(error)) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {toolbar}
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <Empty description={errorMessage}>
+            <Button onClick={() => { void handleOpenExternalLink(path); }}>
+              {t("common.openInAssociatedApp")}
+            </Button>
+          </Empty>
+        </div>
+      </div>
+    );
+  }
+
   if (kind === "image") {
     return (
       <div className="h-full flex flex-col min-h-0">
@@ -409,7 +426,7 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
               onError={() => setImageLoadFailed(true)}
             />
           ) : (
-            <Empty description={error ?? "图片加载失败"} />
+            <Empty description={errorMessage ?? t("fileTabs.openFailed")} />
           )}
         </div>
       </div>
@@ -424,7 +441,7 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
           <Suspense fallback={<div className="flex h-full items-center justify-center"><Spin /></div>}>
             <PdfPreview
               data={pdfData}
-              loadError={error}
+              loadError={errorMessage}
               onOpenExternal={() => handleOpenExternalLink(path)}
             />
           </Suspense>
@@ -454,7 +471,7 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
           <div className="h-full flex items-center justify-center px-6">
             <Empty
               image={<FileOutlined style={{ fontSize: 48, color: "var(--cs-text-tertiary)" }} />}
-              description={error ?? t("fileTabs.binaryUnsupported")}
+              description={errorMessage ?? t("fileTabs.binaryUnsupported")}
             />
           </div>
         </div>
@@ -473,10 +490,10 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
             <Button size="small" onClick={() => { void document.save(true); }}>{t("fileTabs.overwriteFile")}</Button>
           </div>
         } />
-      ) : error && status ? <Alert type="error" showIcon title={error} /> : null}
+      ) : error && status ? <Alert type="error" showIcon title={errorMessage} /> : null}
       {error && !status ? (
         <div className="h-full flex items-center justify-center px-6">
-          <Empty description={error} />
+          <Empty description={errorMessage} />
         </div>
       ) : markdownFile && markdownViewMode === "preview" ? (
         <div

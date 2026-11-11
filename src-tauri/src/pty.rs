@@ -9,10 +9,10 @@ use crate::powershell_integration::{
     POWERSHELL_COMPLETION_INTEGRATION_SCRIPT,
 };
 use crate::runtime_output::{RuntimeOutputStore, RuntimeTerminalMetadata};
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use portable_pty::{CommandBuilder, PtyPair, PtySize};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -110,6 +110,196 @@ const PTY_OUTPUT_BATCH_DELAY: Duration = Duration::from_millis(5);
 // 读线程与发送线程之间使用有界队列，避免发送繁忙时无限积攒原始输出。
 const PTY_OUTPUT_QUEUE_CHUNKS: usize = 32;
 
+// 在途写入和等待写入共用预算，防止背压期间把输入无限堆积在进程中。
+const PTY_INPUT_MAX_BYTES: usize = 4 * 1024 * 1024;
+const PTY_INPUT_MAX_REQUESTS: usize = 256;
+const PTY_INPUT_CLOSED: &str = "pty-input-closed";
+const PTY_INPUT_TOO_LARGE: &str = "pty-input-too-large";
+const PTY_INPUT_QUEUE_FULL: &str = "pty-input-queue-full";
+
+#[derive(Default)]
+struct PtyInputCompletion {
+    result: Mutex<Option<Result<(), String>>>,
+    ready: Condvar,
+}
+
+impl PtyInputCompletion {
+    fn complete(&self, result: Result<(), String>) {
+        let mut current = self.result.lock();
+        // 关闭优先于随后返回的 OS 写入结果，不能把已取消的写入报告为成功。
+        if current.is_none() {
+            *current = Some(result);
+            self.ready.notify_all();
+        }
+    }
+
+    fn wait(&self) -> Result<(), String> {
+        let mut result = self.result.lock();
+        while result.is_none() {
+            self.ready.wait(&mut result);
+        }
+        result.clone().ok_or_else(|| PTY_INPUT_CLOSED.to_string())?
+    }
+}
+
+struct PtyInputRequest {
+    data: Vec<u8>,
+    completion: Arc<PtyInputCompletion>,
+}
+
+#[derive(Default)]
+struct PtyInputState {
+    pending: VecDeque<PtyInputRequest>,
+    active: Option<Arc<PtyInputCompletion>>,
+    buffered_bytes: usize,
+    closed: Option<String>,
+}
+
+#[derive(Default)]
+struct PtyInputShared {
+    state: Mutex<PtyInputState>,
+    available: Condvar,
+}
+
+impl PtyInputShared {
+    fn cancel(&self, error: String) {
+        let mut state = self.state.lock();
+        if state.closed.is_some() {
+            return;
+        }
+        state.closed = Some(error.clone());
+        if let Some(active) = state.active.as_ref() {
+            active.complete(Err(error.clone()));
+        }
+        let removed_bytes = state
+            .pending
+            .iter()
+            .map(|request| request.data.len())
+            .sum::<usize>();
+        for request in state.pending.drain(..) {
+            request.completion.complete(Err(error.clone()));
+        }
+        state.buffered_bytes = state.buffered_bytes.saturating_sub(removed_bytes);
+        // 在途数据由 worker 独占，取消不等待可能阻塞的 OS 写入或 join。
+        self.available.notify_all();
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct PtyInput {
+    owner: Arc<PtyInputOwner>,
+}
+
+struct PtyInputOwner {
+    shared: Arc<PtyInputShared>,
+}
+
+impl Drop for PtyInputOwner {
+    fn drop(&mut self) {
+        self.shared.cancel(PTY_INPUT_CLOSED.into());
+    }
+}
+
+impl PtyInput {
+    fn new(mut writer: Box<dyn Write + Send>) -> Result<Self, String> {
+        let shared = Arc::new(PtyInputShared::default());
+        let worker = shared.clone();
+        std::thread::Builder::new()
+            .name("pty-input".into())
+            .spawn(move || {
+                let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| loop {
+                    let request = {
+                        let mut state = worker.state.lock();
+                        while state.pending.is_empty() && state.closed.is_none() {
+                            worker.available.wait(&mut state);
+                        }
+                        if state.closed.is_some() {
+                            return;
+                        }
+                        let Some(request) = state.pending.pop_front() else {
+                            continue;
+                        };
+                        state.active = Some(request.completion.clone());
+                        request
+                    };
+                    // 该 writer 只属于此 PTY 实例；不持有全局会话锁或队列锁。
+                    let result = writer
+                        .write_all(&request.data)
+                        .map_err(|error| format!("写入失败: {error}"));
+                    let mut state = worker.state.lock();
+                    state.buffered_bytes = state.buffered_bytes.saturating_sub(request.data.len());
+                    state.active = None;
+                    if let Some(error) = state.closed.as_ref() {
+                        request.completion.complete(Err(error.clone()));
+                        return;
+                    }
+                    request.completion.complete(result.clone());
+                    if let Err(error) = result {
+                        drop(state);
+                        worker.cancel(error);
+                        return;
+                    }
+                }));
+                if run.is_err() {
+                    worker.cancel("pty-input-worker-failed".into());
+                }
+            })
+            .map_err(|error| format!("启动终端输入线程失败: {error}"))?;
+        Ok(Self {
+            owner: Arc::new(PtyInputOwner { shared }),
+        })
+    }
+
+    fn enqueue(&self, data: &[u8]) -> Result<Arc<PtyInputCompletion>, String> {
+        let completion = Arc::new(PtyInputCompletion::default());
+        if data.is_empty() {
+            completion.complete(Ok(()));
+            return Ok(completion);
+        }
+        if data.len() > PTY_INPUT_MAX_BYTES {
+            return Err(PTY_INPUT_TOO_LARGE.into());
+        }
+        let mut state = self.owner.shared.state.lock();
+        if let Some(error) = state.closed.as_ref() {
+            return Err(error.clone());
+        }
+        let count = state.pending.len() + usize::from(state.active.is_some());
+        if count >= PTY_INPUT_MAX_REQUESTS
+            || data.len() > PTY_INPUT_MAX_BYTES.saturating_sub(state.buffered_bytes)
+        {
+            return Err(PTY_INPUT_QUEUE_FULL.into());
+        }
+        state.buffered_bytes += data.len();
+        state.pending.push_back(PtyInputRequest {
+            data: data.to_vec(),
+            completion: completion.clone(),
+        });
+        self.owner.shared.available.notify_one();
+        Ok(completion)
+    }
+
+    #[cfg(test)]
+    fn write(&self, data: &[u8]) -> Result<(), String> {
+        self.enqueue(data)?.wait()
+    }
+
+    pub(crate) async fn write_async(self, data: String) -> Result<(), String> {
+        // 在进入阻塞池之前完成有界入队，不能让池内等待任务绕过字节/请求预算。
+        let completion = self.enqueue(data.as_bytes())?;
+        drop(data);
+        tauri::async_runtime::spawn_blocking(move || {
+            let _input = self;
+            completion.wait()
+        })
+        .await
+        .map_err(|error| format!("终端输入任务失败: {error}"))?
+    }
+
+    fn cancel(&self) {
+        self.owner.shared.cancel(PTY_INPUT_CLOSED.into());
+    }
+}
+
 fn read_pty_output(mut reader: impl Read, mut send: impl FnMut(String) -> bool) {
     let mut buf = [0u8; 8192];
     let mut decoder = PtyOutputDecoder::default();
@@ -188,7 +378,7 @@ struct PtySession {
     instance_id: u64,
     project_path: String,
     agent_id: String,
-    writer: Box<dyn Write + Send>,
+    input: PtyInput,
     child: Box<dyn portable_pty::Child + Send>,
     child_pid: u32,
     exit_code: Option<i32>,
@@ -207,6 +397,7 @@ fn windows_taskkill_tree_args(pid: u32) -> [String; 4] {
 
 impl Drop for PtySession {
     fn drop(&mut self) {
+        self.input.cancel();
         if self.exit_code.is_some() {
             return;
         }
@@ -357,7 +548,7 @@ impl PtyManager {
             cmd.env("KROSNA_INITIAL_PROMPT", prompt);
         }
 
-        let child = pty
+        let mut child = pty
             .slave
             .spawn_command(cmd)
             .map_err(|e| format!("启动会话 shell 失败: {}", e))?;
@@ -380,6 +571,13 @@ impl PtyManager {
             .master
             .try_clone_reader()
             .map_err(|e| format!("获取读取器失败: {}", e))?;
+        let input = match PtyInput::new(writer) {
+            Ok(input) => input,
+            Err(error) => {
+                let _ = child.kill();
+                return Err(error);
+            }
+        };
 
         let agent_id = agent_id.unwrap_or_else(|| "generic-cli".to_string());
         let output_log = self.runtime_output.start(
@@ -394,7 +592,7 @@ impl PtyManager {
             instance_id,
             project_path: path.clone(),
             agent_id,
-            writer,
+            input,
             child,
             child_pid,
             exit_code: None,
@@ -510,14 +708,23 @@ impl PtyManager {
         Ok(opencode_control)
     }
 
-    pub fn write_input(&self, session_id: &str, data: &str) -> Result<(), String> {
-        let mut sessions = self.sessions.lock();
-        let session = sessions.get_mut(session_id).ok_or("会话不存在")?;
-        session
-            .writer
-            .write_all(data.as_bytes())
-            .map_err(|e| format!("写入失败: {}", e))?;
-        Ok(())
+    #[cfg(test)]
+    fn write_input(&self, session_id: &str, data: &str) -> Result<(), String> {
+        let (_, _, input) = self.prepare_input(session_id)?;
+        input.write(data.as_bytes())
+    }
+
+    pub(crate) fn prepare_input(
+        &self,
+        session_id: &str,
+    ) -> Result<(String, String, PtyInput), String> {
+        let sessions = self.sessions.lock();
+        let session = sessions.get(session_id).ok_or("会话不存在")?;
+        Ok((
+            session.project_path.clone(),
+            session.agent_id.clone(),
+            session.input.clone(),
+        ))
     }
 
     pub fn session_context(&self, session_id: &str) -> Option<(String, String)> {
@@ -684,6 +891,7 @@ impl PtyManager {
                 match session.child.try_wait() {
                     Ok(Some(status)) => {
                         session.exit_code = Some(status.exit_code() as i32);
+                        session.input.cancel();
                         Some(session.pty.take())
                     }
                     Ok(None) => None,
@@ -1155,6 +1363,298 @@ fn runtime_agent_label(agent_id: Option<&str>) -> &'static str {
 mod tests {
     use super::*;
 
+    #[derive(Default)]
+    struct InputTestGate {
+        released: Arc<(Mutex<bool>, Condvar)>,
+        bytes: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl InputTestGate {
+        fn release(&self) {
+            let (released, ready) = &*self.released;
+            *released.lock() = true;
+            ready.notify_all();
+        }
+
+        fn input(&self) -> (PtyInput, std::sync::mpsc::Receiver<()>) {
+            let (started, receiver) = std::sync::mpsc::channel();
+            let writer = InputTestWriter {
+                released: self.released.clone(),
+                bytes: self.bytes.clone(),
+                started,
+            };
+            (PtyInput::new(Box::new(writer)).unwrap(), receiver)
+        }
+    }
+
+    impl Drop for InputTestGate {
+        fn drop(&mut self) {
+            self.release();
+        }
+    }
+
+    struct InputTestWriter {
+        released: Arc<(Mutex<bool>, Condvar)>,
+        bytes: Arc<Mutex<Vec<u8>>>,
+        started: std::sync::mpsc::Sender<()>,
+    }
+
+    impl Write for InputTestWriter {
+        fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+            let _ = self.started.send(());
+            let (released, ready) = &*self.released;
+            let mut released = released.lock();
+            while !*released {
+                ready.wait(&mut released);
+            }
+            self.bytes.lock().extend_from_slice(data);
+            Ok(data.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    struct ExitedInputTestChild;
+
+    impl portable_pty::ChildKiller for ExitedInputTestChild {
+        fn kill(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+        fn clone_killer(&self) -> Box<dyn portable_pty::ChildKiller + Send + Sync> {
+            Box::new(Self)
+        }
+    }
+
+    impl portable_pty::Child for ExitedInputTestChild {
+        fn try_wait(&mut self) -> std::io::Result<Option<portable_pty::ExitStatus>> {
+            Ok(Some(portable_pty::ExitStatus::with_exit_code(0)))
+        }
+        fn wait(&mut self) -> std::io::Result<portable_pty::ExitStatus> {
+            Ok(portable_pty::ExitStatus::with_exit_code(0))
+        }
+        fn process_id(&self) -> Option<u32> {
+            None
+        }
+        #[cfg(windows)]
+        fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+            None
+        }
+    }
+
+    fn input_test_session(instance_id: u64, input: PtyInput) -> PtySession {
+        PtySession {
+            instance_id,
+            project_path: "synthetic-input-test".into(),
+            agent_id: "test".into(),
+            input,
+            child: Box::new(ExitedInputTestChild),
+            child_pid: 0,
+            exit_code: Some(0),
+            pty: None,
+        }
+    }
+
+    fn input_test_manager() -> Arc<PtyManager> {
+        PtyManager::new(Arc::new(HookIngestConfig {
+            port: 0,
+            token: "test".into(),
+        }))
+    }
+
+    #[test]
+    fn input_worker_preserves_fifo_and_utf8_without_global_lock() {
+        let gate = InputTestGate::default();
+        let (input, started) = gate.input();
+        let first = input.enqueue(b"one").unwrap();
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        let second = input.enqueue("中文\r\n".as_bytes()).unwrap();
+        let third = input.enqueue(b"three").unwrap();
+        gate.release();
+        for completion in [first, second, third] {
+            completion.wait().unwrap();
+        }
+        assert_eq!(&*gate.bytes.lock(), "one中文\r\nthree".as_bytes());
+    }
+
+    #[test]
+    fn input_budget_includes_the_blocked_write_and_rejects_whole_requests() {
+        let gate = InputTestGate::default();
+        let (input, started) = gate.input();
+        let first = input.enqueue(&vec![b'a'; PTY_INPUT_MAX_BYTES - 1]).unwrap();
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        let second = input.enqueue(b"b").unwrap();
+        assert_eq!(
+            input.enqueue(b"c").err().as_deref(),
+            Some(PTY_INPUT_QUEUE_FULL)
+        );
+        assert_eq!(
+            input
+                .enqueue(&vec![b'x'; PTY_INPUT_MAX_BYTES + 1])
+                .err()
+                .as_deref(),
+            Some(PTY_INPUT_TOO_LARGE)
+        );
+        assert_eq!(
+            input.owner.shared.state.lock().buffered_bytes,
+            PTY_INPUT_MAX_BYTES
+        );
+        gate.release();
+        first.wait().unwrap();
+        second.wait().unwrap();
+        let bytes = gate.bytes.lock();
+        assert_eq!(bytes.len(), PTY_INPUT_MAX_BYTES);
+        assert_eq!(bytes.last(), Some(&b'b'));
+    }
+
+    #[test]
+    fn input_request_limit_cannot_be_bypassed_with_small_or_empty_writes() {
+        let gate = InputTestGate::default();
+        let (input, started) = gate.input();
+        let first = input.enqueue(b"a").unwrap();
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        for _ in 1..PTY_INPUT_MAX_REQUESTS {
+            input.enqueue(b"b").unwrap();
+        }
+        for _ in 0..10 {
+            input.write(b"").unwrap();
+        }
+        assert_eq!(
+            input.enqueue(b"c").err().as_deref(),
+            Some(PTY_INPUT_QUEUE_FULL)
+        );
+        input.cancel();
+        assert_eq!(first.wait().unwrap_err(), PTY_INPUT_CLOSED);
+    }
+
+    #[test]
+    fn blocked_input_does_not_block_other_sessions_or_close_acknowledgement() {
+        let gate = InputTestGate::default();
+        let (blocked, started) = gate.input();
+        let healthy_gate = InputTestGate::default();
+        healthy_gate.release();
+        let (healthy, _) = healthy_gate.input();
+        let manager = input_test_manager();
+        manager
+            .sessions
+            .lock()
+            .insert("blocked".into(), input_test_session(1, blocked.clone()));
+        manager
+            .sessions
+            .lock()
+            .insert("healthy".into(), input_test_session(2, healthy));
+        let writer_manager = manager.clone();
+        let (done, result) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(writer_manager.write_input("blocked", "a"));
+        });
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        let queued = blocked.enqueue(b"must-not-write").unwrap();
+        let controls_manager = manager.clone();
+        let (controls_done, controls_result) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            assert_eq!(
+                controls_manager.session_context("healthy").unwrap().1,
+                "test"
+            );
+            assert!(controls_manager.resize("healthy", 24, 80, Some(2)).is_ok());
+            controls_manager
+                .write_input("healthy", "healthy-input")
+                .unwrap();
+            controls_manager.close("blocked");
+            let _ = controls_done.send(());
+        });
+        controls_result
+            .recv_timeout(Duration::from_secs(2))
+            .expect("another session or close waited for the blocked writer");
+        assert_eq!(
+            result
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap()
+                .unwrap_err(),
+            PTY_INPUT_CLOSED
+        );
+        assert_eq!(queued.wait().unwrap_err(), PTY_INPUT_CLOSED);
+        assert!(manager.session_context("blocked").is_none());
+        gate.release();
+        assert_eq!(&*healthy_gate.bytes.lock(), b"healthy-input");
+        manager.close("healthy");
+    }
+
+    #[test]
+    fn prepared_old_input_cannot_write_into_a_replacement_session() {
+        let old_gate = InputTestGate::default();
+        old_gate.release();
+        let (old, _) = old_gate.input();
+        let new_gate = InputTestGate::default();
+        new_gate.release();
+        let (new, _) = new_gate.input();
+        let manager = input_test_manager();
+        manager
+            .sessions
+            .lock()
+            .insert("same-id".into(), input_test_session(1, old));
+        let (_, _, prepared) = manager.prepare_input("same-id").unwrap();
+        manager.close("same-id");
+        manager
+            .sessions
+            .lock()
+            .insert("same-id".into(), input_test_session(2, new));
+        assert_eq!(prepared.write(b"stale").unwrap_err(), PTY_INPUT_CLOSED);
+        manager.write_input("same-id", "new-input").unwrap();
+        assert!(old_gate.bytes.lock().is_empty());
+        assert_eq!(&*new_gate.bytes.lock(), b"new-input");
+        manager.close("same-id");
+    }
+
+    #[test]
+    fn input_worker_io_failure_reaches_the_caller_and_rejects_later_input() {
+        struct FailingWriter;
+        impl Write for FailingWriter {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "synthetic failure",
+                ))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let input = PtyInput::new(Box::new(FailingWriter)).unwrap();
+        let error = input.write(b"a").unwrap_err();
+        assert!(error.contains("synthetic failure"));
+        assert_eq!(input.write(b"b").unwrap_err(), error);
+    }
+
+    #[tokio::test]
+    async fn async_input_reserves_budget_before_waiting_and_close_wakes_its_ack() {
+        let gate = InputTestGate::default();
+        let (input, started) = gate.input();
+        let writing = tokio::spawn(input.clone().write_async("a".repeat(PTY_INPUT_MAX_BYTES)));
+        tokio::task::spawn_blocking(move || started.recv_timeout(Duration::from_secs(2)))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            input.clone().write_async("b".into()).await.unwrap_err(),
+            PTY_INPUT_QUEUE_FULL
+        );
+        input.cancel();
+        let error = tokio::time::timeout(Duration::from_secs(2), writing)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(error, PTY_INPUT_CLOSED);
+        assert_eq!(
+            input.clone().write_async("old".into()).await.unwrap_err(),
+            PTY_INPUT_CLOSED
+        );
+    }
+
     #[test]
     fn pty_size_readback_tracks_applied_grid_and_rejects_stale_instances() {
         let pair = create_test_pty_pair();
@@ -1176,7 +1676,7 @@ mod tests {
                 instance_id: 7,
                 project_path: String::new(),
                 agent_id: "test".to_string(),
-                writer,
+                input: PtyInput::new(writer).unwrap(),
                 child,
                 child_pid,
                 exit_code: None,
@@ -1227,7 +1727,7 @@ mod tests {
                 instance_id: 1,
                 project_path: String::new(),
                 agent_id: "cmd".to_string(),
-                writer,
+                input: PtyInput::new(writer).unwrap(),
                 child,
                 child_pid,
                 exit_code: None,

@@ -1952,12 +1952,14 @@ export async function gitResolveConflict(
   filePath: string,
   resolution: "ours" | "theirs" | "edited",
   content?: string,
+  expectedRevision?: string,
 ): Promise<void> {
   await invoke("git_resolve_conflict", {
     projectPath,
     filePath,
     resolution,
     content: content ?? null,
+    expectedRevision: expectedRevision ?? null,
   });
 }
 

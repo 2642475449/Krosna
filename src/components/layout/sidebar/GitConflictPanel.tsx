@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useGitConflictDraftStore } from "@/store/slices/gitConflictDraft";
+import { useGitRemoteStore } from "@/store/slices/gitRemote";
+import { GitConflictAgentAction } from "@/components/GitConflictAgentAction";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, message, Tooltip } from "antd";
 import {
   CheckOutlined,
@@ -52,10 +55,15 @@ export function GitConflictPanel({
   onOpenConflictResolver,
 }: GitConflictPanelProps) {
   const { t } = useTranslation();
+  const conflictBusy = useGitConflictDraftStore(state => Boolean(state.busy[projectPath]));
+  const remoteBusy = useGitRemoteStore(state => Boolean(state.busy[projectPath]));
+  const beginOperation = useCallback(() => !useGitRemoteStore.getState().busy[projectPath]
+    && useGitConflictDraftStore.getState().setOperationBusy(projectPath, true), [projectPath]);
   const [operating, setOperating] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [conflictDetail, setConflictDetail] =
     useState<GitConflictDetail | null>(null);
+  const detailRequest = useRef(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const operationLabel = t(getGitOperationLabelKey(operationState));
   const abortLabel = t("sidebar.gitAbortOperation", { operation: operationLabel });
@@ -68,25 +76,28 @@ export function GitConflictPanel({
   // 加载冲突详情
   const loadConflictDetail = useCallback(
     async (filePath: string) => {
+      const request = ++detailRequest.current;
+      setConflictDetail(null);
       setLoadingDetail(true);
       try {
         const detail = await gitConflictDetail(projectPath, filePath);
-        setConflictDetail(detail);
+        if (request === detailRequest.current) setConflictDetail(detail);
       } catch (e) {
         message.error(
-          `加载冲突详情失败: ${e instanceof Error ? e.message : String(e)}`
+          `${t("sidebar.gitConflictResolverLoadFailed")}: ${e instanceof Error ? e.message : String(e)}`
         );
       } finally {
-        setLoadingDetail(false);
+        if (request === detailRequest.current) setLoadingDetail(false);
       }
     },
-    [projectPath]
+    [projectPath, t]
   );
 
   useEffect(() => {
     if (selectedFile) {
       void loadConflictDetail(selectedFile);
     } else {
+      detailRequest.current++;
       setConflictDetail(null);
     }
   }, [selectedFile, loadConflictDetail]);
@@ -94,25 +105,30 @@ export function GitConflictPanel({
   // 解决冲突
   const handleResolve = useCallback(
     async (filePath: string, resolution: "ours" | "theirs" | "edited") => {
+      if (operating || !conflictDetail || conflictDetail.filePath !== filePath) return;
+      if (!beginOperation()) return;
       setOperating(filePath);
       try {
-        await gitResolveConflict(projectPath, filePath, resolution);
+        await gitResolveConflict(projectPath, filePath, resolution, undefined, conflictDetail.revision);
         message.success(t("sidebar.gitResolveSuccess"));
         setSelectedFile(null);
         await onConflictResolved();
       } catch (e) {
-        message.error(
-          `${t("sidebar.gitResolveFailed")}: ${e instanceof Error ? e.message : String(e)}`
-        );
+        const error = e instanceof Error ? e.message : String(e);
+        message.error(error.includes("git-conflict-stale") ? t("sidebar.gitConflictStale")
+          : error.includes("git-conflict-busy") ? t("sidebar.gitConflictBusy") : `${t("sidebar.gitResolveFailed")}: ${error}`);
+        if (error.includes("git-conflict-stale")) await loadConflictDetail(filePath);
       } finally {
+        useGitConflictDraftStore.getState().setOperationBusy(projectPath, false);
         setOperating(null);
       }
     },
-    [projectPath, onConflictResolved, t]
+    [projectPath, onConflictResolved, t, conflictDetail, operating, beginOperation, loadConflictDetail]
   );
 
   // 根据仓库当前状态中止合并、变基、拣选或还原操作。
   const handleAbortOperation = useCallback(async () => {
+    if (!beginOperation()) return;
     setOperating("abort");
     try {
       await gitAbortOperation(projectPath);
@@ -124,11 +140,13 @@ export function GitConflictPanel({
         `${t("sidebar.gitAbortOperationFailed", { operation: operationLabel })}: ${e instanceof Error ? e.message : String(e)}`
       );
     } finally {
+      useGitConflictDraftStore.getState().setOperationBusy(projectPath, false);
       setOperating(null);
     }
-  }, [operationLabel, projectPath, onConflictResolved, t]);
+  }, [operationLabel, projectPath, onConflictResolved, t, beginOperation]);
 
   const handleContinueOperation = useCallback(async () => {
+    if (!beginOperation()) return;
     setOperating("continue");
     try {
       await gitContinueOperation(projectPath);
@@ -140,9 +158,10 @@ export function GitConflictPanel({
         `${t("sidebar.gitContinueOperationFailed", { operation: operationLabel })}: ${e instanceof Error ? e.message : String(e)}`
       );
     } finally {
+      useGitConflictDraftStore.getState().setOperationBusy(projectPath, false);
       setOperating(null);
     }
-  }, [operationLabel, projectPath, onConflictResolved, t]);
+  }, [operationLabel, projectPath, onConflictResolved, t, beginOperation]);
 
   if (!hasConflicts && !isGitOperationInProgress(operationState)) {
     return null;
@@ -200,7 +219,7 @@ export function GitConflictPanel({
               type="text"
               size="small"
               loading={operating === "continue"}
-              disabled={!continueSupported || hasConflicts}
+              disabled={!continueSupported || hasConflicts || operating !== null || conflictBusy || remoteBusy}
               style={{
                 fontSize: 11,
                 color: "var(--cs-success)",
@@ -220,7 +239,7 @@ export function GitConflictPanel({
               type="text"
               size="small"
               loading={operating === "abort"}
-              disabled={!abortSupported}
+              disabled={!abortSupported || operating !== null || conflictBusy || remoteBusy}
               style={{
                 fontSize: 11,
                 color: "var(--cs-error)",
@@ -235,6 +254,7 @@ export function GitConflictPanel({
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2 px-2 py-1.5"><GitConflictAgentAction projectPath={projectPath} disabled={operating !== null || conflictBusy || remoteBusy} /></div>
       {/* 冲突文件列表 */}
       {hasConflicts && <div className="px-1 py-1">
         {conflictFiles.map((file) => {
@@ -282,12 +302,13 @@ export function GitConflictPanel({
                       style={{ color: "var(--cs-text-tertiary)" }}
                     >
                       <LoadingOutlined style={{ fontSize: 11 }} />
-                      <span className="text-[11px]">加载中...</span>
+                      <span className="text-[11px]">{t("common.loading")}</span>
                     </div>
-                  ) : (
+                  ) : conflictDetail?.filePath === file.path ? (
                     <>
                       <div className="flex gap-1">
                         <Button
+                          disabled={conflictBusy || remoteBusy}
                           size="small"
                           style={{
                             flex: 1,
@@ -302,6 +323,7 @@ export function GitConflictPanel({
                           {t(conflictResolutionLabels.ours)}
                         </Button>
                         <Button
+                          disabled={conflictBusy || remoteBusy}
                           size="small"
                           style={{
                             flex: 1,
@@ -319,6 +341,7 @@ export function GitConflictPanel({
                         </Button>
                       </div>
                       <Button
+                        disabled={conflictBusy || remoteBusy}
                         size="small"
                         block
                         style={{
@@ -355,7 +378,7 @@ export function GitConflictPanel({
                         </div>
                       )}
                     </>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>

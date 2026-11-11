@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import FileTabView from "./FileTabView";
 import AuxiliaryFileView from "./AuxiliaryFileView";
-import { inspectProjectFile, readProjectFile, writeProjectFile } from "@/lib/api";
+import { inspectProjectFile, readProjectFile, readProjectImage, writeProjectFile, openInAssociatedApplication } from "@/lib/api";
 
 const app = vi.hoisted(() => ({
   activeTheme: () => "light-glass" as const, registerFileDocument: vi.fn(), setTabDirty: vi.fn(), setSidebarCollapsed: vi.fn(),
@@ -13,6 +13,7 @@ const app = vi.hoisted(() => ({
 }));
 vi.mock("@/store", () => ({ useAppStore: (select: (state: typeof app) => unknown) => select(app) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@/i18n", () => ({ default: { t: (key: string, options: { limit: number }) => `${key}:${options.limit}` } }));
 vi.mock("@/lib/api", () => ({
   inspectProjectFile: vi.fn(), readProjectFile: vi.fn(), writeProjectFile: vi.fn(),
   readProjectImage: vi.fn(), readProjectPdf: vi.fn(async () => new Uint8Array([1, 2, 3])),
@@ -33,7 +34,9 @@ vi.mock("@/components/documents/OfficeFilePreview", () => ({ default: () => crea
 vi.mock("antd", () => {
   const Pass = ({ children }: { children?: ReactNode }) => children;
   return {
-    Alert: () => null, Dropdown: Pass, Tag: Pass, Empty: () => null, Spin: () => null,
+    Alert: () => null, Dropdown: Pass, Tag: Pass, Spin: () => null,
+    Empty: ({ description, children }: { description?: ReactNode; children?: ReactNode }) =>
+      createElement("section", { "data-empty": true }, description, children),
     message: { success: vi.fn(), error: vi.fn() },
     Button: ({ children, onClick, title, "aria-label": label }: {
       children?: ReactNode; onClick?: () => void; title?: string; "aria-label"?: string;
@@ -72,9 +75,9 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function auxiliary(path: string, onPin = vi.fn(), onPromoteToWorkspace = vi.fn()) {
+function auxiliary(path: string, onPromoteToWorkspace = vi.fn()) {
   return createElement(AuxiliaryFileView, {
-    projectPath, path, preview: true, active: true, onPin, onPromoteToWorkspace,
+    projectPath, path, active: true, onPromoteToWorkspace,
   });
 }
 
@@ -100,8 +103,9 @@ it("shares one disk read and live edits between the workspace and auxiliary host
 it("places the auxiliary breadcrumb, mode control and actions in one horizontal toolbar", async () => {
   const path = `${projectPath}/report.md`;
   await act(async () => root.render(auxiliary(path)));
-  const pin = host.querySelector('[aria-label="auxiliaryDock.pin"]')!;
-  const toolbar = pin.parentElement!;
+  const promote = host.querySelector('[aria-label="auxiliaryDock.openInWorkspace"]')!;
+  const toolbar = promote.parentElement!;
+  expect(toolbar.querySelector('[aria-label="auxiliaryDock.pin"]')).toBeNull();
   expect(toolbar.querySelector("[data-mode-control]")?.parentElement).toBe(toolbar);
   expect(toolbar.querySelector(`[title="${path}"]`)).not.toBeNull();
   expect(toolbar.querySelector('[aria-label="auxiliaryDock.openInWorkspace"]')?.parentElement).toBe(toolbar);
@@ -111,19 +115,16 @@ it("places the auxiliary breadcrumb, mode control and actions in one horizontal 
   expect(host.querySelectorAll("[data-mode-control]")).toHaveLength(1);
 });
 
-it.each(["pdf", "docx", "bin"])("retains auxiliary pin and workspace promotion for %s files", async (extension) => {
+it.each(["pdf", "docx", "bin"])("retains workspace promotion without the auxiliary pin button for %s files", async (extension) => {
   const path = `${projectPath}/document.${extension}`;
-  const onPin = vi.fn();
   const onPromote = vi.fn();
-  await act(async () => root.render(auxiliary(path, onPin, onPromote)));
+  await act(async () => root.render(auxiliary(path, onPromote)));
   const pin = host.querySelector<HTMLButtonElement>('[aria-label="auxiliaryDock.pin"]');
   const promote = host.querySelector<HTMLButtonElement>('[aria-label="auxiliaryDock.openInWorkspace"]');
-  expect(pin).not.toBeNull();
+  expect(pin).toBeNull();
   expect(promote).not.toBeNull();
   expect(host.querySelector('[aria-label="common.openInAssociatedApp"]')).not.toBeNull();
-  await act(async () => pin!.click());
   await act(async () => promote!.click());
-  expect(onPin).toHaveBeenCalledOnce();
   expect(app.openFileTab).not.toHaveBeenCalled();
   expect(onPromote).toHaveBeenCalledOnce();
   if (extension === "pdf") expect(host.querySelector("[data-pdf]")).not.toBeNull();
@@ -134,4 +135,27 @@ it.each(["pdf", "docx", "bin"])("retains auxiliary pin and workspace promotion f
 it("uses the terminal theme background for the markdown reading surface", async () => {
   await act(async () => root.render(auxiliary(`${projectPath}/background.md`)));
   expect(host.querySelector<HTMLElement>(".app-markdown-preview-shell")!.style.background).toBe("#ffffff");
+});
+
+it.each(["text", "image"] as const)("shows a localized %s preview limit and offers external opening", async (kind) => {
+  const path = `${projectPath}/oversized.${kind === "text" ? "md" : "png"}`;
+  vi.mocked(inspectProjectFile).mockResolvedValueOnce({
+    path, name: "oversized", kind, readOnly: true, modifiedAtMs: 100,
+    sizeBytes: 20 * 1024 * 1024, largeFile: true,
+  });
+  const code = `FILE_PREVIEW_TOO_LARGE:${kind}:16`;
+  if (kind === "text") vi.mocked(readProjectFile).mockRejectedValueOnce(code);
+  else vi.mocked(readProjectImage).mockRejectedValueOnce(code);
+
+  await act(async () => root.render(auxiliary(path)));
+
+  const empty = host.querySelector("[data-empty]")!;
+  expect(empty.textContent).toContain(`filePreview.tooLarge${kind === "text" ? "Text" : "Image"}:16`);
+  expect(host.textContent).not.toContain("FILE_PREVIEW_TOO_LARGE");
+  expect(host.querySelector("[data-editor]")).toBeNull();
+  expect(host.querySelector("[data-preview]")).toBeNull();
+  const external = empty.querySelector<HTMLButtonElement>("button")!;
+  expect(external.textContent).toBe("common.openInAssociatedApp");
+  await act(async () => external.click());
+  expect(openInAssociatedApplication).toHaveBeenCalledWith(path);
 });

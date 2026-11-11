@@ -3490,3 +3490,11 @@ html, body, #root {
   outline: 2px solid var(--cs-primary);
   outline-offset: -2px;
 }
+
+/* 当前选中的冲突块与导航动作使用同一范围。 */
+.app-git-conflict-current {
+  background: var(--cs-bg-hover);
+}
+.app-git-conflict-gutter {
+  border-left: 2px solid var(--cs-warning);
+}

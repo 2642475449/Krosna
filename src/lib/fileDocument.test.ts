@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFileDocument, getFileDocument, retainFileDocument, getUnsavedFileDocuments } from "./fileDocument";
+import { createFileDocument, findFileDocument, getFileDocument, retainFileDocument, getUnsavedFileDocuments } from "./fileDocument";
 import { inspectProjectFile, readProjectFile, writeProjectFile } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
@@ -296,6 +296,116 @@ describe("shared file documents", () => {
       retainFileDocument(project, "D:/repo/dirty.md")();
       await vi.advanceTimersByTimeAsync(30_000);
       expect(getFileDocument(project, "D:/repo/dirty.md")).toBe(dirty);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("releases a closed document after a load outlasts its handoff deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const filePath = "D:/repo/slow-load-cleanup.md";
+      const document = getFileDocument(project, filePath);
+      const release = retainFileDocument(project, filePath);
+      const read = deferred<Awaited<ReturnType<typeof readProjectFile>>>();
+      vi.mocked(readProjectFile).mockReturnValueOnce(read.promise);
+      const loading = document.load();
+      await Promise.resolve();
+      release();
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(findFileDocument(project, filePath)).toBe(document);
+
+      read.resolve({ ...status(), content: "late content", encoding: "utf-8" });
+      await loading;
+
+      expect(document.store.getState()).toMatchObject({ loading: false, content: "late content" });
+      expect(findFileDocument(project, filePath)).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("releases a closed document after a slow save completes without losing its edit", async () => {
+    vi.useFakeTimers();
+    try {
+      const filePath = "D:/repo/slow-save-cleanup.md";
+      const document = getFileDocument(project, filePath);
+      await document.load();
+      const release = retainFileDocument(project, filePath);
+      const write = deferred<void>();
+      vi.mocked(writeProjectFile).mockImplementationOnce(async (_project, _path, content) => {
+        await write.promise;
+        disk = content;
+        mtime += 1;
+      });
+      document.setContent("save before eviction");
+      const saving = document.save();
+      release();
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(findFileDocument(project, filePath)).toBe(document);
+
+      write.resolve();
+      expect(await saving).toBe(true);
+      expect(disk).toBe("save before eviction");
+      expect(findFileDocument(project, filePath)).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("waits for an in-flight background refresh even when loading is false", async () => {
+    vi.useFakeTimers();
+    try {
+      const filePath = "D:/repo/slow-refresh-cleanup.md";
+      const document = getFileDocument(project, filePath);
+      await document.load();
+      const release = retainFileDocument(project, filePath);
+      const check = deferred<Awaited<ReturnType<typeof inspectProjectFile>>>();
+      vi.mocked(inspectProjectFile).mockReturnValueOnce(check.promise);
+      const refreshing = document.refresh();
+      release();
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(document.store.getState().loading).toBe(false);
+      expect(findFileDocument(project, filePath)).toBe(document);
+
+      check.resolve(status());
+      await refreshing;
+      expect(findFileDocument(project, filePath)).toBeUndefined();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps closed drafts until they become clean and then reclaims them without polling", async () => {
+    vi.useFakeTimers();
+    try {
+      const filePath = "D:/repo/draft-cleanup.md";
+      const document = getFileDocument(project, filePath);
+      await document.load();
+      const release = retainFileDocument(project, filePath);
+      document.setContent("unsaved draft");
+      release();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(findFileDocument(project, filePath)).toBe(document);
+      expect(vi.getTimerCount()).toBe(0);
+
+      document.setContent(document.store.getState().savedContent);
+      expect(findFileDocument(project, filePath)).toBeUndefined();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("cancels cleanup on a host handoff and makes each release idempotent", async () => {
+    vi.useFakeTimers();
+    try {
+      const filePath = "D:/repo/reopened-cleanup.md";
+      const document = getFileDocument(project, filePath);
+      await document.load();
+      const releaseFirst = retainFileDocument(project, filePath);
+      releaseFirst();
+      await vi.advanceTimersByTimeAsync(29_999);
+      const releaseSecond = retainFileDocument(project, filePath);
+      releaseFirst();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(findFileDocument(project, filePath)).toBe(document);
+
+      releaseSecond();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(findFileDocument(project, filePath)).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
 });

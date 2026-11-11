@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { App as AntdApp, ConfigProvider, theme } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
 import jaJP from "antd/locale/ja_JP";
-import AppLayout from "./components/layout/AppLayout";
-import VoiceOverlayWindow from "./components/VoiceOverlayWindow";
-import { BackgroundCloseController } from "./components/BackgroundCloseController";
-import VoiceWorkerWindow from "./components/VoiceWorkerWindow";
 import {
   applyPersistentSettingsToStore,
   useAppStore,
@@ -30,13 +26,8 @@ import {
   initializePersistentSettings,
   savePersistentSettings,
   setExplorerContextMenuEnabled,
-  onQuickCommandsUpdated,
 } from "./lib/api";
 import i18n, { toI18nLanguage } from "./i18n";
-import { useRecentProjectSync } from "./hooks/useRecentProjectSync";
-import { startClipboardSessionSync } from "./store/slices/clipboardCache";
-import { startSessionTitleGeneration } from "./store/slices/sessionTitleSlice";
-import { loadProjectQuickCommands } from "./store/slices/projectQuickCommands";
 import { message, TOAST_NOTIFICATION_CONFIG, ToastHost } from "./lib/toast";
 import {
   ANTD_COMPONENT_OVERRIDES,
@@ -45,6 +36,10 @@ import {
 } from "./lib/antdTheme";
 
 const STARTUP_THEME_STORAGE_KEY = "krosna-startup-theme";
+// 按窗口用途加载内容，隐藏语音窗口不解析、执行主工作区模块。
+const MainWindow = lazy(() => import("./components/MainWindow"));
+const VoiceOverlayWindow = lazy(() => import("./components/VoiceOverlayWindow"));
+const VoiceWorkerWindow = lazy(() => import("./components/VoiceWorkerWindow"));
 const PERSISTENT_NETWORK_PROXY_UPDATED_EVENT = "persistent-network-proxy-updated";
 const PERSISTENT_EXPLORER_CONTEXT_MENU_UPDATED_EVENT =
   "persistent-explorer-context-menu-updated";
@@ -92,7 +87,6 @@ function App() {
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
   const themeCategory = useAppStore((s) => s.themeCategory);
-  const currentProject = useAppStore((s) => s.currentProject);
   const lastProject = useAppStore((s) => s.lastProject);
   const language = useAppStore((s) => s.language);
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
@@ -144,7 +138,6 @@ function App() {
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
-  const projectPath = currentProject?.path ?? null;
   const [persistentSettingsReady, setPersistentSettingsReady] = useState(false);
 
   useEffect(() => {
@@ -275,48 +268,6 @@ function App() {
       voiceTriggerVisible,
     ]
   );
-
-  useRecentProjectSync(!isVoiceOverlayWindow && !isVoiceWorkerWindow);
-
-  useEffect(() => {
-    if (!persistentSettingsReady || isVoiceOverlayWindow || isVoiceWorkerWindow) return;
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    const reload = () => {
-      if (disposed) return;
-      void loadProjectQuickCommands(projectPath).catch((error) => {
-        if (!disposed) message.error({
-          key: "quick-commands-load-error",
-          content: i18n.t("quickCommands.loadFailed", { error: String(error) }),
-        });
-      });
-    };
-    // 先订阅，再读取，避免漏掉其他窗口在初始化期间的修改。
-    void onQuickCommandsUpdated(reload).then((stop) => {
-      if (disposed) { stop(); return; }
-      unlisten = stop;
-      reload();
-    }).catch((error) => {
-      console.error("Failed to subscribe to quick commands:", error);
-      reload();
-    });
-    window.addEventListener("focus", reload);
-    return () => {
-      disposed = true;
-      unlisten?.();
-      window.removeEventListener("focus", reload);
-    };
-  }, [projectPath, persistentSettingsReady, isVoiceOverlayWindow, isVoiceWorkerWindow]);
-
-  useEffect(() => {
-    if (isVoiceOverlayWindow || isVoiceWorkerWindow || !persistentSettingsReady) return;
-    return startSessionTitleGeneration();
-  }, [isVoiceOverlayWindow, isVoiceWorkerWindow, persistentSettingsReady]);
-
-  useEffect(() => {
-    if (isVoiceOverlayWindow || isVoiceWorkerWindow || !persistentSettingsReady) return;
-    return startClipboardSessionSync();
-  }, [isVoiceOverlayWindow, isVoiceWorkerWindow, persistentSettingsReady]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", currentTheme);
@@ -592,13 +543,15 @@ function App() {
     >
       <AntdApp notification={TOAST_NOTIFICATION_CONFIG}>
         <ToastHost />
-        {isVoiceOverlayWindow ? (
-          <VoiceOverlayWindow />
-        ) : isVoiceWorkerWindow ? (
-          <VoiceWorkerWindow />
-        ) : (
-          <><BackgroundCloseController /><AppLayout /></>
-        )}
+        <Suspense fallback={null}>
+          {isVoiceOverlayWindow ? (
+            <VoiceOverlayWindow />
+          ) : isVoiceWorkerWindow ? (
+            <VoiceWorkerWindow />
+          ) : (
+            <MainWindow persistentSettingsReady={persistentSettingsReady} />
+          )}
+        </Suspense>
       </AntdApp>
     </ConfigProvider>
   );

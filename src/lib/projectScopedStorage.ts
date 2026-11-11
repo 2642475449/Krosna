@@ -52,17 +52,62 @@ export function mergeProjectScopedPersistedState(
 }
 
 export function createProjectScopedStorage(storage: StateStorage): StateStorage {
+  // 只记住本窗口成功提交的意图，不缓存共享存储内容。其他窗口修改或删除后，
+  // 无变化的旧快照不能重新写回；真正变化时仍读取底层最新值再合并。
+  const successfulInputs = new Map<string, string>();
+  let pending: Promise<void> | undefined;
+
+  function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+    return value !== null && (typeof value === "object" || typeof value === "function") &&
+      "then" in value && typeof value.then === "function";
+  }
+
+  function serialize<T>(operation: () => T | PromiseLike<T>): T | Promise<T> {
+    const result = pending ? pending.then(operation) : operation();
+    if (!isPromiseLike(result)) return result;
+    const promise = Promise.resolve(result);
+    // 仅队列尾部恢复失败状态，原始 Promise 的错误仍返回调用方。
+    const settled = promise.then(() => {}, () => {});
+    pending = settled;
+    void settled.then(() => {
+      if (pending === settled) pending = undefined;
+    });
+    return promise;
+  }
+
   return {
-    getItem: (name) => storage.getItem(name),
-    removeItem: (name) => storage.removeItem(name),
-    setItem: (name, value) => {
-      const current = storage.getItem(name);
-      if (current instanceof Promise) {
-        return current.then((resolved) => storage.setItem(
-          name, mergeProjectScopedPersistedState(resolved, value),
-        ));
+    getItem: (name) => serialize(() => storage.getItem(name)),
+    removeItem: (name) => serialize(() => {
+      const result = storage.removeItem(name);
+      if (isPromiseLike(result)) {
+        return Promise.resolve(result).then((removed) => {
+          successfulInputs.delete(name);
+          return removed;
+        });
       }
-      return storage.setItem(name, mergeProjectScopedPersistedState(current, value));
-    },
+      successfulInputs.delete(name);
+      return result;
+    }),
+    setItem: (name, value) => serialize(() => {
+      if (successfulInputs.get(name) === value) return;
+      const write = (current: string | null) => {
+        const merged = mergeProjectScopedPersistedState(current, value);
+        if (merged === current) {
+          successfulInputs.set(name, value);
+          return;
+        }
+        const result = storage.setItem(name, merged);
+        if (isPromiseLike(result)) {
+          return Promise.resolve(result).then((saved) => {
+            successfulInputs.set(name, value);
+            return saved;
+          });
+        }
+        successfulInputs.set(name, value);
+        return result;
+      };
+      const current = storage.getItem(name);
+      return isPromiseLike(current) ? Promise.resolve(current).then(write) : write(current);
+    }),
   };
 }

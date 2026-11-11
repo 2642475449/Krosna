@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button, Tooltip, Dropdown, message } from "antd";
+import { Button, Tooltip, Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
 import {
   CloseOutlined,
@@ -14,6 +14,7 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
   ShopOutlined,
+  ReloadOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
@@ -24,6 +25,8 @@ import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
+import { isSessionTurnRunning } from "@/lib/sessions";
+import { useResumeSession } from "@/hooks/useResumeSession";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
@@ -116,6 +119,7 @@ interface TabBarProps {
 }
 
 function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
+  const resumeSession = useResumeSession();
   const closeKeys = useShortcutStore((s) => getAppShortcut(s.overrides, "closeTab"));
   const { t } = useTranslation();
   const openTabs = tabIds;
@@ -135,6 +139,9 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [availableAgents, setAvailableAgents] = useState<AgentCliInfo[] | null>(null);
   const [loadingAgents, setLoadingAgents] = useState(false);
+  // 这里只保存浮层目标，进程状态始终读取 store，避免确认期间使用过期会话。
+  const [pendingRestartId, setPendingRestartId] = useState<string | null>(null);
+  const [openTabMenuId, setOpenTabMenuId] = useState<string | null>(null);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const tabListRef = useRef<HTMLDivElement | null>(null);
   const pressStateRef = useRef<PressState | null>(null);
@@ -156,6 +163,38 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions]
   );
+  const pendingRestart = pendingRestartId ? sessionById.get(pendingRestartId) : undefined;
+
+  useEffect(() => {
+    if (pendingRestartId && (!pendingRestart || pendingRestart.path !== currentProject?.path ||
+      !tabIds.includes(pendingRestartId) || pendingRestart.status === "starting")) {
+      setPendingRestartId(null);
+    }
+  }, [currentProject?.path, pendingRestart, pendingRestartId, tabIds]);
+
+  function requestRestart(sessionId: string) {
+    setOpenTabMenuId(null);
+    const state = useAppStore.getState();
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (!session || session.status === "starting" || session.path !== state.currentProject?.path ||
+      !state.panesById[paneId]?.tabIds.includes(sessionId)) return;
+    if (isSessionTurnRunning(session) || (session.active && (session.agentId === "cmd" || session.agentId === "powershell"))) {
+      setPendingRestartId(sessionId);
+    } else {
+      void resumeSession(sessionId, { restart: true });
+    }
+  }
+
+  function confirmRestart() {
+    const sessionId = pendingRestartId;
+    setPendingRestartId(null);
+    if (!sessionId) return;
+    const state = useAppStore.getState();
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (!session || session.status === "starting" || session.path !== state.currentProject?.path ||
+      !state.panesById[paneId]?.tabIds.includes(sessionId)) return;
+    void resumeSession(sessionId, { restart: true });
+  }
 
   useEffect(() => {
     const list = tabListRef.current;
@@ -360,6 +399,15 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
 
 
     const items: MenuProps["items"] = [
+      ...(session ? [
+        {
+          key: "restart",
+          label: t("tabBar.restartSession"),
+          icon: <ReloadOutlined />,
+          disabled: session.status === "starting",
+        },
+        { type: "divider" as const },
+      ] : []),
       {
         key: "close",
         label: (
@@ -444,6 +492,9 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     }
 
     switch (key) {
+      case "restart":
+        if (session) requestRestart(session.id);
+        return;
       case "close":
         void requestCloseTabs([tabId]);
         return;
@@ -592,9 +643,14 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
         return (
           <Dropdown
             key={tabId}
+            open={openTabMenuId === tabId}
+            onOpenChange={(open) => setOpenTabMenuId(open ? tabId : null)}
             menu={{
               items: getTabMenuItems(tabId),
-              onClick: ({ key }) => handleTabMenuClick(key, tabId),
+              onClick: ({ key }) => {
+                setOpenTabMenuId(null);
+                handleTabMenuClick(key, tabId);
+              },
             }}
             trigger={["contextMenu"]}
           >
@@ -783,6 +839,18 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           </Dropdown>
         </div>
       )}
+      <Modal
+        open={Boolean(pendingRestart)}
+        title={t("tabBar.restartSessionTitle", { name: pendingRestart?.name })}
+        okText={t("tabBar.restartSession")}
+        cancelText={t("common.cancel")}
+        okButtonProps={{ danger: true }}
+        onOk={confirmRestart}
+        onCancel={() => setPendingRestartId(null)}
+      >
+        <p>{t(pendingRestart && (pendingRestart.agentId === "cmd" || pendingRestart.agentId === "powershell")
+          ? "tabBar.restartTerminalDescription" : "tabBar.restartAgentDescription")}</p>
+      </Modal>
       {dragPreview && typeof document !== "undefined" &&
         createPortal(
           <div

@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse } from "@babel/parser";
 import { expect, it } from "vitest";
 
-it("keeps editor and syntax-highlighting runtimes out of the static startup graph", () => {
+function readStaticGraph(entry: string) {
   const root = path.resolve(import.meta.dirname, "../..");
   const config = JSON.parse(readFileSync(path.join(root, "tsconfig.json"), "utf8")) as {
     compilerOptions: { paths: Record<string, string[]> };
@@ -47,8 +47,31 @@ it("keeps editor and syntax-highlighting runtimes out of the static startup grap
   }
 
   // 检查整个入口依赖链，防止其他常驻弹窗再次绕过编辑器的 lazy 边界。
-  visit(path.join(root, "src/main.tsx"));
-  expect([...eagerPackages].filter((name) =>
-    /^(monaco-editor|@monaco-editor\/react|@shikijs\/|@wooorm\/starry-night)/.test(name),
+  visit(path.join(root, entry));
+  return { eagerPackages, files: [...visited].map((file) => path.relative(root, file).replaceAll("\\", "/")) };
+}
+
+it.each(["src/main.tsx", "src/components/MainWindow.tsx"])(
+  "keeps editor and syntax-highlighting runtimes out of the static graph of %s", (entry) => {
+    const { eagerPackages } = readStaticGraph(entry);
+    expect([...eagerPackages].filter((name) =>
+      /^(monaco-editor|@monaco-editor\/react|@shikijs\/|@wooorm\/starry-night)/.test(name),
+    )).toEqual([]);
+  },
+);
+
+it.each([
+  "src/main.tsx",
+  "src/components/VoiceOverlayWindow.tsx",
+  "src/components/VoiceWorkerWindow.tsx",
+])("keeps workspace UI and project services out of the voice startup graph of %s", (entry) => {
+  const { files } = readStaticGraph(entry);
+  expect(files.filter((file) =>
+    file === "src/components/MainWindow.tsx"
+    || file === "src/components/BackgroundCloseController.tsx"
+    || file.startsWith("src/components/layout/")
+    || file === "src/hooks/useRecentProjectSync.ts"
+    || file === "src/store/slices/sessionTitleSlice.ts"
+    || file === "src/store/slices/clipboardCache.ts",
   )).toEqual([]);
 });

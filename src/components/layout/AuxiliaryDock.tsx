@@ -533,9 +533,7 @@ export default function AuxiliaryDock({
                     <AuxiliaryFileView
                       projectPath={tab.projectPath}
                       path={tab.resourceId}
-                      preview={tab.preview}
                       active={active}
-                      onPin={() => pinTab(tab.id)}
                       onPromoteToWorkspace={() => finishMove(tab)}
                     />
                   </Suspense>

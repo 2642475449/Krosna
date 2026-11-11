@@ -11,9 +11,9 @@ use ignore::{WalkBuilder, WalkState};
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, State};
@@ -22,6 +22,67 @@ const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const MAX_MATCHES: usize = 5_000;
 const BATCH_SIZE: usize = 200;
 const CONTEXT_LINE_COUNT: usize = 3;
+const MAX_MATCH_PREVIEW_BYTES: usize = 2 * 1024;
+const MAX_CONTEXT_PREVIEW_BYTES: usize = 512;
+const MAX_FILE_RESULT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_SEARCH_RESULT_BYTES: usize = 8 * 1024 * 1024;
+
+// 所有 worker 共用累计预算，避免每个 worker 都先构建一份超大结果再检查。
+struct SearchResultBudget {
+    used: AtomicUsize,
+    limit: usize,
+}
+
+impl SearchResultBudget {
+    fn new(limit: usize) -> Self {
+        Self {
+            used: AtomicUsize::new(0),
+            limit,
+        }
+    }
+
+    fn for_search(limit: usize, search_id: &str) -> Self {
+        let controls = serialized_result_bytes(&search_id)
+            .saturating_add(32)
+            .saturating_mul(MAX_MATCHES.div_ceil(BATCH_SIZE));
+        Self::new(limit.saturating_sub(controls))
+    }
+
+    fn reserve(&self, bytes: usize) -> bool {
+        self.used
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(bytes).filter(|next| *next <= self.limit)
+            })
+            .is_ok()
+    }
+
+    fn release(&self, bytes: usize) {
+        self.used.fetch_sub(bytes, Ordering::AcqRel);
+    }
+}
+
+#[derive(Default)]
+struct JsonByteCounter(usize);
+
+impl io::Write for JsonByteCounter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0 = self.0.saturating_add(bytes.len());
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn serialized_result_bytes(value: &impl Serialize) -> usize {
+    let mut counter = JsonByteCounter::default();
+    if serde_json::to_writer(&mut counter, value).is_ok() {
+        counter.0
+    } else {
+        usize::MAX
+    }
+}
 
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".git",
@@ -68,6 +129,8 @@ pub struct ContentSearchMatch {
     pub end_line_number: usize,
     pub end_column: usize,
     pub line_text: String,
+    pub line_text_start_column: usize,
+    pub line_text_truncated: bool,
     pub context_before: Vec<String>,
     pub context_after: Vec<String>,
 }
@@ -113,6 +176,7 @@ struct SearchContext {
 #[derive(Default)]
 struct FileSearchOutcome {
     matches: Vec<ContentSearchMatch>,
+    result_bytes: usize,
     skipped: bool,
     cancelled: bool,
     truncated: bool,
@@ -307,10 +371,15 @@ fn run_content_search_core_with_plan(
         build_search_walker_builder(&scope_path, &context.root_path, &context.filters)
             .build_parallel()
     };
+    let result_budget = Arc::new(SearchResultBudget::for_search(
+        MAX_SEARCH_RESULT_BYTES,
+        &context.request.search_id,
+    ));
     let shared_context = Arc::new(Mutex::new(context));
     let stop_requested = Arc::new(AtomicBool::new(false));
     walker.run(|| {
         let shared_context = shared_context.clone();
+        let result_budget = result_budget.clone();
         let stop_requested = stop_requested.clone();
         let (
             root_path,
@@ -402,6 +471,7 @@ fn run_content_search_core_with_plan(
                 &relative_path,
                 &matcher,
                 MAX_MATCHES,
+                result_budget.clone(),
                 || search_is_cancelled(&cancelled_searches, &search_id),
             );
             let should_stop = match shared_context.lock() {
@@ -621,11 +691,65 @@ fn build_file_searcher() -> Searcher {
     builder.build()
 }
 
+fn bounded_prefix(text: &str, limit: usize) -> &str {
+    let mut end = text.len().min(limit);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+fn match_preview(text: &str, start: usize) -> (&str, usize, bool) {
+    let mut preview_start = start.saturating_sub(256);
+    while !text.is_char_boundary(preview_start) {
+        preview_start += 1;
+    }
+    let preview = bounded_prefix(&text[preview_start..], MAX_MATCH_PREVIEW_BYTES);
+    (
+        preview,
+        preview_start,
+        preview_start + preview.len() < text.len(),
+    )
+}
+
+struct TextPosition {
+    offset: usize,
+    line_start: usize,
+    line_number: usize,
+    column: usize,
+}
+
+impl TextPosition {
+    fn new(line_number: usize) -> Self {
+        Self {
+            offset: 0,
+            line_start: 0,
+            line_number,
+            column: 1,
+        }
+    }
+
+    // 匹配有序且不重叠，逐段推进坐标，避免长行每次命中都重扫整个前缀。
+    fn advance(&mut self, text: &str, end: usize) {
+        for (index, character) in text[self.offset..end].char_indices() {
+            if character == '\n' {
+                self.line_number += 1;
+                self.column = 1;
+                self.line_start = self.offset + index + 1;
+            } else {
+                self.column += character.len_utf16();
+            }
+        }
+        self.offset = end;
+    }
+}
+
 struct ContentSearchSink<'a, F> {
-    path: &'a Path,
+    path_text: String,
     relative_path: &'a str,
     matcher: &'a Regex,
     match_limit: usize,
+    result_budget: Arc<SearchResultBudget>,
     is_cancelled: F,
     outcome: FileSearchOutcome,
     recent_lines: VecDeque<(usize, String)>,
@@ -642,13 +766,15 @@ where
         relative_path: &'a str,
         matcher: &'a Regex,
         match_limit: usize,
+        result_budget: Arc<SearchResultBudget>,
         is_cancelled: F,
     ) -> Self {
         Self {
-            path,
+            path_text: display_path(path),
             relative_path,
             matcher,
             match_limit,
+            result_budget,
             is_cancelled,
             outcome: FileSearchOutcome::default(),
             recent_lines: VecDeque::with_capacity(CONTEXT_LINE_COUNT),
@@ -666,6 +792,24 @@ where
         }
     }
 
+    fn reserve(&mut self, bytes: usize) -> bool {
+        if self.outcome.result_bytes.saturating_add(bytes) > MAX_FILE_RESULT_BYTES
+            || !self.result_budget.reserve(bytes)
+        {
+            self.outcome.truncated = true;
+            return false;
+        }
+        self.outcome.result_bytes += bytes;
+        true
+    }
+
+    fn clear_matches(&mut self) {
+        self.result_budget.release(self.outcome.result_bytes);
+        self.outcome.result_bytes = 0;
+        self.outcome.matches.clear();
+        self.pending_after.clear();
+    }
+
     fn decode_line(&mut self, bytes: &[u8]) -> Option<String> {
         let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
         let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
@@ -673,7 +817,7 @@ where
             Ok(line) => Some(line.to_string()),
             Err(_) => {
                 self.outcome.skipped = true;
-                self.outcome.matches.clear();
+                self.clear_matches();
                 None
             }
         }
@@ -696,10 +840,21 @@ where
                 break;
             }
         }
-        for &match_index in &self.pending_after {
+        let preview = bounded_prefix(line, MAX_CONTEXT_PREVIEW_BYTES);
+        let pending: Vec<usize> = self.pending_after.iter().copied().collect();
+        for match_index in pending {
+            let can_add = {
+                let found = &self.outcome.matches[match_index];
+                line_number > found.line_number && found.context_after.len() < CONTEXT_LINE_COUNT
+            };
+            let extra_bytes = (preview.len() + std::mem::size_of::<String>())
+                .max(serialized_result_bytes(&preview).saturating_add(1));
+            if can_add && !self.reserve(extra_bytes) {
+                return None;
+            }
             let found = &mut self.outcome.matches[match_index];
-            if line_number > found.line_number && found.context_after.len() < CONTEXT_LINE_COUNT {
-                found.context_after.push(line.to_string());
+            if can_add {
+                found.context_after.push(preview.to_string());
             }
         }
 
@@ -718,8 +873,11 @@ where
         )
     }
 
-    fn finish_line(&mut self, line_number: usize, line: String) {
-        self.recent_lines.push_back((line_number, line));
+    fn finish_line(&mut self, line_number: usize, line: &str) {
+        self.recent_lines.push_back((
+            line_number,
+            bounded_prefix(line, MAX_CONTEXT_PREVIEW_BYTES).to_string(),
+        ));
         while self.recent_lines.len() > CONTEXT_LINE_COUNT {
             self.recent_lines.pop_front();
         }
@@ -727,52 +885,96 @@ where
 
     fn process_context_line(&mut self, line_number: usize, line: String) {
         if self.prepare_line(line_number, &line).is_some() {
-            self.finish_line(line_number, line);
+            self.finish_line(line_number, &line);
         }
     }
 
     fn process_matching_line(&mut self, line_number: usize, line: String) -> bool {
         let Some(context_before) = self.prepare_line(line_number, &line) else {
-            return true;
+            return !self.outcome.truncated;
         };
-        let line_text = line
-            .split('\n')
-            .next()
-            .unwrap_or_default()
-            .trim_end_matches('\r');
-        for found in self.matcher.find_iter(&line) {
+        let mut position = TextPosition::new(line_number);
+        let mut display_line_start = usize::MAX;
+        let mut display_line_end = 0;
+        let matcher = self.matcher;
+        for found in matcher.find_iter(&line) {
+            if self.cancelled() {
+                return false;
+            }
             if self.outcome.matches.len() >= self.match_limit {
                 self.outcome.truncated = true;
                 return false;
             }
-            let end_offset = usize::min(found.end(), line_text.len());
-            let matched_text = &line[..found.end()];
-            let end_line_number =
-                line_number + matched_text.bytes().filter(|byte| *byte == b'\n').count();
-            let end_line_text = matched_text
-                .rsplit('\n')
-                .next()
-                .unwrap_or_default()
-                .trim_end_matches('\r');
+            position.advance(&line, found.start());
+            let start_line_number = position.line_number;
+            let start_column = position.column;
+            if display_line_start != position.line_start {
+                display_line_start = position.line_start;
+                display_line_end = line[display_line_start..]
+                    .find('\n')
+                    .map(|offset| display_line_start + offset)
+                    .unwrap_or(line.len());
+                if display_line_end > display_line_start
+                    && line.as_bytes()[display_line_end - 1] == b'\r'
+                {
+                    display_line_end -= 1;
+                }
+            }
+            let line_text = &line[display_line_start..display_line_end];
+            let local_start = found
+                .start()
+                .saturating_sub(display_line_start)
+                .min(line_text.len());
+            let (preview, preview_start, preview_truncated) = match_preview(line_text, local_start);
+            let line_text_start_column =
+                start_column - line_text[preview_start..local_start].encode_utf16().count();
+            position.advance(&line, found.end());
+            let end_line_number = position.line_number;
+            let end_column = if end_line_number == start_line_number {
+                let end = found
+                    .end()
+                    .saturating_sub(display_line_start)
+                    .min(line_text.len());
+                start_column + line_text[local_start..end].encode_utf16().count()
+            } else {
+                position.column
+            };
+            let bytes = std::mem::size_of::<ContentSearchMatch>()
+                + self.path_text.len()
+                + self.relative_path.len()
+                + preview.len()
+                + context_before
+                    .iter()
+                    .map(|text| text.len() + std::mem::size_of::<String>())
+                    .sum::<usize>()
+                + CONTEXT_LINE_COUNT * std::mem::size_of::<String>();
             let match_index = self.outcome.matches.len();
-            self.outcome.matches.push(ContentSearchMatch {
-                path: display_path(self.path),
+            let result = ContentSearchMatch {
+                path: self.path_text.clone(),
                 relative_path: self.relative_path.to_string(),
-                line_number,
-                start_column: utf16_column(line_text, found.start()),
+                line_number: start_line_number,
+                start_column,
                 end_line_number,
-                end_column: if end_line_number == line_number {
-                    utf16_column(line_text, end_offset)
-                } else {
-                    utf16_column(end_line_text, end_line_text.len())
-                },
-                line_text: line_text.to_string(),
+                end_column,
+                line_text: preview.to_string(),
+                line_text_start_column,
+                line_text_truncated: preview_truncated,
                 context_before: context_before.clone(),
                 context_after: Vec::with_capacity(CONTEXT_LINE_COUNT),
-            });
+            };
+            if !self.reserve(bytes.max(serialized_result_bytes(&result).saturating_add(1))) {
+                return false;
+            }
+            self.outcome.matches.push(result);
             self.pending_after.push_back(match_index);
         }
-        self.finish_line(line_number, line_text.to_string());
+        self.finish_line(
+            line_number,
+            line.split('\n')
+                .next()
+                .unwrap_or_default()
+                .trim_end_matches('\r'),
+        );
         true
     }
 }
@@ -819,7 +1021,7 @@ where
             return Ok(false);
         };
         self.process_context_line(line_number, line);
-        Ok(true)
+        Ok(!self.outcome.truncated)
     }
 
     fn binary_data(
@@ -828,7 +1030,7 @@ where
         _binary_byte_offset: u64,
     ) -> Result<bool, Self::Error> {
         self.outcome.skipped = true;
-        self.outcome.matches.clear();
+        self.clear_matches();
         Ok(false)
     }
 }
@@ -840,22 +1042,46 @@ fn search_file<F>(
     relative_path: &str,
     matcher: &Regex,
     match_limit: usize,
+    result_budget: Arc<SearchResultBudget>,
     is_cancelled: F,
 ) -> FileSearchOutcome
 where
     F: FnMut() -> bool,
 {
-    let mut sink = ContentSearchSink::new(path, relative_path, matcher, match_limit, is_cancelled);
+    let mut sink = ContentSearchSink::new(
+        path,
+        relative_path,
+        matcher,
+        match_limit,
+        result_budget,
+        is_cancelled,
+    );
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => {
+            sink.outcome.skipped = true;
+            return sink.outcome;
+        }
+    };
+    // 外层 metadata 之后文件仍可能增长，读取也必须有硬限。
+    let mut reader = file.take(MAX_FILE_BYTES + 1);
     if searcher
-        .search_path(searcher_matcher, path, &mut sink)
+        .search_reader(searcher_matcher, &mut reader, &mut sink)
         .is_err()
     {
         sink.outcome.skipped = true;
-        sink.outcome.matches.clear();
+        sink.clear_matches();
+    }
+    if reader.limit() == 0 {
+        // 裁剪输入会制造假的 EOF，不能保留由 $/多行正则得到的伪完整匹配。
+        sink.outcome.skipped = true;
+        sink.outcome.truncated = true;
+        sink.clear_matches();
     }
     sink.outcome
 }
 
+#[cfg(test)]
 fn utf16_column(line: &str, byte_offset: usize) -> usize {
     line[..byte_offset].encode_utf16().count() + 1
 }
@@ -948,6 +1174,7 @@ mod tests {
             relative_path,
             &matcher,
             match_limit,
+            Arc::new(SearchResultBudget::new(MAX_SEARCH_RESULT_BYTES)),
             is_cancelled,
         )
     }
@@ -1421,7 +1648,7 @@ mod tests {
     #[test]
     fn parallel_search_core_enforces_the_global_match_limit() {
         let fixture = tempdir().unwrap();
-        let repeated = "needle ".repeat(3_000);
+        let repeated = "needle\n".repeat(3_000);
         fs::write(fixture.path().join("first.txt"), &repeated).unwrap();
         fs::write(fixture.path().join("second.txt"), &repeated).unwrap();
         let mut search_request = request("needle");
@@ -1437,6 +1664,220 @@ mod tests {
         assert_eq!(summary.match_count, MAX_MATCHES);
         assert!(summary.truncated);
         assert!(!summary.cancelled);
+    }
+
+    #[test]
+    fn long_line_results_stop_at_the_file_byte_budget() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("long.txt");
+        fs::write(&file, "a".repeat(32 * 1024)).unwrap();
+        let outcome = search_test_file(&file, "long.txt", &request("a"), MAX_MATCHES, || false);
+        assert!(outcome.truncated);
+        assert!(!outcome.matches.is_empty());
+        assert!(outcome.matches.len() < 1_000);
+        assert!(outcome.result_bytes <= MAX_FILE_RESULT_BYTES);
+        assert!(outcome
+            .matches
+            .iter()
+            .all(|found| found.line_text.len() <= MAX_MATCH_PREVIEW_BYTES));
+    }
+
+    #[test]
+    fn long_unicode_snippets_keep_original_utf16_navigation_columns() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("unicode-long.txt");
+        let text = format!("{}needle{}", "😀中".repeat(2_000), "后".repeat(2_000));
+        fs::write(&file, text).unwrap();
+        let outcome = search_test_file(
+            &file,
+            "unicode-long.txt",
+            &request("needle"),
+            MAX_MATCHES,
+            || false,
+        );
+        let found = &outcome.matches[0];
+        assert_eq!(found.start_column, 6_001);
+        assert_eq!(found.end_column, 6_007);
+        assert!(found.line_text_start_column > 1);
+        assert!(found.line_text_truncated);
+        assert!(found.line_text.len() <= MAX_MATCH_PREVIEW_BYTES);
+        let units: Vec<u16> = found.line_text.encode_utf16().collect();
+        let start = found.start_column - found.line_text_start_column;
+        let end = found.end_column - found.line_text_start_column;
+        assert_eq!(String::from_utf16(&units[start..end]).unwrap(), "needle");
+    }
+
+    #[test]
+    fn long_context_lines_are_bounded_before_cloning_for_each_match() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("context.txt");
+        fs::write(
+            &file,
+            format!(
+                "{}\nneedle needle\n{}\n",
+                "😀".repeat(10_000),
+                "中".repeat(10_000)
+            ),
+        )
+        .unwrap();
+        let outcome = search_test_file(
+            &file,
+            "context.txt",
+            &request("needle"),
+            MAX_MATCHES,
+            || false,
+        );
+        assert_eq!(outcome.matches.len(), 2);
+        for found in outcome.matches {
+            assert!(found
+                .context_before
+                .iter()
+                .chain(&found.context_after)
+                .all(|line| line.len() <= MAX_CONTEXT_PREVIEW_BYTES));
+        }
+    }
+
+    #[test]
+    fn shared_byte_budget_cannot_be_exceeded_by_parallel_reservations() {
+        let budget = Arc::new(SearchResultBudget::new(1_024));
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                let budget = budget.clone();
+                scope.spawn(move || while budget.reserve(7) {});
+            }
+        });
+        assert_eq!(budget.used.load(Ordering::Acquire), 1_022);
+        assert!(!budget.reserve(3));
+    }
+
+    #[test]
+    fn escaped_payloads_and_later_context_stay_within_the_serialized_budget() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("escaped.txt");
+        let context = "\u{1}\\\"中😀".repeat(200);
+        let text = format!("needle\\\"中😀\n{context}\n{context}\n{context}\n").repeat(100);
+        fs::write(&file, text).unwrap();
+        let search_request = request("needle");
+        let matcher =
+            build_exact_matcher(&search_request, &build_pattern(&search_request).unwrap()).unwrap();
+        let searcher_matcher =
+            build_searcher_matcher(&search_request, &build_pattern(&search_request).unwrap())
+                .unwrap();
+        let limit = 64 * 1024;
+        let search_id = "quoted\\\"\u{1}😀-search";
+        let budget = Arc::new(SearchResultBudget::for_search(limit, search_id));
+        let outcome = search_file(
+            &mut build_file_searcher(),
+            &searcher_matcher,
+            &file,
+            "quoted\\\"\u{1}😀-file.txt",
+            &matcher,
+            MAX_MATCHES,
+            budget.clone(),
+            || false,
+        );
+        assert!(outcome.truncated);
+        assert!(!outcome.matches.is_empty());
+        assert!(outcome.result_bytes <= budget.limit);
+        let payload = ContentSearchBatch {
+            search_id: search_id.into(),
+            matches: outcome.matches,
+        };
+        assert_eq!(
+            serialized_result_bytes(&payload),
+            serde_json::to_vec(&payload).unwrap().len()
+        );
+        assert!(serialized_result_bytes(&payload) <= limit);
+    }
+
+    #[test]
+    fn multiple_file_sinks_share_one_cumulative_byte_budget() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("many.txt");
+        fs::write(&file, "needle\n".repeat(100)).unwrap();
+        let search_request = request("needle");
+        let pattern = build_pattern(&search_request).unwrap();
+        let matcher = build_exact_matcher(&search_request, &pattern).unwrap();
+        let searcher_matcher = build_searcher_matcher(&search_request, &pattern).unwrap();
+        let budget = Arc::new(SearchResultBudget::new(32 * 1024));
+        let mut total = 0;
+        let mut truncated = false;
+        for _ in 0..3 {
+            let outcome = search_file(
+                &mut build_file_searcher(),
+                &searcher_matcher,
+                &file,
+                "many.txt",
+                &matcher,
+                MAX_MATCHES,
+                budget.clone(),
+                || false,
+            );
+            total += outcome.result_bytes;
+            truncated |= outcome.truncated;
+        }
+        assert!(truncated);
+        assert!(total <= budget.limit);
+        assert_eq!(total, budget.used.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn multiline_matches_keep_each_start_and_end_line() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("blocks.txt");
+        fs::write(&file, "pre\nneedle\nz\nbetween\nneedle\nz\npost\n").unwrap();
+        let outcome = search_test_file(
+            &file,
+            "blocks.txt",
+            &request("needle\nz"),
+            MAX_MATCHES,
+            || false,
+        );
+        assert_eq!(outcome.matches.len(), 2);
+        assert_eq!(
+            (
+                outcome.matches[0].line_number,
+                outcome.matches[0].end_line_number
+            ),
+            (2, 3)
+        );
+        assert_eq!(
+            (
+                outcome.matches[1].line_number,
+                outcome.matches[1].end_line_number
+            ),
+            (5, 6)
+        );
+    }
+
+    #[test]
+    fn an_input_that_grew_past_the_limit_drops_truncated_eof_matches_and_refunds_budget() {
+        let fixture = tempdir().unwrap();
+        let file = fixture.path().join("growing.txt");
+        let mut bytes = vec![b'x'; MAX_FILE_BYTES as usize + 64];
+        bytes[0..7].copy_from_slice(b"needle\n");
+        fs::write(&file, bytes).unwrap();
+        let mut search_request = request("needle|x$");
+        search_request.use_regex = true;
+        let pattern = build_pattern(&search_request).unwrap();
+        let matcher = build_exact_matcher(&search_request, &pattern).unwrap();
+        let searcher_matcher = build_searcher_matcher(&search_request, &pattern).unwrap();
+        let budget = Arc::new(SearchResultBudget::new(MAX_SEARCH_RESULT_BYTES));
+        // 模拟 walker 已检查过旧 metadata，随后实际文件增长的入口。
+        let outcome = search_file(
+            &mut build_file_searcher(),
+            &searcher_matcher,
+            &file,
+            "growing.txt",
+            &matcher,
+            MAX_MATCHES,
+            budget.clone(),
+            || false,
+        );
+        assert!(outcome.skipped && outcome.truncated);
+        assert!(outcome.matches.is_empty());
+        assert_eq!(outcome.result_bytes, 0);
+        assert_eq!(budget.used.load(Ordering::Acquire), 0);
     }
 
     #[test]

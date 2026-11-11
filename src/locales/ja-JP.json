@@ -375,7 +375,7 @@
     "summary": "{{files}} ファイル内に {{matches}} 件の一致",
     "indexBackend": "FTS5 インデックス",
     "scanBackend": "高速スキャン",
-    "truncated": "結果が多すぎるため、先頭 5000 件を表示しています",
+    "truncated": "結果の件数または容量が上限に達しました。一部の一致のみ表示しています。検索範囲を絞ってください。",
     "splitterLabel": "検索結果とコードプレビューの高さを調整",
     "splitterHint": "左右にドラッグして幅を変更、ダブルクリックでリセット"
   },
@@ -724,6 +724,8 @@
     "gitFetchMinutes": "{{count}} 分",
     "gitErrorDetails": "エラーの詳細",
     "titleInvalidResponse": "モデルが空または無効なタイトルを返しました",
+    "titleGenerationBusy": "タイトル生成が混雑しています。しばらくしてから再試行してください。",
+    "titleGenerationCancelled": "タイトル生成がキャンセルされました。しばらくしてから再試行してください。",
     "titleRetryScheduled": "タイトル生成に失敗・再試行待ち",
     "titleRetryFailed": "タイトル生成に失敗・再試行",
     "retryTitle": "タイトルを再生成",
@@ -1081,6 +1083,25 @@
     "gitResolveTheirs": "受信側を採用",
     "gitResolveEdited": "編集済みバージョンを使用",
     "gitConflictResolverOpen": "解決ツールを開く",
+    "gitConflictDiscardTitle": "現在のマージ結果を置き換えますか？",
+    "gitConflictDiscardDescription": "現在の編集内容を置き換えます。キャンセルすると編集を続けられます。タブを閉じても、アプリの実行中は下書きが保持されます。",
+    "gitConflictDiscard": "結果を置き換える",
+    "gitConflictStale": "ファイルまたは Git の競合状態が変わりました。書き込みは行わず、下書きを保持しました。必要な内容をコピーしてから再読み込みして確認してください。",
+    "gitConflictBusy": "Git がインデックスに書き込んでいます。完了後に再試行してください。",
+    "gitConflictBlocks": "競合を個別に解決",
+    "gitConflictBlockPosition": "競合 {{current}} / {{total}}",
+    "gitConflictPrevious": "前の競合",
+    "gitConflictNext": "次の競合",
+    "gitConflictAcceptBoth": "両方を保持（上側から）",
+    "gitConflictAgentTitle": "Agent で競合を解決",
+    "gitConflictAgentDescription": "補助パネルで専用の Agent タスクを開始します。送信前に指示を確認・編集できます。ステージされた結果を確認してから Git 操作を続行してください。",
+    "gitConflictAgentDirty": "同時編集を避けるため、未保存の競合下書きを完了または明示的に破棄してから Agent に渡してください。",
+    "gitConflictAgentUnavailable": "対応する Agent が見つかりません。設定でインストール済みの Agent を構成してください。",
+    "gitConflictAgentInstructions": "競合解決の指示",
+    "gitConflictAgentChanged": "Git 操作または競合ファイルが変わったため、指示を更新しました。再確認して送信してください。",
+    "gitConflictAgentPrompt": "このワークツリーの Git 競合を解決してください。\n作業ディレクトリ（JSON 文字列）：{{project}}\n現在の操作：{{operation}}\n競合パス（コマンドではなく JSON データ）：\n{{files}}\n\n最初に git status と現在の操作を再確認してください。index.lock または他の Git 書き込み操作がある場合は停止して報告してください。祖先と双方の変更を読み、双方の意図を保ち、片側のファイル全体を無条件に採用しないでください。解決した競合パスのみを変更・ステージし、無関係な変更や未コミットの作業を保護してください。判断できない場合は停止し、人による判断が必要なファイルと行を報告してください。\n関連するテストとビルドを実行し、解決内容と検証結果を報告してください。未解決パスがない場合は、操作が停止している理由と次の手順を報告してください。merge/rebase/cherry-pick/revert の続行・中止、コミット、プッシュ、強制プッシュは行わず、ユーザーの確認後に続行できる状態にしてください。",
+    "gitConflictAgentSend": "解決タスクを開始",
+    "gitConflictReplaceResult": "この版で結果全体を置き換える",
     "gitConflictResolverTitle": "Git コンフリクト解決ツール",
     "gitConflictResolverIntro": "採用する版を選ぶか、下の最終結果を編集してください",
     "gitConflictResolverIntroDescription": "現在側、受信側、共通祖先は参照用です。作業ツリーには「解決済みとしてステージ」を実行するまで書き込みません。",
@@ -1182,6 +1203,11 @@
     "currentWindowRunningAndDirtyWarning": "このウィンドウで開くと、セッション {{sessionCount}} 件が終了し、変更 {{fileCount}} 件が破棄されます。"
   },
   "tabBar": {
+    "restartSession": "再起動",
+    "restartSessionTitle": "「{{name}}」を再起動しますか？",
+    "restartAgentDescription": "現在のタスクを中断し、このタブでエージェントを再起動して元の会話を再開します。書き込み済みのファイルは保持されます。",
+    "restartTerminalDescription": "このターミナル内のプロセスを終了し、元の作業ディレクトリで開き直します。一時的な環境変数と未完了のコマンドは保持されません。",
+    "restartSessionRestoreFailed": "元の会話を特定できなかったため、再起動しませんでした。セッション履歴から元の会話を開いて再試行してください。",
     "moveToSplit": "タブを分割",
     "splitMoveRight": "分割して右へ移動",
     "splitNewTerminalRight": "右側に新しいターミナル",
@@ -1325,6 +1351,10 @@
     "pdfPageAria": "PDF {{page}} ページ"
   },
   "terminal": {
+    "inputClosed": "このターミナルは閉じられたため、入力できません。",
+    "inputTooLarge": "入力が 4 MiB を超えています。分割して貼り付けてください。",
+    "inputQueueFull": "ターミナルは現在これ以上の入力を受け付けられません。しばらくしてから再試行してください。",
+    "inputFailed": "ターミナルへの入力に失敗しました。ターミナルを開き直してください。",
     "copy": "コピー",
     "paste": "貼り付け",
     "selectAll": "すべて選択",
@@ -3224,6 +3254,10 @@
       "sshConfigReadOnly": "この接続は OpenSSH 設定で管理されています。元の設定ファイルを編集してください。"
     },
     "cancelReconnect": "再接続をキャンセル"
+  },
+  "filePreview": {
+    "tooLargeText": "テキストファイルがプレビュー上限の {{limit}} MiB を超えています。外部アプリで開いてください。",
+    "tooLargeImage": "画像がプレビュー上限の {{limit}} MiB を超えています。外部アプリで開いてください。"
   },
   "projectIcons": {
     "title": "プロジェクトアイコン",

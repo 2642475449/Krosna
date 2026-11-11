@@ -1,10 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
   adjustSearchWindow,
+  contentSearchHighlightRange,
   DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO,
   clampGlobalSearchSplitRatio,
   globalSearchSplitRatioFromPointer,
 } from "./globalSearchLayout";
+
+describe("content search snippets", () => {
+  it("uses UTF-16 columns relative to the snippet without moving file navigation coordinates", () => {
+    const match = { lineText: "中😀needle后", lineTextStartColumn: 120,
+      startColumn: 123, endColumn: 129, lineNumber: 8, endLineNumber: 8 };
+    const range = contentSearchHighlightRange(match);
+    expect(match.lineText.slice(range.start, range.end)).toBe("needle");
+    expect(match.startColumn).toBe(123);
+  });
+
+  it("clips a multi-line match to the visible first-line snippet", () => {
+    expect(contentSearchHighlightRange({ lineText: "前 needle suffix", lineTextStartColumn: 20,
+      startColumn: 22, endColumn: 4, lineNumber: 2, endLineNumber: 3 }))
+      .toEqual({ start: 2, end: 15 });
+  });
+
+  it("supports full legacy lines and clamps oversized match ranges", () => {
+    expect(contentSearchHighlightRange({ lineText: "needle", startColumn: 1,
+      endColumn: 100, lineNumber: 1, endLineNumber: 1 })).toEqual({ start: 0, end: 6 });
+  });
+});
 
 describe("global search horizontal split", () => {
   it("converts the pointer position to a percentage", () => {

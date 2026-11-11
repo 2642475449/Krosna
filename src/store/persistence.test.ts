@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StateStorage } from "zustand/middleware";
 import type { Session } from "@/types";
 import type { AttentionItem } from "@/lib/attention";
@@ -7,6 +7,8 @@ import { createProjectScopedStorage } from "@/lib/projectScopedStorage";
 
 const NOW = 2_000_000_000_000;
 const PROJECT = "D:/workspace/demo";
+
+afterEach(() => vi.useRealTimers());
 
 function session(): Session {
   return {
@@ -110,5 +112,74 @@ describe("store persistence v5", () => {
     expect(parsed.version).toBe(5);
     expect(parsed.state.projectAttentionItems[PROJECT]).toHaveLength(1);
     expect(parsed.state.projectAttentionItems[PROJECT][0].kind).toBe("failure");
+  });
+
+  it("avoids storage access for runtime-only actions and no-op updates", () => {
+    let saved: string | null = null;
+    const backend = {
+      getItem: vi.fn(() => saved),
+      setItem: vi.fn((_name: string, value: string) => { saved = value; }),
+      removeItem: vi.fn(() => { saved = null; }),
+    };
+    const store = createAppStore(createProjectScopedStorage(backend));
+    store.getState().setCurrentProject({ path: PROJECT, name: "Demo" });
+    store.getState().addSession(session());
+    const before = saved;
+    backend.getItem.mockClear();
+    backend.setItem.mockClear();
+
+    for (let index = 0; index < 100; index++) {
+      store.getState().setGitChangeCount(index);
+      store.setState((state) => state);
+    }
+
+    expect(store.getState().gitChangeCount).toBe(99);
+    expect(saved).toBe(before);
+    expect(backend.getItem).not.toHaveBeenCalled();
+    expect(backend.setItem).not.toHaveBeenCalled();
+  });
+
+  it("does not replay an unchanged store snapshot over another window's updates", () => {
+    let saved: string | null = null;
+    const backend = {
+      getItem: vi.fn(() => saved),
+      setItem: vi.fn((_name: string, value: string) => { saved = value; }),
+      removeItem: vi.fn(() => { saved = null; }),
+    };
+    const projectWindow = createAppStore(createProjectScopedStorage(backend));
+    const staleWindow = createAppStore(createProjectScopedStorage(backend));
+    projectWindow.getState().setCurrentProject({ path: PROJECT, name: "Demo" });
+    projectWindow.getState().addSession(session());
+    staleWindow.getState().setPinnedCollapsed(true);
+    const afterExternalUpdate = saved;
+    backend.getItem.mockClear();
+    backend.setItem.mockClear();
+
+    projectWindow.getState().setGitChangeCount(5);
+    expect(saved).toBe(afterExternalUpdate);
+    saved = null;
+    projectWindow.setState((state) => state);
+    expect(saved).toBeNull();
+    expect(backend.getItem).not.toHaveBeenCalled();
+    expect(backend.setItem).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed persisted action without hiding its error", () => {
+    let saved: string | null = null;
+    const error = new Error("storage unavailable");
+    const setItem = vi.fn((_name: string, value: string) => { saved = value; });
+    const store = createAppStore(createProjectScopedStorage({
+      getItem: () => saved,
+      setItem,
+      removeItem: vi.fn(),
+    }));
+    store.getState().setCurrentProject({ path: PROJECT, name: "Demo" });
+    setItem.mockImplementationOnce(() => { throw error; });
+
+    expect(() => store.getState().setPinnedCollapsed(true)).toThrow(error);
+    store.getState().setPinnedCollapsed(true);
+
+    expect(JSON.parse(saved!).state.sidebarPinnedCollapsed).toBe(true);
+    expect(setItem).toHaveBeenCalledTimes(3);
   });
 });
