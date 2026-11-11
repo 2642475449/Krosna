@@ -27,3 +27,8 @@
 
 .app-bottom-runner-panel[data-word-wrap="false"] .app-terminal-surface { overflow-x: auto; overflow-y: hidden; }
 .app-bottom-runner-panel[data-word-wrap="false"] .app-terminal-surface > .xterm { width: max-content; min-width: 100%; }
+
+.app-runner-log-search { background: var(--cs-bg-card-solid); color: var(--cs-text-primary); border-bottom: 1px solid var(--cs-border); }
+.app-runner-log-search-field { max-width: 360px; min-height: 28px; color: var(--cs-text-primary); background: var(--cs-bg-card-solid); border: 1px solid var(--cs-border); }
+.app-runner-log-search-field:focus-within { border-color: var(--cs-primary); outline: 1px solid var(--cs-primary); outline-offset: -1px; }
+.app-runner-log-search input::placeholder, .app-runner-log-search-status { color: var(--cs-text-secondary); }

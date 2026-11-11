@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { DeleteOutlined, CloseOutlined, MinusOutlined,
-  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined } from "@ant-design/icons";
+  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined, SearchOutlined, HighlightOutlined } from "@ant-design/icons";
 import { Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
@@ -10,6 +10,7 @@ import { closeRunnerTab, completeRunner, markRunnerTerminalReady,
   rerunRunner, stopRunner } from "@/store/slices/bottomRunnerRuntime";
 import { BottomRunnerDivider, syncRunnerLayout } from "./BottomRunnerDivider";
 import { RunnerStatusIcon } from "./BottomRunnerStatus";
+import { RunnerLogSearch } from "./RunnerLogSearch";
 import "./bottomRunner.css";
 
 const Terminal = lazy(() => import("../Terminal"));
@@ -54,9 +55,13 @@ export function BottomRunnerPanel() {
     <style>{`.app-bottom-runner-panel { height: ${store.height}px; }`}</style>
     <section aria-label={t("bottomRunner.title")} data-open={store.open} data-maximized={store.maximized} data-word-wrap={store.wordWrap}
       className="app-bottom-runner-panel min-h-0 shrink-0 flex-col"
-      onMouseDown={(event) => { if (!(event.target as HTMLElement).closest(".xterm")) event.preventDefault(); }}
+      onMouseDown={(event) => { if (!(event.target as HTMLElement).closest(".xterm, .app-runner-log-search")) event.preventDefault(); }}
       onKeyDownCapture={(event) => {
         if (event.nativeEvent.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+        if (event.key.toLowerCase() === "f" && !event.shiftKey && active) {
+          event.preventDefault(); event.stopPropagation(); store.setLogSearchOpen(active.sessionId, true); return;
+        }
+        if ((event.target as HTMLElement).closest(".app-runner-log-search")) return;
         if (event.key.toLowerCase() === "k" && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); clear(); }
         if (event.key.toLowerCase() === "r" && event.shiftKey && active) {
           event.preventDefault(); event.stopPropagation(); runAction(rerunRunner(active));
@@ -80,12 +85,15 @@ export function BottomRunnerPanel() {
           {tool("rerun", <ReloadOutlined />, () => active && runAction(rerunRunner(active)), !active || active.status === "starting")}
           {tool("stop", <StopOutlined />, () => active && runAction(stopRunner(active)), !active || !isRunnerRunning(active))}
           {tool("clear", <DeleteOutlined />, clear, !active)}
+          {tool("search", <SearchOutlined />, () => active && store.setLogSearchOpen(active.sessionId, true), !active)}
           <span aria-hidden="true" className="app-bottom-runner-tool-divider mx-1 h-4" />
           {tool("autoScroll", <VerticalAlignBottomOutlined />, store.toggleAutoScroll, false, store.autoScroll)}
           {tool("wordWrap", <EnterOutlined />, store.toggleWordWrap, false, store.wordWrap)}
+          {tool("colorizeLogs", <HighlightOutlined />, store.toggleColorizeLogs, false, store.colorizeLogs)}
           {tool("collapse", <MinusOutlined />, () => store.setOpen(false))}
         </div>
       </div>
+      {active && <RunnerLogSearch sessionId={active.sessionId} />}
       <div className="relative min-h-0 flex-1">
         {!active && <div className="flex h-full items-center justify-center text-xs">{t("bottomRunner.noActiveRun")}</div>}
         {/* 折叠、切换标签/工程仅隐藏 DOM，保留日志、OSC 解析与 PTY 输出监听。 */}

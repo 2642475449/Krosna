@@ -41,6 +41,13 @@
     }
   },
   "bottomRunner": {
+    "search": "Find in logs (Ctrl+F)",
+    "searchPlaceholder": "Search current run output",
+    "searchNoResults": "No matches",
+    "searchPrevious": "Previous match (Shift+Enter)",
+    "searchNext": "Next match (Enter)",
+    "searchClose": "Close search (Esc)",
+    "colorizeLogs": "Highlight log levels (new output only; preserves native colors)",
     "terminalNotReady": "Terminal initialization timed out; rerun the task",
     "title": "Script Runner",
     "toggle": "Script Runner",

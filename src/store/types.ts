@@ -532,12 +532,23 @@ export interface BottomRunnerTab {
   startTime: number;
   endTime: number | null;
 }
+export interface RunnerLogSearchState {
+  open: boolean;
+  query: string;
+  resultIndex: number;
+  resultCount: number;
+  request: number;
+  focusRequest: number;
+  direction: "next" | "previous";
+}
 export interface BottomRunnerState {
   open: boolean;
   height: number;
   maximized: boolean;
   autoScroll: boolean;
   wordWrap: boolean;
+  colorizeLogs: boolean;
+  searchBySession: Record<string, RunnerLogSearchState>;
   tabsByProject: Record<string, BottomRunnerTab[]>;
   activeTabIdByProject: Record<string, string | null>;
   setOpen: (open: boolean) => void;
@@ -549,6 +560,12 @@ export interface BottomRunnerState {
   toggleAutoScroll: () => void;
   setWordWrap: (wordWrap: boolean) => void;
   toggleWordWrap: () => void;
+  setColorizeLogs: (enabled: boolean) => void;
+  toggleColorizeLogs: () => void;
+  setLogSearchOpen: (sessionId: string, open: boolean) => void;
+  setLogSearchQuery: (sessionId: string, query: string) => void;
+  navigateLogSearch: (sessionId: string, direction: "next" | "previous") => void;
+  setLogSearchResults: (sessionId: string, resultIndex: number, resultCount: number) => void;
   activateTab: (projectPath: string, tabId: string) => void;
   addRunTab: (projectPath: string, tab: BottomRunnerTab) => BottomRunnerTab | null;
   updateTabStatus: (projectPath: string, tabId: string, status: BottomRunnerTabStatus, exitCode?: number | null) => void;

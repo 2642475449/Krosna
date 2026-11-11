@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { BottomRunnerState, BottomRunnerTab, BottomRunnerTabStatus } from "../types";
+import type { BottomRunnerState, BottomRunnerTab, BottomRunnerTabStatus, RunnerLogSearchState } from "../types";
 export type { BottomRunnerState, BottomRunnerTab, BottomRunnerTabStatus } from "../types";
 
 export const DEFAULT_BOTTOM_RUNNER_HEIGHT = 260;
@@ -9,6 +9,9 @@ export const MAX_BOTTOM_RUNNER_HEIGHT = 650;
 export const AUTO_COLLAPSE_VIEWPORT_HEIGHT_THRESHOLD = 350;
 export const MAX_BOTTOM_RUNNER_TABS = 8;
 export const EMPTY_RUNNER_TABS: BottomRunnerTab[] = [];
+export const EMPTY_RUNNER_LOG_SEARCH: RunnerLogSearchState = {
+  open: false, query: "", resultIndex: -1, resultCount: 0, request: 0, focusRequest: 0, direction: "next",
+};
 
 export function clampBottomRunnerHeight(height: number, viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight) {
   if (viewportHeight < AUTO_COLLAPSE_VIEWPORT_HEIGHT_THRESHOLD) return 0;
@@ -30,6 +33,8 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
   maximized: false,
   autoScroll: true,
   wordWrap: false,
+  colorizeLogs: true,
+  searchBySession: {},
   tabsByProject: {},
   activeTabIdByProject: {},
   setOpen: (open) => set({ open: open && clampBottomRunnerHeight(get().height) > 0 }),
@@ -45,6 +50,26 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
   toggleAutoScroll: () => set((state) => ({ autoScroll: !state.autoScroll })),
   setWordWrap: (wordWrap) => set({ wordWrap }),
   toggleWordWrap: () => set((state) => ({ wordWrap: !state.wordWrap })),
+  setColorizeLogs: (colorizeLogs) => set({ colorizeLogs }),
+  toggleColorizeLogs: () => set((state) => ({ colorizeLogs: !state.colorizeLogs })),
+  setLogSearchOpen: (sessionId, open) => set((state) => ({ searchBySession: {
+    ...state.searchBySession,
+    [sessionId]: { ...(state.searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH), open,
+      focusRequest: (state.searchBySession[sessionId]?.focusRequest ?? 0) + (open ? 1 : 0) },
+  } })),
+  setLogSearchQuery: (sessionId, query) => set((state) => ({ searchBySession: {
+    ...state.searchBySession,
+    [sessionId]: { ...(state.searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH), query, resultIndex: -1, resultCount: 0 },
+  } })),
+  navigateLogSearch: (sessionId, direction) => set((state) => {
+    const search = state.searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH;
+    return { searchBySession: { ...state.searchBySession, [sessionId]: { ...search, direction, request: search.request + 1 } } };
+  }),
+  setLogSearchResults: (sessionId, resultIndex, resultCount) => set((state) => {
+    const search = state.searchBySession[sessionId];
+    if (!search || (search.resultIndex === resultIndex && search.resultCount === resultCount)) return state;
+    return { searchBySession: { ...state.searchBySession, [sessionId]: { ...search, resultIndex, resultCount } } };
+  }),
   activateTab: (projectPath, tabId) => {
     if (!get().tabsByProject[projectPath]?.some((tab) => tab.id === tabId)) return;
     set((state) => ({ activeTabIdByProject: { ...state.activeTabIdByProject, [projectPath]: tabId } }));
@@ -61,6 +86,7 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
       tabsByProject: { ...state.tabsByProject, [projectPath]: tabs },
       activeTabIdByProject: { ...state.activeTabIdByProject, [projectPath]: tab.id },
       autoScroll: true,
+      searchBySession: Object.fromEntries(Object.entries(state.searchBySession).filter(([id]) => id !== tab.sessionId && id !== evicted?.sessionId)),
     }));
     get().setOpen(true);
     // 调用者必须清理被回收的 PTY 和 AppStore 会话。
@@ -82,6 +108,7 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
       activeTabIdByProject: { ...state.activeTabIdByProject, [projectPath]: state.activeTabIdByProject[projectPath] === tabId
         ? tabs[Math.min(index, tabs.length - 1)]?.id ?? null : state.activeTabIdByProject[projectPath] },
       open: tabs.length ? state.open : false,
+      searchBySession: Object.fromEntries(Object.entries(state.searchBySession).filter(([id]) => id !== current[index].sessionId)),
     };
   }),
   clearFinishedTabs: (projectPath) => {
@@ -92,20 +119,21 @@ export const useBottomRunnerStore = create<BottomRunnerState>()(persist((set, ge
   handleProjectChange: (projectPath) => {
     if (!get().tabsByProject[projectPath]?.length) set({ open: false });
   },
-  reset: () => set({ open: false, maximized: false, tabsByProject: {}, activeTabIdByProject: {} }),
+  reset: () => set({ open: false, maximized: false, tabsByProject: {}, activeTabIdByProject: {}, searchBySession: {} }),
 }), {
   name: "krosna-bottom-runner-storage",
   storage: createJSONStorage(() => typeof localStorage !== "undefined" ? localStorage : {
     getItem: () => null, setItem: () => {}, removeItem: () => {},
   }),
   // 翻阅日志造成的暂停只在当前运行期间生效，不带到下次启动。
-  partialize: (state) => ({ height: state.height, wordWrap: state.wordWrap }),
+  partialize: (state) => ({ height: state.height, wordWrap: state.wordWrap, colorizeLogs: state.colorizeLogs }),
   merge: (saved, current) => {
     const prefs = (saved && typeof saved === "object" ? saved : {}) as Partial<BottomRunnerState>;
     return { ...current,
       height: clampBottomRunnerHeight(typeof prefs.height === "number" ? prefs.height : DEFAULT_BOTTOM_RUNNER_HEIGHT, 1000),
       autoScroll: true,
       wordWrap: typeof prefs.wordWrap === "boolean" ? prefs.wordWrap : false,
+      colorizeLogs: typeof prefs.colorizeLogs === "boolean" ? prefs.colorizeLogs : true,
     };
   },
 }));

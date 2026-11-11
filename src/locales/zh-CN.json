@@ -41,6 +41,13 @@
     }
   },
   "bottomRunner": {
+    "search": "搜索日志 (Ctrl+F)",
+    "searchPlaceholder": "搜索当前运行日志",
+    "searchNoResults": "未找到匹配项",
+    "searchPrevious": "上一个匹配项 (Shift+Enter)",
+    "searchNext": "下一个匹配项 (Enter)",
+    "searchClose": "关闭搜索 (Esc)",
+    "colorizeLogs": "日志级别补色（仅后续输出，始终保留原生颜色）",
     "terminalNotReady": "终端初始化超时，请重新运行",
     "title": "脚本运行器",
     "toggle": "脚本运行器",

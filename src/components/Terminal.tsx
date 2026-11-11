@@ -17,6 +17,7 @@ import {
 } from "@ant-design/icons";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -93,6 +94,11 @@ import { terminalInputErrorKey } from "@/lib/terminalInputError";
 import { createTerminalRevealRepaint, terminalRenderingPool } from "@/lib/terminalRendering";
 import { createTerminalOutputMonitor } from "@/lib/terminalOutputMonitor";
 import { createTerminalOutputAcknowledgements } from "@/lib/terminalOutputAcknowledgements";
+import { createRunnerLogOutput } from "@/lib/runnerLogOutput";
+import { handleRunnerLogShortcut } from "@/lib/runnerLogShortcuts";
+import { createRunnerLogSearch } from "@/lib/runnerLogSearch";
+import { createRunnerLogScroll } from "@/lib/runnerLogScroll";
+import { EMPTY_RUNNER_LOG_SEARCH, useBottomRunnerStore } from "@/store/slices/bottomRunner";
 import { useTerminalDiagnosticsStore } from "@/store/slices/terminalDiagnosticsSlice";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
 import { installTerminalTextSelection } from "@/lib/terminalTextSelection";
@@ -465,17 +471,20 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       key: "copy",
       label: t("terminal.copy"),
       icon: <CopyOutlined />,
+      extra: runnerOptions ? "Ctrl+C / Ctrl+Shift+C" : undefined,
       disabled: !contextMenuSelection,
     },
     {
       key: "paste",
       label: t("terminal.paste"),
       icon: <SnippetsOutlined />,
+      extra: runnerOptions ? "Ctrl+V / Ctrl+Shift+V" : undefined,
     },
     {
       key: "select-all",
       label: t("terminal.selectAll"),
       icon: <SelectOutlined />,
+      extra: runnerOptions ? "Ctrl+A" : undefined,
     },
     { type: "divider" },
     {
@@ -492,7 +501,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     { type: "divider" },
     {
       key: "clear-input",
-      label: t("terminal.clearInput"),
+      label: t(runnerOptions ? "bottomRunner.clear" : "terminal.clearInput"),
       icon: <DeleteOutlined />,
       extra: "Ctrl+L",
     },
@@ -534,11 +543,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           term?.selectAll();
           break;
         case "clear-input":
-          ptyInput(sessionId, "\x15").catch(reportInputError);
+          if (runnerOptions) {
+            window.dispatchEvent(new CustomEvent("terminal:clear", { detail: { sessionId } }));
+          } else ptyInput(sessionId, "\x15").catch(reportInputError);
           break;
       }
     },
-    [contextMenuSelection, currentSession, installedAgents, pasteIntoTerminal, reportInputError, sessionId, t]
+    [contextMenuSelection, currentSession, installedAgents, pasteIntoTerminal, reportInputError, runnerOptions, sessionId, t]
   );
 
   const closeSideQuestionComposer = useCallback(() => {
@@ -963,21 +974,54 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       };
     }, (data) => term.input(data, true)));
     terminalRef.current = term;
+    const clearRunnerOutput = () => {
+      runnerLogOutput?.flush();
+      outputFrameGateRef.current?.flush();
+      // 等已提交的输出解析后再清空，避免异步 write 把刚清掉的日志重新画出来。
+      term.write("", () => {
+        if (isTerminalDisposed) return;
+        term.clear();
+        term.clearSelection();
+      });
+    };
     const handleRunnerClear = (event: Event) => {
       if ((event as CustomEvent<{ sessionId: string }>).detail?.sessionId !== sessionId) return;
-      outputFrameGateRef.current?.flush();
-      term.clear();
+      clearRunnerOutput();
     };
     window.addEventListener("terminal:clear", handleRunnerClear);
     const runnerScroll = term.onScroll(() => {
-      if (runnerOptionsRef.current?.autoScroll && term.buffer.active.viewportY < term.buffer.active.baseY) {
-        runnerOptionsRef.current.onAutoScrollChange(false);
-      }
+      runnerScrollController?.onScroll();
     });
+    const runnerScrollController = runnerOptionsRef.current ? createRunnerLogScroll(term, {
+      following: runnerOptionsRef.current.autoScroll,
+      onFollowingChange: (enabled) => runnerOptionsRef.current?.onAutoScrollChange(enabled),
+      isVisible: () => Boolean(container.getClientRects().length),
+    }) : null;
     const onRunnerWheel = (event: WheelEvent) => {
-      if (event.deltaY < 0) runnerOptionsRef.current?.onAutoScrollChange(false);
+      if (!runnerScrollController) return;
+      if (event.deltaY < 0) runnerScrollController.pause();
+      queueMicrotask(() => runnerScrollController.userScrolled());
     };
     container.addEventListener("wheel", onRunnerWheel, { passive: true });
+    const onRunnerPointerUp = () => runnerScrollController?.userScrolled();
+    container.addEventListener("pointerup", onRunnerPointerUp);
+    const searchAddon = runnerOptionsRef.current ? new SearchAddon({ highlightLimit: 10_000 }) : null;
+    if (searchAddon) term.loadAddon(searchAddon);
+    const runnerSearch = searchAddon ? createRunnerLogSearch(term, searchAddon, {
+      pauseFollow: () => runnerScrollController?.pause(),
+      isVisible: () => Boolean(container.getClientRects().length),
+      decorations: () => {
+        const theme = getTerminalTheme(useAppStore.getState().activeTheme()).theme;
+        return { matchBorder: theme.cursor, activeMatchBorder: theme.foreground,
+          matchOverviewRuler: theme.cursor!, activeMatchColorOverviewRuler: theme.foreground! };
+      },
+      onResults: (index, count) => useBottomRunnerStore.getState().setLogSearchResults(sessionId, index, count),
+    }) : null;
+    runnerSearch?.update(useBottomRunnerStore.getState().searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
+    const unsubscribeRunner = runnerOptionsRef.current ? useBottomRunnerStore.subscribe((state, previous) => {
+      runnerSearch?.update(state.searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
+      if (state.autoScroll !== previous.autoScroll) runnerScrollController?.setFollowing(state.autoScroll);
+    }) : () => {};
 
     const cursorStyleDisposable = forceStableCursor
       ? term.parser.registerCsiHandler({ intermediates: " ", final: "q" }, (params) => {
@@ -1158,11 +1202,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
     const setDiagnostics = useTerminalDiagnosticsStore.getState().setTerminalDiagnostics;
     const outputAcknowledgements = createTerminalOutputAcknowledgements({
-      buffered: () => imeOutputGate.getBufferedChars() + outputFrameGate.getPendingWriteChars() > 0,
+      buffered: () => imeOutputGate.getBufferedChars() + outputFrameGate.getPendingWriteChars()
+        + (runnerLogOutput?.getBufferedChars() ?? 0) > 0,
       afterParsed: (done) => term.write("", done),
     });
     const outputMonitor = createTerminalOutputMonitor({
-      bufferedChars: () => imeOutputGate.getBufferedChars() + outputFrameGate.getBufferedChars(),
+      bufferedChars: () => imeOutputGate.getBufferedChars() + outputFrameGate.getBufferedChars()
+        + (runnerLogOutput?.getBufferedChars() ?? 0),
       onSnapshot: (snapshot) => setDiagnostics(runtimeId, { sessionId, ...snapshot }),
       onPressureChange: (snapshot) => {
         // 只记录数量与耗时，不把终端文本或用户输入写入诊断日志。
@@ -1177,8 +1223,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       const refreshCursor = frameNeedsCursorRefresh;
       frameNeedsCursorRefresh = false;
       outputMonitor.write(data, (output, onParsed) => {
-        const runnerViewport = runnerOptionsRef.current && !runnerOptionsRef.current.autoScroll
-          ? term.buffer.active.viewportY : null;
+        const finishRunnerWrite = runnerScrollController?.beforeWrite();
         writeTerminalOutputWithCursorRefresh(
           term,
           output,
@@ -1187,8 +1232,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
             : undefined,
           () => {
             onParsed();
-            if (runnerOptionsRef.current?.autoScroll) term.scrollToBottom();
-            else if (runnerViewport !== null) term.scrollToLine(runnerViewport);
+            finishRunnerWrite?.();
           },
         );
       });
@@ -1204,6 +1248,12 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       },
     );
     outputFrameGateRef.current = outputFrameGate;
+    const runnerLogOutput = runnerOptionsRef.current
+      ? createRunnerLogOutput((data) => {
+          outputFrameGate.write(data);
+          outputAcknowledgements.schedule();
+        }, () => useBottomRunnerStore.getState().colorizeLogs)
+      : null;
     setDiagnostics(runtimeId, { sessionId, ...outputMonitor.snapshot() });
 
     const enqueueInput = createTerminalInputQueue();
@@ -1383,6 +1433,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
     // Smart Ctrl+C / Ctrl+V / Ctrl+L handling
     term.attachCustomKeyEventHandler((event) => {
+      if (runnerOptionsRef.current && handleRunnerLogShortcut(event, term, {
+        copy: () => {
+          if (term.hasSelection()) void navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+        },
+        paste: () => { void pasteIntoTerminal(term).catch(reportPasteError); },
+        clear: clearRunnerOutput,
+        find: () => useBottomRunnerStore.getState().setLogSearchOpen(sessionId, true),
+        autoScroll: (enabled) => runnerScrollController?.setFollowing(enabled),
+      })) return false;
       const isPlainCtrlCombo = event.ctrlKey && !event.shiftKey && !event.altKey;
       const lowerKey = event.key.toLowerCase();
 
@@ -1559,7 +1618,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       "pty-output",
       (event) => {
         if (event.payload.session_id === sessionId) {
-          return outputAcknowledgements.track(() => outputFrameGate.write(event.payload.data));
+          return outputAcknowledgements.track(() => {
+            if (runnerLogOutput) runnerLogOutput.write(event.payload.data);
+            else outputFrameGate.write(event.payload.data);
+          });
         }
       }
     );
@@ -1582,6 +1644,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       "pty-exit",
       (event) => {
         if (event.payload.session_id === sessionId) {
+          runnerLogOutput?.flush();
           outputFrameGate.flush();
           terminalCommandWatcherRef.current.reset();
           useAppStore.getState().setTerminalCompletionIntegration(sessionId, {
@@ -1650,6 +1713,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       isTerminalDisposed = true;
       window.removeEventListener("terminal:clear", handleRunnerClear);
       container.removeEventListener("wheel", onRunnerWheel);
+      container.removeEventListener("pointerup", onRunnerPointerUp);
+      unsubscribeRunner();
+      runnerSearch?.dispose();
+      runnerScrollController?.dispose();
       runnerScroll.dispose();
       if (fallbackAnimationFrame !== null) {
         window.cancelAnimationFrame(fallbackAnimationFrame);
@@ -1680,6 +1747,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       programStatusDisposable.dispose();
       parsedDisposable.dispose();
       outputFrameGate.dispose();
+      runnerLogOutput?.dispose();
       outputMonitor.dispose();
       outputAcknowledgements.dispose();
       setDiagnostics(runtimeId, null);

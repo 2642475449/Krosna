@@ -12,6 +12,7 @@ beforeEach(() => {
   state().setHeight(260);
   state().setAutoScroll(true);
   state().setWordWrap(false);
+  state().setColorizeLogs(true);
 });
 it("clamps height to viewport margin and protects small viewports including invalid heights", () => {
   expect(clampBottomRunnerHeight(500, 349)).toBe(0);
@@ -98,13 +99,51 @@ it("persists only validated UI preferences, never tabs, open state or maximizati
   state().setHeight(400, 1000);
   state().setWordWrap(true);
   state().addRunTab("A", tab("a"));
-  expect(JSON.parse([...entries.values()][0]).state).toEqual({ height: 400, wordWrap: true });
+  expect(JSON.parse([...entries.values()][0]).state).toEqual({ height: 400, wordWrap: true, colorizeLogs: true });
   state().reset();
   await useBottomRunnerStore.persist.rehydrate();
   expect(state()).toMatchObject({ height: 400, wordWrap: true, open: false, tabsByProject: {} });
   const merge = useBottomRunnerStore.persist.getOptions().merge!;
   expect(merge({ height: "oops", autoScroll: "yes", wordWrap: 1, tabsByProject: { A: [tab("x")] }, open: true }, state()))
     .toMatchObject({ height: 260, autoScroll: true, wordWrap: false, open: false, tabsByProject: {} });
+});
+
+it("keeps search queries, navigation and focus requests independent for each terminal", () => {
+  state().setLogSearchOpen("one", true);
+  state().setLogSearchQuery("one", "错误");
+  state().setLogSearchResults("one", 1, 3);
+  state().navigateLogSearch("one", "previous");
+  state().setLogSearchOpen("two", true);
+  state().setLogSearchQuery("two", "warning");
+  state().setLogSearchOpen("one", false);
+  state().setLogSearchOpen("one", true);
+  expect(state().searchBySession.one).toMatchObject({ query: "错误", resultIndex: 1, resultCount: 3, request: 1, focusRequest: 2, direction: "previous" });
+  expect(state().searchBySession.two).toMatchObject({ query: "warning", resultCount: 0, request: 0 });
+});
+
+it("removes searches when a terminal closes or is recycled, without persisting search contents", () => {
+  state().addRunTab("A", tab("one"));
+  state().setLogSearchOpen("one", true);
+  state().setLogSearchQuery("one", "private query");
+  state().closeTab("A", "one");
+  expect(state().searchBySession.one).toBeUndefined();
+  for (let i = 0; i < 8; i++) state().addRunTab("A", tab(String(i)));
+  state().setLogSearchOpen("0", true);
+  state().addRunTab("A", tab("next"));
+  expect(state().searchBySession["0"]).toBeUndefined();
+  const partialize = useBottomRunnerStore.persist.getOptions().partialize!;
+  expect(partialize(state())).not.toHaveProperty("searchBySession");
+});
+
+it("persists the color preference with a validated default for existing installs", () => {
+  state().toggleColorizeLogs();
+  expect(state().colorizeLogs).toBe(false);
+  const partialize = useBottomRunnerStore.persist.getOptions().partialize!;
+  expect(partialize(state())).toMatchObject({ colorizeLogs: false });
+  const merge = useBottomRunnerStore.persist.getOptions().merge!;
+  expect(merge({}, state()).colorizeLogs).toBe(true);
+  expect(merge({ colorizeLogs: "false" }, state()).colorizeLogs).toBe(true);
+  expect(merge({ colorizeLogs: false }, state()).colorizeLogs).toBe(false);
 });
 it("enables auto scroll for a new run and ignores a previously saved pause", () => {
   state().setAutoScroll(false);

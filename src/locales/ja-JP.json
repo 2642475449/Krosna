@@ -41,6 +41,13 @@
     }
   },
   "bottomRunner": {
+    "search": "ログ内を検索 (Ctrl+F)",
+    "searchPlaceholder": "現在の実行ログを検索",
+    "searchNoResults": "一致する結果がありません",
+    "searchPrevious": "前の一致 (Shift+Enter)",
+    "searchNext": "次の一致 (Enter)",
+    "searchClose": "検索を閉じる (Esc)",
+    "colorizeLogs": "ログレベルの色付け（以降の出力のみ、元の色は維持）",
     "terminalNotReady": "ターミナルの初期化がタイムアウトしました。再実行してください",
     "title": "スクリプトランナー",
     "toggle": "スクリプトランナーの表示切替",
