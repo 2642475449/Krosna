@@ -258,6 +258,25 @@ describe("shared file documents", () => {
     expect(document.store.getState()).toMatchObject({ content: "external", savedContent: "external", conflict: false });
   });
 
+  it.each(["mtime", "size"])("refreshes binary file metadata when its %s changes", async (field) => {
+    const binaryPath = "D:/repo/contract.docx";
+    let metadata = { ...status(), path: binaryPath, kind: "binary" as const };
+    vi.mocked(inspectProjectFile).mockImplementation(async () => metadata);
+    const document = createFileDocument(project, binaryPath);
+    await document.load();
+    const initialStatus = document.store.getState().status;
+    await document.refresh();
+    expect(document.store.getState().status).toBe(initialStatus);
+
+    metadata = field === "mtime"
+      ? { ...metadata, modifiedAtMs: 2 }
+      : { ...metadata, sizeBytes: 1024 };
+    await document.refresh();
+    expect(document.store.getState().status).toEqual(metadata);
+    expect(document.store.getState().loading).toBe(false);
+    expect(readProjectFile).not.toHaveBeenCalled();
+  });
+
   it("does not overwrite typing that occurs during a background read", async () => {
     const document = createFileDocument(project, path);
     await document.load();

@@ -457,7 +457,12 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
           {toolbar}
           <div className="min-h-0 flex-1">
             <Suspense fallback={<div className="flex h-full items-center justify-center"><Spin /></div>}>
-              <OfficeFilePreview projectPath={projectPath} path={path} />
+              <OfficeFilePreview
+                projectPath={projectPath}
+                path={path}
+                modifiedAtMs={status?.modifiedAtMs}
+                sizeBytes={status?.sizeBytes}
+              />
             </Suspense>
           </div>
         </div>

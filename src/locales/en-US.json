@@ -296,6 +296,7 @@
     "loadFailed": "Unable to load scheduled tasks"
   },
   "common": {
+    "retry": "Retry",
     "edit": "Edit",
     "file": "Explorer",
     "openFolder": "Open Folder",

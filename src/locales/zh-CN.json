@@ -296,6 +296,7 @@
     "loadFailed": "无法加载定时任务"
   },
   "common": {
+    "retry": "重试",
     "edit": "编辑",
     "file": "资源管理器",
     "openFolder": "打开文件夹",

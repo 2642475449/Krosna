@@ -78,8 +78,10 @@ import { isSessionTurnRunning } from "@/lib/sessions";
 import { canRestoreTerminalInputCursor, createTerminalAgentInterrupt } from "@/lib/terminalAgentInterrupt";
 import { getTerminalTheme } from "@/lib/terminalTheme";
 import {
-  getCheckpointedAgentUserResponseBaseline,
+  createTerminalAgentUserResponse,
+  getAgentTurnInputResponseBaseline,
   isAgentUserResponseBaselineCurrent,
+  type AgentUserResponseBaseline,
 } from "@/lib/agentUserResponse";
 import { createTerminalLayoutScheduler } from "@/lib/terminalResize";
 import { createTerminalSizeReconciler } from "@/lib/terminalSizeReconcile";
@@ -1259,6 +1261,20 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
     const getSession = () => useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    const confirmUserResponse = async (baseline: AgentUserResponseBaseline) => {
+      const revision = await inferAgentUserResponse(sessionId, baseline.revision, baseline.eventType);
+      if (isTerminalDisposed || revision === null || !isAgentUserResponseBaselineCurrent(getSession(), baseline)) return;
+      updateSession(sessionId, {
+        status: "running", statusRevision: revision,
+        statusUpdatedAt: Date.now(), lastEventType: "user_response",
+      });
+    };
+    const userResponseTracker = createTerminalAgentUserResponse({
+      getSession,
+      confirm: (baseline) => {
+        void confirmUserResponse(baseline).catch(reportRuntimeInputError);
+      },
+    });
     const interruptTracker = createTerminalAgentInterrupt({
       getSession,
       getScreen: () => {
@@ -1282,7 +1298,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const programStatusDisposable = term.parser.registerOscHandler(7501, (data) => {
       if (data === "?") {
         void enqueueInput(() => ptyInput(sessionId, "\x1b]7501;?\x1b\\")).catch(reportRuntimeInputError);
-      } else interruptTracker.observeProgramStatus(data);
+      } else {
+        interruptTracker.observeProgramStatus(data);
+        userResponseTracker.observeProgramStatus(data);
+      }
       return true;
     });
     const parsedDisposable = term.onWriteParsed(() => interruptTracker.observeScreen());
@@ -1298,6 +1317,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         outputFrameGate.requestCursorRestore();
       }
       if (session?.status !== "running") interruptTracker.cancel();
+      if (session?.status !== "waiting" || session.statusRevision !== before?.statusRevision) userResponseTracker.cancel();
     });
     let processingClipboardPaste = false;
 
@@ -1316,6 +1336,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       outputFrameGate.markUserInput();
 
       const acknowledgeInput = interruptTracker.prepareInput(data);
+      const acknowledgeUserResponse = userResponseTracker.prepareInput(data);
       const editingSession = getSession();
       // 只修复曾使用原生光标的 CLI；始终自行绘制插入点的 TUI 保留其光标策略。
       const restoreEditingCursor = canRestoreTerminalInputCursor(editingSession)
@@ -1326,12 +1347,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         try {
           await ptyInput(sessionId, data);
           acknowledgeInput(true);
+          acknowledgeUserResponse(true);
           const latest = getSession();
           if (!isTerminalDisposed && restoreEditingCursor && canRestoreTerminalInputCursor(latest)) {
             outputFrameGate.requestCursorRestore();
           }
         }
-        catch (error) { acknowledgeInput(false); throw error; }
+        catch (error) { acknowledgeInput(false); acknowledgeUserResponse(false); throw error; }
       };
       if (data === "\r" || data === "\n") outputFrameGate.cancelCursorRestore();
 
@@ -1348,25 +1370,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         const waitingSession = useAppStore.getState().sessions.find(
           (item) => item.id === sessionId,
         );
-        const responseBaseline = getCheckpointedAgentUserResponseBaseline(waitingSession);
+        const responseBaseline = getAgentTurnInputResponseBaseline(waitingSession);
         if (responseBaseline !== null) {
           const sendInput = async () => {
             await ptyInput(sessionId, data);
-            const inferredRevision = await inferAgentUserResponse(
-              sessionId,
-              responseBaseline.revision,
-              responseBaseline.eventType,
-            );
-            if (inferredRevision === null) return;
-            const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-            if (isAgentUserResponseBaselineCurrent(latest, responseBaseline)) {
-              updateSession(sessionId, {
-                status: "running",
-                statusRevision: inferredRevision,
-                statusUpdatedAt: Date.now(),
-                lastEventType: "user_response",
-              });
-            }
+            await confirmUserResponse(responseBaseline);
           };
           void enqueueInput(sendInput).catch(reportRuntimeInputError);
           return;
@@ -1743,6 +1751,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       imeOutputGate.dispose();
       unsubscribeSession();
       interruptTracker.dispose();
+      userResponseTracker.dispose();
       titleDisposable.dispose();
       programStatusDisposable.dispose();
       parsedDisposable.dispose();

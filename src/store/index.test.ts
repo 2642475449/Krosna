@@ -5,6 +5,8 @@ import { applyPersistentSettingsToStore, createAppStore, getPersistentSettingsSn
 import { useAppStore } from "./index";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import type { TabEntity } from "./types";
+import { getAgentTurnInputResponseBaseline } from "@/lib/agentUserResponse";
+import { getSessionFeedback } from "@/lib/sessionFeedback";
 
 function createSession(
   id: string,
@@ -40,6 +42,43 @@ function createProjectContext(
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+it("resolves a permission indicator through updateSession without a checkpoint and preserves the next question", () => {
+  const store = createAppStore();
+  const projectPath = "D:/workspace/demo";
+  const session = createSession("permission", "Codex", projectPath, {
+    agentId: "codex", status: "waiting", statusRevision: 4, checkpointActiveTurnId: null,
+  });
+  store.setState({
+    currentProject: { path: projectPath, name: "demo" },
+    projectSessions: { [projectPath]: [session] },
+    projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+    sessions: [session],
+  });
+  store.getState().pushSessionEvent({
+    id: "permission-4", sessionId: session.id, projectPath, revision: 4,
+    sessionName: session.name, eventType: "permission_request", title: "Approve", body: "",
+    severity: "warning", source: "codex", requiresAttention: true, actionable: true, createdAt: 200,
+  });
+  const baseline = getAgentTurnInputResponseBaseline(store.getState().sessions[0]);
+  expect(baseline).toEqual({ revision: 4, eventType: "permission_request" });
+  store.getState().updateSession(session.id, {
+    status: "running", statusRevision: 5, statusUpdatedAt: 300, lastEventType: "user_response",
+  });
+  const attention = store.getState().projectAttentionItems[projectPath][0];
+  expect(attention.disposition).toBe("resolved");
+  expect(getSessionFeedback(store.getState().sessions[0], attention)?.state).toBe("running");
+
+  store.getState().updateSession(session.id, {
+    status: "waiting", statusRevision: 6, statusUpdatedAt: 400, lastEventType: "waiting_input",
+  });
+  store.getState().pushSessionEvent({
+    id: "question-6", sessionId: session.id, projectPath, revision: 6,
+    sessionName: session.name, eventType: "waiting_input", title: "Choose", body: "",
+    severity: "warning", source: "codex", requiresAttention: true, actionable: true, createdAt: 400,
+  });
+  expect(getSessionFeedback(store.getState().sessions[0], store.getState().projectAttentionItems[projectPath][0])?.state).toBe("waiting");
 });
 
 it.each([1.2, 1.5, 1.8])("normalizes legacy persisted line height %s to 1 on save", (terminalLineHeight) => {

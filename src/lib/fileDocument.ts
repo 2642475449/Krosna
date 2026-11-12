@@ -88,7 +88,8 @@ export function createFileDocument(projectPath: string, path: string, onActivity
       try {
         const status = await inspectProjectFile(projectPath, path);
         if (version !== generation || store.getState().saving) return;
-        if (status.modifiedAtMs === store.getState().status?.modifiedAtMs) return;
+        const previousStatus = store.getState().status;
+        if (status.modifiedAtMs === previousStatus?.modifiedAtMs && status.sizeBytes === previousStatus?.sizeBytes) return;
         if (dirty()) store.setState({ conflict: true });
         else await load();
       } catch (error) {

@@ -1,6 +1,6 @@
 import { Button, Empty, Spin, message } from "antd";
 import { ExportOutlined, FileOutlined, ReloadOutlined } from "@ant-design/icons";
-import { FileViewer, type FileViewerHandle, type ViewerOptions } from "@file-viewer/react";
+import { FileViewer, type FileViewerHandle, type ViewerOptions, type ViewerState } from "@file-viewer/react";
 import { wordRenderer } from "@file-viewer/renderer-word";
 import { spreadsheetRenderer } from "@file-viewer/renderer-spreadsheet";
 import { presentationRenderer } from "@file-viewer/renderer-presentation";
@@ -12,6 +12,8 @@ import { useAppStore } from "@/store";
 interface OfficeFilePreviewProps {
   projectPath: string;
   path: string;
+  modifiedAtMs?: number | null;
+  sizeBytes?: number | null;
 }
 
 // 上游渲染器把挂载节点收窄为 HTMLDivElement，而 React 适配器声明为 HTMLElement。
@@ -22,7 +24,7 @@ const OFFICE_RENDERERS = [
   presentationRenderer,
 ] as unknown as NonNullable<ViewerOptions["renderers"]>;
 
-export default function OfficeFilePreview({ projectPath, path }: OfficeFilePreviewProps) {
+export default function OfficeFilePreview({ projectPath, path, modifiedAtMs, sizeBytes }: OfficeFilePreviewProps) {
   const { i18n, t } = useTranslation();
   // 使用应用解析后的主题，避免系统深色偏好覆盖用户选择的浅色主题。
   const previewTheme = useAppStore((state) => state.activeTheme().startsWith("dark-") ? "dark" : "light");
@@ -32,8 +34,32 @@ export default function OfficeFilePreview({ projectPath, path }: OfficeFilePrevi
   const [reloadVersion, setReloadVersion] = useState(0);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<FileViewerHandle | null>(null);
+  const activeDataRef = useRef<ArrayBuffer | null>(null);
   const lastWheelZoomAtRef = useRef(0);
   const fileName = useMemo(() => path.split(/[\\/]/).filter(Boolean).pop() ?? path, [path]);
+  const locale = i18n.resolvedLanguage ?? "auto";
+  // React 适配器会在 options 引用变化时重新加载文档，轮询重渲染需保持引用稳定。
+  const viewerOptions = useMemo<ViewerOptions>(() => ({
+    locale,
+    theme: previewTheme,
+    rendererMode: "replace",
+    renderers: OFFICE_RENDERERS,
+    toolbar: false,
+    docx: {
+      visualPagination: true,
+      strictWordCompatibility: true,
+      awaitLayout: true,
+      externalLinkPolicy: "block",
+      externalResourcePolicy: "block",
+    },
+    ui: { density: "compact" },
+  }), [locale, previewTheme]);
+  const handleViewerStateChange = useCallback((state: ViewerState) => {
+    // 替换或卸载预览后，旧渲染器的延迟错误不能污染当前文档。
+    if (!data || activeDataRef.current !== data || state.error == null) return;
+    const reason = state.error instanceof Error ? state.error.message : String(state.error);
+    setError(reason || t("fileTabs.officePreviewUnavailable"));
+  }, [data, t]);
 
   const openExternal = useCallback(async () => {
     try {
@@ -45,12 +71,17 @@ export default function OfficeFilePreview({ projectPath, path }: OfficeFilePrevi
 
   useEffect(() => {
     let cancelled = false;
+    activeDataRef.current = null;
     setLoading(true);
     setError(null);
     setData(null);
     void readProjectOfficePreview(projectPath, path)
       .then((bytes) => {
-        if (!cancelled) setData(bytes.slice().buffer);
+        if (!cancelled) {
+          const buffer = bytes.slice().buffer;
+          activeDataRef.current = buffer;
+          setData(buffer);
+        }
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
@@ -60,8 +91,9 @@ export default function OfficeFilePreview({ projectPath, path }: OfficeFilePrevi
       });
     return () => {
       cancelled = true;
+      activeDataRef.current = null;
     };
-  }, [path, projectPath, reloadVersion]);
+  }, [path, projectPath, modifiedAtMs, sizeBytes, reloadVersion]);
 
   useEffect(() => {
     const preview = previewRef.current;
@@ -117,21 +149,8 @@ export default function OfficeFilePreview({ projectPath, path }: OfficeFilePrevi
           ref={viewerRef}
           buffer={data}
           filename={fileName}
-          options={{
-            locale: i18n.resolvedLanguage ?? "auto",
-            theme: previewTheme,
-            rendererMode: "replace",
-            renderers: OFFICE_RENDERERS,
-            toolbar: false,
-            docx: {
-              visualPagination: true,
-              strictWordCompatibility: true,
-              awaitLayout: true,
-              externalLinkPolicy: "block",
-              externalResourcePolicy: "block",
-            },
-            ui: { density: "compact" },
-          }}
+          options={viewerOptions}
+          onStateChange={handleViewerStateChange}
           className="h-full w-full"
         />
       </div>
