@@ -61,6 +61,17 @@ it.each(["src/main.tsx", "src/components/MainWindow.tsx"])(
 );
 
 it.each([
+  "src/components/editors/MonacoTextEditor.tsx",
+  "src/components/GitDiffTabView.tsx",
+  "src/components/GitConflictTabView.tsx",
+])("keeps full Monaco and compiler services out of the editor graph of %s", (entry) => {
+  const { eagerPackages } = readStaticGraph(entry);
+  expect([...eagerPackages].filter((name) => name === "monaco-editor"
+    || /monaco-editor\/esm\/vs\/(?:editor\/editor\.main|language\/(?:typescript|html|css)\/)/.test(name),
+  )).toEqual([]);
+});
+
+it.each([
   "src/main.tsx",
   "src/components/VoiceOverlayWindow.tsx",
   "src/components/VoiceWorkerWindow.tsx",

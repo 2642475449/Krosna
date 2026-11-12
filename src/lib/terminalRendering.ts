@@ -35,7 +35,7 @@ export function createTerminalRevealRepaint(options: {
 }
 
 // 只保存渲染资源句柄；会话与标签业务状态仍由 store 管理。
-export function createTerminalRenderingPool(maxHiddenContexts = 4) {
+export function createTerminalRenderingPool(maxHiddenContexts = 1) {
   const hidden = new Set<() => void>();
 
   function retain(release: () => void) {

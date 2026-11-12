@@ -8,7 +8,7 @@ import {
   UndoOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
-import * as monaco from "monaco-editor";
+import * as monaco from "@/lib/monacoRuntime";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,

@@ -1,7 +1,7 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "@/lib/monacoRuntime";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 import {
   disableMonacoCommandPalette,
@@ -17,6 +17,7 @@ import type { FileRevealTarget } from "@/lib/fileNavigation";
 loader.config({ monaco });
 
 interface MonacoTextEditorProps {
+  isActive?: boolean;
   statusTabId?: string;
   filePath: string;
   value: string;
@@ -31,6 +32,7 @@ interface MonacoTextEditorProps {
 }
 
 function MonacoTextEditor({
+  isActive = true,
   statusTabId,
   filePath,
   value,
@@ -54,13 +56,21 @@ function MonacoTextEditor({
   // so each editor must own a distinct model even for the same disk file.
   const modelPath = useMemo(() => monaco.Uri.file(filePath)
     .with({ query: `krosna-editor=${encodeURIComponent(editorId)}` }).toString(), [filePath, editorId]);
-  useLayoutEffect(() => () => { editorRef.current = null; }, [modelPath]);
+  const [editedModelPath, setEditedModelPath] = useState<string | null>(null);
+  // View state cannot restore undo history. Once edited, keep this model alive
+  // until its host closes, including after saving or undoing back to clean text.
+  const mounted = isActive || editedModelPath === modelPath || saveEnabled;
+  const savedView = useRef<{ path: string; state: monaco.editor.ICodeEditorViewState | null } | null>(null);
+  const lastRevealedTarget = useRef<FileRevealTarget | null>(null);
   const statusDisposables = useRef<monaco.IDisposable[]>([]);
-  useEffect(() => () => {
+  useLayoutEffect(() => () => {
+    // The React wrapper disposes models in passive cleanup. Capture state first.
+    if (editorRef.current) savedView.current = { path: modelPath, state: editorRef.current.saveViewState() };
+    editorRef.current = null;
     statusDisposables.current.forEach((disposable) => disposable.dispose());
     statusDisposables.current = [];
     if (statusTabId) useFileEditorStatusStore.getState().removeEditorStatus(statusTabId);
-  }, [statusTabId]);
+  }, [modelPath, mounted, statusTabId]);
   const onSaveRef = useRef(onSave);
   const saveEnabledRef = useRef(saveEnabled);
   onSaveRef.current = onSave;
@@ -81,6 +91,7 @@ function MonacoTextEditor({
     );
     editorInstance.setSelection(range);
     editorInstance.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
+    lastRevealedTarget.current = target;
     if (focusOnReveal) editorInstance.focus();
   };
 
@@ -121,6 +132,8 @@ function MonacoTextEditor({
     statusDisposables.current.forEach((disposable) => disposable.dispose());
     statusDisposables.current = [];
     editorRef.current = editor;
+    const view = savedView.current?.path === modelPath ? savedView.current.state : null;
+    if (view) editor.restoreViewState(view);
     if (statusTabId) {
       const updateStatus = () => {
         const model = editor.getModel();
@@ -161,7 +174,9 @@ function MonacoTextEditor({
       });
     }
 
-    if (revealTarget) revealLocationAfterLayout(editor, revealTarget);
+    if (revealTarget && (!view || lastRevealedTarget.current !== revealTarget)) {
+      revealLocationAfterLayout(editor, revealTarget);
+    }
   };
 
   return (
@@ -178,19 +193,26 @@ function MonacoTextEditor({
           : undefined
       }
     >
-      <Editor
+      {mounted && <Editor
         key={modelPath}
         height="100%"
         width="100%"
         loading={null}
         path={modelPath}
+        saveViewState={false}
         language={language}
         theme={theme}
         value={value}
         onMount={handleMount}
-        onChange={(nextValue) => onChange(nextValue ?? "")}
+        onChange={(nextValue) => {
+          if (!readOnly) setEditedModelPath(modelPath);
+          onChange(nextValue ?? "");
+        }}
         options={{
           automaticLayout: true,
+          // No compiler highlight provider in review mode. Avoid Monaco 0.55's
+          // uncaught cancellation when its delayed word highlighter is disposed.
+          occurrencesHighlight: "off",
           contextmenu: false,
           minimap: { enabled: false },
           readOnly,
@@ -207,7 +229,7 @@ function MonacoTextEditor({
             bottom: 12,
           },
         }}
-      />
+      />}
     </MonacoContextMenu>
   );
 }

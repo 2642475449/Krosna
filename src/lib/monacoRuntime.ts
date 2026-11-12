@@ -1,9 +1,7 @@
-// 集中声明 Monaco 运行时入口：保留编辑功能与语言服务，仅加载应用识别的语言。
+// 轻量审阅运行时：保留编辑、Diff、语法高亮与 JSON 校验。
+// TS/JS、HTML、CSS 仅注册 tokenizer，不注册会请求语言服务 Worker 的 providers。
 import './monacoWorkers';
-import 'monaco-editor/esm/vs/language/css/monaco.contribution.js';
-import 'monaco-editor/esm/vs/language/html/monaco.contribution.js';
 import 'monaco-editor/esm/vs/language/json/monaco.contribution.js';
-import 'monaco-editor/esm/vs/language/typescript/monaco.contribution.js';
 import 'monaco-editor/esm/vs/basic-languages/bat/bat.contribution.js';
 import 'monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js';
 import 'monaco-editor/esm/vs/basic-languages/css/css.contribution.js';
@@ -24,7 +22,7 @@ import 'monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js';
 import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js';
 import 'monaco-editor/esm/vs/basic-languages/xml/xml.contribution.js';
 import 'monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution.js';
-// 全部编辑器 contribution 保留：查找、折叠、补全、格式化、差异视图与无障碍操作。
+// 保留编辑器交互入口；补全、格式化等操作仅在有对应 provider 时提供语言能力。
 import 'monaco-editor/esm/vs/editor/editor.all.js';
 import 'monaco-editor/esm/vs/editor/standalone/browser/iPadShowKeyboard/iPadShowKeyboard.js';
 import 'monaco-editor/esm/vs/editor/standalone/browser/inspectTokens/inspectTokens.js';

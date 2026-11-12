@@ -530,6 +530,7 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
         </div>
       ) : (
         <MonacoTextEditor
+          isActive={isActive}
           statusTabId={tabId}
           filePath={path}
           value={content}

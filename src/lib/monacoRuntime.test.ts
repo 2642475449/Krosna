@@ -15,11 +15,15 @@ it("provides a tokenizer for every file type recognized by the application", () 
   for (const file of ["Dockerfile", "Makefile", ".gitignore"]) expect(languages.has(getMonacoLanguage(file)), file).toBe(true);
 });
 
-it("keeps editor interactions and language services without importing the full language entry", () => {
+it("keeps editor interactions and JSON validation with tokenizers instead of compiler services", () => {
   const runtime = readFileSync(new URL("./monacoRuntime.ts", import.meta.url), "utf8");
+  const workers = readFileSync(new URL("./monacoWorkers.ts", import.meta.url), "utf8");
   expect(runtime).toContain("editor/editor.all.js");
-  for (const language of ["typescript", "json", "html", "css"]) {
-    expect(runtime).toContain(`language/${language}/monaco.contribution.js`);
+  expect(runtime).toContain("language/json/monaco.contribution.js");
+  for (const language of ["typescript", "html", "css"]) {
+    expect(runtime).not.toContain(`language/${language}/monaco.contribution.js`);
+    expect(runtime).toContain(`basic-languages/${language}/${language}.contribution.js`);
+    expect(workers).not.toContain(`language/${language}/`);
   }
   expect(runtime).not.toContain("editor.main");
   expect(runtime).not.toMatch(/from ["']monaco-editor["']/);

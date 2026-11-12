@@ -56,8 +56,8 @@ export default defineConfig(async () => ({
   },
   clearScreen: false,
   build: {
-    // Monaco bundles its complete offline editor and language-service runtime in one chunk.
-    // Keep a guardrail for regressions without warning on that intentional 3.8 MB chunk.
+    // Monaco's offline editor core remains large even without compiler services.
+    // Keep a guardrail without warning on the intentional editor runtime chunk.
     chunkSizeWarningLimit: 4000,
     rollupOptions: {
       output: {

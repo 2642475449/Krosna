@@ -34,6 +34,7 @@ loader.config({ monaco });
 
 interface GitDiffTabViewProps {
   tabId: string;
+  isActive?: boolean;
 }
 
 function resolveProjectFilePath(projectPath: string, filePath: string) {
@@ -44,7 +45,7 @@ function resolveProjectFilePath(projectPath: string, filePath: string) {
   return `${projectPath.replace(/[\\/]+$/, "")}\\${filePath.replace(/^[\\/]+/, "")}`;
 }
 
-function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
+function GitDiffTabView({ tabId, isActive = true }: GitDiffTabViewProps) {
   const { t } = useTranslation();
   const lightTheme = useAppStore((s) => s.lightTheme);
   const darkTheme = useAppStore((s) => s.darkTheme);
@@ -112,17 +113,20 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
       disableMonacoCommandPalette(editor.getModifiedEditor(), monaco);
 
       const syncChanges = () => {
-        const changes = editor.getLineChanges() ?? [];
+        const changes = editor.getLineChanges();
+        if (!changes) return; // Wait for the new instance to finish computing its diff.
         const nextChangeCount = changes.length;
         setChangeCount(nextChangeCount);
-        setActiveChangeIndex(0);
         if (changes.length > 0 && revealedDocumentRef.current !== documentRef.current) {
+          setActiveChangeIndex(0);
           const firstChange = changes[0];
           editor.getModifiedEditor().revealLineInCenter(
             getModifiedDiffTargetLine(firstChange),
             monaco.editor.ScrollType.Immediate,
           );
           revealedDocumentRef.current = documentRef.current;
+        } else {
+          setActiveChangeIndex((index) => Math.min(index, Math.max(0, nextChangeCount - 1)));
         }
       };
 
@@ -132,14 +136,11 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
     [],
   );
 
-  useEffect(
-    () => () => {
-      diffUpdateSubscriptionRef.current?.dispose();
-      diffUpdateSubscriptionRef.current = null;
-      diffEditorRef.current = null;
-    },
-    [],
-  );
+  const handleDiffEditorUnmount = useCallback(() => {
+    diffUpdateSubscriptionRef.current?.dispose();
+    diffUpdateSubscriptionRef.current = null;
+    diffEditorRef.current = null;
+  }, []);
 
   if (!document) {
     return <Empty className="mt-16" description={t("sidebar.gitClickToViewDiff")} />;
@@ -292,6 +293,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
         }}
       >
         <MonacoDiffEditor
+          isActive={isActive}
           height="100%"
           width="100%"
           language={language}
@@ -299,6 +301,7 @@ function GitDiffTabView({ tabId }: GitDiffTabViewProps) {
           original={document.originalContent}
           modified={document.modifiedContent}
           onMount={handleDiffEditorMount}
+          onUnmount={handleDiffEditorUnmount}
           options={{
             readOnly: true,
             originalEditable: false,

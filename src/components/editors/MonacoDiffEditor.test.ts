@@ -27,6 +27,8 @@ beforeEach(() => {
       getModel: () => attached,
       setModel: vi.fn((models) => { attached = models; }),
       updateOptions: vi.fn(),
+      saveViewState: vi.fn(() => ({ original: { line: 20 }, modified: { line: 30 } })),
+      restoreViewState: vi.fn(),
       dispose: vi.fn(() => { expect(attached).toBeNull(); }),
     };
     runtime.editors.push(instance);
@@ -36,6 +38,7 @@ beforeEach(() => {
     let disposed = false;
     const model = {
       language,
+      getLanguageId: () => language ?? "plaintext",
       getValue: () => value,
       setValue: vi.fn((next) => { value = next; }),
       isDisposed: () => disposed,
@@ -103,4 +106,40 @@ it("releases partially created resources when initialization fails", () => {
   expect(() => act(() => root.render(createElement(MonacoDiffEditor)))).toThrow("model initialization failed");
   expect(runtime.editors[0].dispose).toHaveBeenCalledTimes(1);
   error.mockRestore();
+});
+
+it("allocates only visible diffs, restores their view, and releases both models while hidden", () => {
+  const onUnmount = vi.fn();
+  const render = (isActive: boolean, modified = "after") => act(() => root.render(
+    createElement(MonacoDiffEditor, { original: "before", modified, isActive, onUnmount }),
+  ));
+  render(false);
+  expect(runtime.createDiffEditor).not.toHaveBeenCalled();
+  render(true);
+  const first = runtime.editors[0];
+  const view = first.saveViewState();
+  render(false);
+  expect(first.dispose).toHaveBeenCalledTimes(1);
+  expect(runtime.models.every((model) => model.isDisposed())).toBe(true);
+  expect(onUnmount).toHaveBeenCalledTimes(1);
+  render(true);
+  expect(runtime.editors[1].restoreViewState).toHaveBeenCalledWith(view);
+  render(false);
+  render(false, "updated while hidden");
+  render(true, "updated while hidden");
+  expect(runtime.editors[2].getModel().modified.getValue()).toBe("updated while hidden");
+  expect(runtime.editors[2].restoreViewState).not.toHaveBeenCalled();
+});
+
+it("keeps both visible split panes alive while releasing an inactive diff", () => {
+  const render = (active: boolean) => act(() => root.render(createElement("div", null,
+    createElement(MonacoDiffEditor, { key: "left", isActive: true, original: "a", modified: "b" }),
+    createElement(MonacoDiffEditor, { key: "right", isActive: true, original: "c", modified: "d" }),
+    createElement(MonacoDiffEditor, { key: "hidden", isActive: active, original: "e", modified: "f" }),
+  )));
+  render(true);
+  render(false);
+  expect(runtime.editors[0].dispose).not.toHaveBeenCalled();
+  expect(runtime.editors[1].dispose).not.toHaveBeenCalled();
+  expect(runtime.editors[2].dispose).toHaveBeenCalledTimes(1);
 });
