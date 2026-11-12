@@ -4,9 +4,11 @@ const mocks = vi.hoisted(() => ({
   spawn: vi.fn<(...args: unknown[]) => Promise<void>>(),
   close: vi.fn<(...args: unknown[]) => Promise<void>>(),
   input: vi.fn<(...args: unknown[]) => Promise<void>>(),
+  removeOutput: vi.fn<(...args: unknown[]) => Promise<void>>(),
   exit: null as null | ((event: { payload: { session_id: string; code: number | null } }) => void),
 }));
 vi.mock("@/lib/api", () => ({ spawnPty: mocks.spawn, closePty: mocks.close, ptyInput: mocks.input,
+  removeRunnerOutput: mocks.removeOutput,
   recordQuickCommandUse: vi.fn(async (_path: string, _id: string, timestamp: number) => timestamp),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
@@ -17,6 +19,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async (_: string, callba
 import { useAppStore } from "@/store";
 import { useBottomRunnerStore } from "./bottomRunner";
 import { useQuickCommandUsageStore } from "./quickCommandUsage";
+import { registerRunnerOutputTerminal, resetRunnerOutputsForTests, useRunnerOutputStore } from "./runnerOutput";
 import { buildRunnerCommand, clearFinishedRunnerTabs, closeRunnerTab, completeRunner, launchRunner,
   markRunnerTerminalReady, rerunRunner, stopRunner } from "./bottomRunnerRuntime";
 const path = "D:/project";
@@ -33,13 +36,33 @@ async function flush() { for (let i = 0; i < 12; i++) await Promise.resolve(); }
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.spawn.mockResolvedValue(); mocks.close.mockResolvedValue(); mocks.input.mockResolvedValue();
+  mocks.removeOutput.mockResolvedValue();
+  resetRunnerOutputsForTests();
   runner().reset();
   useQuickCommandUsageStore.setState({ usageByProject: {} });
   useAppStore.setState({ projectSessions: {}, projectWorkspaces: {} });
   useAppStore.getState().setCurrentProject({ path, name: "Project" });
   useAppStore.getState().addSession({ id: "main", name: "Main", path, active: true, createdAt: 1, agentId: "codex" });
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { resetRunnerOutputsForTests(); vi.useRealTimers(); });
+
+it("closing a runner removes its cached output and per-session completion state", async () => {
+  const { promise, created } = start();
+  await promise;
+  registerRunnerOutputTerminal(created.sessionId, {
+    capture: async () => ({ version: 1, data: "finished", cols: 1024, rows: 24, viewportY: 0 }),
+    estimateBytes: () => 4096,
+  });
+  useAppStore.getState().setTerminalExitCode(created.sessionId, 0);
+  useAppStore.getState().setTerminalCompletionIntegration(created.sessionId, {
+    shell: "powershell", status: "unavailable", reason: "terminal-closed", updatedAt: 1,
+  });
+  await closeRunnerTab(created);
+  expect(mocks.removeOutput).toHaveBeenCalledWith(created.sessionId);
+  expect(useRunnerOutputStore.getState().entries[created.sessionId]).toBeUndefined();
+  expect(useAppStore.getState().terminalExitCodeBySession[created.sessionId]).toBeUndefined();
+  expect(useAppStore.getState().terminalCompletionIntegrationBySession[created.sessionId]).toBeUndefined();
+});
 it("starts outside the workspace and never changes its active session, focus or tabs", async () => {
   const before = useAppStore.getState();
   const { promise, created } = start();

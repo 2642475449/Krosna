@@ -2,6 +2,7 @@ import { getHookCommandName, getHookSource, groupHooksBySource, isKrosnaHook } f
 import { SkillsSettingsPage } from "./settings/SkillsSettingsPage";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { BackgroundSettings } from "./settings/BackgroundSettings";
+import { WorkspaceRestoreSettings } from "./settings/WorkspaceRestoreSettings";
 import { SettingRow } from "./settings/SettingRow";
 import {
   SettingOutlined,
@@ -260,7 +261,6 @@ function GeneralPage() {
   const themeCategory = useAppStore((s) => s.themeCategory);
   const systemPrefersDark = useAppStore((s) => s.systemPrefersDark);
   const language = useAppStore((s) => s.language);
-  const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
   const terminalScrollback = useAppStore((s) => s.terminalScrollback);
@@ -268,7 +268,6 @@ function GeneralPage() {
   const setDarkTheme = useAppStore((s) => s.setDarkTheme);
   const setThemeCategory = useAppStore((s) => s.setThemeCategory);
   const setLanguage = useAppStore((s) => s.setLanguage);
-  const setStartupRestoreLastProject = useAppStore((s) => s.setStartupRestoreLastProject);
   const setProjectOpenBehavior = useAppStore((s) => s.setProjectOpenBehavior);
   const setTerminalScrollback = useAppStore((s) => s.setTerminalScrollback);
   const setExplorerContextMenuEnabledInStore = useAppStore(
@@ -415,18 +414,15 @@ function GeneralPage() {
         </SettingRow>
       </SettingSection>
 
-      <SettingSection title={t("settings.general.startupSection")}>
+      <SettingSection title={t("background.closeSection")}>
         <BackgroundSettings />
-        <SettingRow
-          label={t("settings.general.restoreLastProject")}
-        >
-          <Switch
-            checked={startupRestoreLastProject}
-            onChange={setStartupRestoreLastProject}
-          />
-        </SettingRow>
+      </SettingSection>
+
+      <SettingSection title={t("settings.general.startupSection")}>
+        <WorkspaceRestoreSettings />
         <SettingRow
           label={t("settings.general.projectOpenBehavior")}
+          description={t("settings.general.projectOpenBehaviorDesc")}
         >
           <Select
             value={projectOpenBehavior}

@@ -12,6 +12,7 @@ import {
 } from "@/lib/monaco";
 import { useAppStore } from "@/store";
 import { useFileEditorStatusStore } from "@/store/slices/fileEditorStatus";
+import { useWorkspaceRecoveryStore } from "@/store/slices/workspaceRecovery";
 import type { FileRevealTarget } from "@/lib/fileNavigation";
 
 loader.config({ monaco });
@@ -63,8 +64,19 @@ function MonacoTextEditor({
   const savedView = useRef<{ path: string; state: monaco.editor.ICodeEditorViewState | null } | null>(null);
   const lastRevealedTarget = useRef<FileRevealTarget | null>(null);
   const statusDisposables = useRef<monaco.IDisposable[]>([]);
+  const rememberRecoveryView = () => {
+    const editor = editorRef.current;
+    if (!editor || !statusTabId || useAppStore.getState().tabsById[statusTabId]?.kind !== "file") return;
+    const position = editor.getPosition();
+    if (!position) return;
+    useWorkspaceRecoveryStore.getState().setEditorView(filePath, {
+      lineNumber: position.lineNumber, column: position.column,
+      scrollTop: editor.getScrollTop(), scrollLeft: editor.getScrollLeft(),
+    });
+  };
   useLayoutEffect(() => () => {
     // The React wrapper disposes models in passive cleanup. Capture state first.
+    rememberRecoveryView();
     if (editorRef.current) savedView.current = { path: modelPath, state: editorRef.current.saveViewState() };
     editorRef.current = null;
     statusDisposables.current.forEach((disposable) => disposable.dispose());
@@ -134,6 +146,15 @@ function MonacoTextEditor({
     editorRef.current = editor;
     const view = savedView.current?.path === modelPath ? savedView.current.state : null;
     if (view) editor.restoreViewState(view);
+    const recovered = useWorkspaceRecoveryStore.getState().editorViews[filePath];
+    if (!view && recovered && !revealTarget) {
+      editor.setPosition({ lineNumber: recovered.lineNumber, column: recovered.column });
+      editor.setScrollPosition({ scrollTop: recovered.scrollTop, scrollLeft: recovered.scrollLeft });
+      window.requestAnimationFrame(() => {
+        if (editorRef.current !== editor) return;
+        editor.setScrollPosition({ scrollTop: recovered.scrollTop, scrollLeft: recovered.scrollLeft });
+      });
+    }
     if (statusTabId) {
       const updateStatus = () => {
         const model = editor.getModel();
@@ -154,6 +175,8 @@ function MonacoTextEditor({
         editor.onDidChangeModelContent(updateStatus),
         editor.onDidChangeModelOptions(updateStatus),
         editor.onDidChangeModelLanguage(updateStatus),
+        editor.onDidChangeCursorPosition(rememberRecoveryView),
+        editor.onDidScrollChange(rememberRecoveryView),
       ];
       updateStatus();
     }

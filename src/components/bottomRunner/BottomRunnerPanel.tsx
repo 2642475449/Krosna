@@ -1,19 +1,19 @@
-import { lazy, Suspense, useEffect } from "react";
+import { useEffect } from "react";
 import { DeleteOutlined, CloseOutlined, MinusOutlined,
-  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined, SearchOutlined, HighlightOutlined } from "@ant-design/icons";
+  ReloadOutlined, StopOutlined, VerticalAlignBottomOutlined, EnterOutlined, SearchOutlined } from "@ant-design/icons";
 import { Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
 import { setRuntimeRunnerContext } from "@/lib/api";
 import { EMPTY_RUNNER_TABS, isRunnerRunning, useBottomRunnerStore } from "@/store/slices/bottomRunner";
-import { closeRunnerTab, completeRunner, markRunnerTerminalReady,
+import { closeRunnerTab,
   rerunRunner, stopRunner } from "@/store/slices/bottomRunnerRuntime";
 import { BottomRunnerDivider, syncRunnerLayout } from "./BottomRunnerDivider";
 import { RunnerStatusIcon } from "./BottomRunnerStatus";
 import { RunnerLogSearch } from "./RunnerLogSearch";
+import { RunnerTerminalView } from "./RunnerTerminalView";
+import { useRunnerOutputStore } from "@/store/slices/runnerOutput";
 import "./bottomRunner.css";
-
-const Terminal = lazy(() => import("../Terminal"));
 
 export function BottomRunnerPanel() {
   const { t } = useTranslation();
@@ -21,6 +21,11 @@ export function BottomRunnerPanel() {
   const store = useBottomRunnerStore();
   const tabs = store.tabsByProject[projectPath] ?? EMPTY_RUNNER_TABS;
   const active = tabs.find((tab) => tab.id === store.activeTabIdByProject[projectPath]);
+  const activeOutputReady = useRunnerOutputStore((state) => {
+    const entry = active ? state.entries[active.sessionId] : undefined;
+    return Boolean(entry && entry.estimatedBytes > 0 && !entry.snapshot
+      && (entry.phase === "live" || entry.phase === "saving"));
+  });
   useEffect(() => {
     if (projectPath) void setRuntimeRunnerContext(projectPath, active?.sessionId ?? null)
       .catch((error: unknown) => console.warn("Failed to sync runtime runner context:", error));
@@ -42,7 +47,7 @@ export function BottomRunnerPanel() {
     void operation.catch((error: unknown) => message.error(t("bottomRunner.launchFailed", { error: String(error) })));
   };
   const clear = () => {
-    if (active) window.dispatchEvent(new CustomEvent("terminal:clear", { detail: { sessionId: active.sessionId } }));
+    if (active && activeOutputReady) window.dispatchEvent(new CustomEvent("terminal:clear", { detail: { sessionId: active.sessionId } }));
   };
   const tool = (key: string, icon: React.ReactNode, onClick: () => void, disabled = false, pressed?: boolean) => (
     <Tooltip key={key} title={t(`bottomRunner.${key}`)}>
@@ -84,27 +89,22 @@ export function BottomRunnerPanel() {
         <div className="flex shrink-0 items-center gap-1">
           {tool("rerun", <ReloadOutlined />, () => active && runAction(rerunRunner(active)), !active || active.status === "starting")}
           {tool("stop", <StopOutlined />, () => active && runAction(stopRunner(active)), !active || !isRunnerRunning(active))}
-          {tool("clear", <DeleteOutlined />, clear, !active)}
+          {tool("clear", <DeleteOutlined />, clear, !active || !activeOutputReady)}
           {tool("search", <SearchOutlined />, () => active && store.setLogSearchOpen(active.sessionId, true), !active)}
           <span aria-hidden="true" className="app-bottom-runner-tool-divider mx-1 h-4" />
           {tool("autoScroll", <VerticalAlignBottomOutlined />, store.toggleAutoScroll, false, store.autoScroll)}
           {tool("wordWrap", <EnterOutlined />, store.toggleWordWrap, false, store.wordWrap)}
-          {tool("colorizeLogs", <HighlightOutlined />, store.toggleColorizeLogs, false, store.colorizeLogs)}
           {tool("collapse", <MinusOutlined />, () => store.setOpen(false))}
         </div>
       </div>
       {active && <RunnerLogSearch sessionId={active.sessionId} />}
       <div className="relative min-h-0 flex-1">
         {!active && <div className="flex h-full items-center justify-center text-xs">{t("bottomRunner.noActiveRun")}</div>}
-        {/* 折叠、切换标签/工程仅隐藏 DOM，保留日志、OSC 解析与 PTY 输出监听。 */}
+        {/* 运行中的任务继续解析输出；已退出日志由全局预算决定保留视图或暂存。 */}
         {Object.values(store.tabsByProject).flat().map((tab) => <div key={tab.sessionId} role="tabpanel"
           id={`output:${tab.sessionId}`} aria-labelledby={tab.id}
           className={tab.sessionId === active?.sessionId ? "absolute inset-0" : "hidden"}>
-          <Suspense fallback={null}><Terminal sessionId={tab.sessionId}
-            allowIndependentFocus={store.open && tab.sessionId === active?.sessionId}
-            runnerOptions={{ autoScroll: store.autoScroll, wordWrap: store.wordWrap,
-              onAutoScrollChange: store.setAutoScroll, onReady: markRunnerTerminalReady, onCommandComplete: completeRunner }} />
-          </Suspense>
+          <RunnerTerminalView tab={tab} visible={store.open && tab.sessionId === active?.sessionId} />
         </div>)}
       </div>
     </section>

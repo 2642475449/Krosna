@@ -16,7 +16,9 @@ import HomePage from "@/pages/home";
 import { WorkflowIllustration } from "@/components/ui/WorkflowIllustration";
 import { SettingsPanelSkeleton } from "@/components/settings/SettingsPanelSkeleton";
 import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
-import { SessionResumeView } from "@/components/SessionResumeView";
+import { TerminalHistoryView } from "@/components/TerminalHistoryView";
+import { initializeRecoverableWindowContext } from "@/store/slices/workspaceRecovery";
+import { useWorkspaceSessionRestore } from "@/hooks/useWorkspaceSessionRestore";
 import { NewSessionDialog } from "@/components/NewSessionDialog";
 import GlobalTextSearchDialog from "@/components/GlobalTextSearchDialog";
 import { VoiceTrigger } from "@/components/VoiceButton";
@@ -67,6 +69,7 @@ import type {
   SessionUsageUpdatePayload,
   AgentTurnReview,
   AiAgentId,
+  WindowProjectContext,
 } from "@/types";
 import {
   isPermissionGranted,
@@ -280,7 +283,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                         onClose={() => closeTab(tabId)}
                       />
                     ) : session ? (
-                      <SessionResumeView session={session} onResume={() => void resumeSession(tabId)} />
+                      <TerminalHistoryView session={session} onResume={async () => { await resumeSession(tabId); }} />
                     ) : null}
                   </Suspense>
                   </ErrorBoundary>
@@ -548,10 +551,9 @@ function AppLayout() {
   const windowContextReady = useAppStore((s) => s.windowContextReady);
   const windowMode = useAppStore((s) => s.windowMode);
   const windowLabel = useAppStore((s) => s.windowLabel);
-  const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
   const lastProjectPath = useAppStore((s) => s.lastProject?.path ?? null);
   const setClaudeCliInfo = useAppStore((s) => s.setClaudeCliInfo);
-  const initializeWindowContext = useAppStore((s) => s.initializeWindowContext);
+  useWorkspaceSessionRestore();
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
   const setVoiceTriggerVisible = useAppStore((s) => s.setVoiceTriggerVisible);
   const addSession = useAppStore((s) => s.addSession);
@@ -711,6 +713,7 @@ function AppLayout() {
         titleSource,
         agentId: agent.id,
         agentExecutablePath: agent.executablePath,
+        launchConfigSnapshot: effectiveLaunchOptions,
         agentSessionId: agent.id === "pi" ? sessionId : null,
         presentation,
         runtimeEffort: claudeEffort,
@@ -1170,19 +1173,19 @@ function AppLayout() {
     let disposed = false;
     getWindowProjectContext()
       .then((context) => {
-        if (!disposed) initializeWindowContext(context);
+        if (!disposed) return initializeRecoverableWindowContext(context);
       })
       .catch(console.error);
 
-    const unlistenPromise = getCurrentWindow().listen<any>("window-context-updated", (event) => {
-      initializeWindowContext(event.payload);
+    const unlistenPromise = getCurrentWindow().listen<WindowProjectContext>("window-context-updated", (event) => {
+      void initializeRecoverableWindowContext(event.payload).catch(console.error);
     });
 
     return () => {
       disposed = true;
       unlistenPromise.then((fn) => fn()).catch(() => {});
     };
-  }, [initializeWindowContext]);
+  }, []);
 
   // Restore after both the window context and persisted settings are ready.
   useEffect(() => {
@@ -1190,7 +1193,6 @@ function AppLayout() {
       !windowContextReady ||
       windowMode !== "launcher" ||
       windowLabel !== "main" ||
-      !startupRestoreLastProject ||
       !lastProjectPath ||
       currentProject
     ) {
@@ -1208,7 +1210,6 @@ function AppLayout() {
         state.windowMode !== "launcher" ||
         state.windowLabel !== "main" ||
         state.currentProject ||
-        !state.startupRestoreLastProject ||
         state.lastProject?.path !== lastProjectPath
       ) {
         return;
@@ -1223,7 +1224,6 @@ function AppLayout() {
   }, [
     currentProject,
     lastProjectPath,
-    startupRestoreLastProject,
     windowContextReady,
     windowLabel,
     windowMode,

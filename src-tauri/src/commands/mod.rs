@@ -22,6 +22,7 @@ pub mod project_launchers;
 pub mod project_icon;
 pub mod quick_commands;
 pub mod remote_notification;
+pub mod runner_output;
 pub(crate) mod scheduled_tasks;
 pub mod search_index;
 pub mod session;
@@ -35,6 +36,7 @@ pub mod voice;
 pub mod voice_polish;
 pub mod voice_shortcut;
 pub mod window;
+pub mod workspace_recovery;
 
 /// 将同步磁盘、进程和锁等待操作移出窗口线程及异步执行线程。
 pub(crate) async fn run_background_task<T, F>(operation: &'static str, task: F) -> Result<T, String>

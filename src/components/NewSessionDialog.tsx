@@ -33,6 +33,8 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
   const [nameDraft, setNameDraft] = useState("");
   const nameInputRef = useRef<InputRef>(null);
   const nameButtonRef = useRef<HTMLButtonElement>(null);
+  const launcherRef = useRef<HTMLDivElement>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
   const [agents, setAgents] = useState<AgentCliInfo[]>([]);
   const [agentId, setAgentId] = useState<AiAgentId | null>(null);
   const [selectOpen, setSelectOpen] = useState(false);
@@ -104,16 +106,21 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
     setEditingName(false);
   };
   const canCreate = Boolean(selected && sessionName.trim() && !creating && !detecting);
+  const focusCreateButton = () => (canCreate ? createButtonRef.current : launcherRef.current)?.focus();
   const confirm = () => { if (!canCreate || !selected || submitting.current) return; submitting.current = true; onCreate(sessionName.trim(), selected, launchOptions, nameEdited ? "manual" : "default"); };
   useEffect(() => { if (!creating) submitting.current = false; }, [creating]);
   const move = (step: number) => { if (!agents.length || creating) return; const index = Math.max(0, agents.findIndex(a => a.id === agentId)); const next = (index + step + agents.length) % agents.length; setAgentId(agents[next].id); };
   const choices = agentId && agentId in TASK_CHOICES ? TASK_CHOICES[agentId as keyof typeof TASK_CHOICES] : null;
   const defaultTask = base ? (base as unknown as Record<string, string>)[taskKey] : "inherit";
   const defaultLabel = agentId === "claude" && defaultTask === "inherit" ? t(`statusBar.effort.${effortInfo?.effectiveLevel ?? "auto"}`) : agentId ? choiceLabel(agentId, defaultTask) : "";
-  return <Modal open={open} title={null} closable={false} footer={null} width={580} keyboard={!selectOpen} className="app-session-launcher-modal" classNames={{ mask: "app-session-launcher-mask" }} onCancel={() => { if (!creating) onCancel(); }} destroyOnHidden>
-    <div aria-label={title ?? t("newSession.title")} onKeyDown={event => {
+  return <Modal open={open} title={null} closable={false} footer={null} width={580} keyboard={!selectOpen} className="app-session-launcher-modal" classNames={{ mask: "app-session-launcher-mask" }} onCancel={() => { if (!creating) onCancel(); }} afterOpenChange={visible => {
+    // 默认回车创建会话，避免 Modal 将焦点放在标题编辑按钮上。
+    if (visible) focusCreateButton();
+  }} destroyOnHidden>
+    <div ref={launcherRef} tabIndex={-1} aria-label={title ?? t("newSession.title")} onKeyDown={event => {
       if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.repeat) return;
-      if (event.key === "Enter" && !selectOpen) { event.preventDefault(); event.stopPropagation(); confirm(); }
+      // 子控件保留原生回车行为，仅在弹窗内容本身聚焦时执行默认创建。
+      if (event.key === "Enter" && !selectOpen && event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); confirm(); }
       else if (event.altKey && ["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); move(event.key === "ArrowLeft" ? -1 : 1); }
     }}>
       <div className="app-launcher-header">
@@ -132,10 +139,14 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
             if (event.key === "Enter" || event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
-              if (event.key === "Enter") finishNameEditing();
+              const saved = event.key === "Enter";
+              if (saved) finishNameEditing();
               else setEditingName(false);
-              // Restore keyboard navigation after the editor unmounts.
-              requestAnimationFrame(() => nameButtonRef.current?.focus());
+              // 等输入框卸载后恢复焦点：保存后可继续创建，取消后可重新编辑。
+              requestAnimationFrame(() => {
+                if (saved) focusCreateButton();
+                else nameButtonRef.current?.focus();
+              });
             }
           }}
         /> : <button
@@ -199,7 +210,7 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
           <code aria-label={t("newSession.commandPreview")}>$ {command}</code>
         </button>
         <Button disabled={creating} onClick={onCancel}>{t("common.cancel")}</Button>
-        <Button type="primary" loading={creating} disabled={!canCreate} onClick={confirm}>{t("newSession.create")} <EnterOutlined /></Button>
+        <Button ref={createButtonRef} type="primary" loading={creating} disabled={!canCreate} onClick={confirm}>{t("newSession.create")} <EnterOutlined /></Button>
       </div>
     </div>
   </Modal>;

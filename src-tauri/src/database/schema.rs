@@ -189,6 +189,19 @@ pub fn migrate(conn: &Connection) -> Result<(), String> {
             .map_err(|error| format!("更新语音设置版本失败: {error}"))?;
     }
 
+    if version < 9 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS workspace_recovery (
+                project_path TEXT PRIMARY KEY NOT NULL,
+                payload_json TEXT NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            ) WITHOUT ROWID;",
+        )
+        .map_err(|error| format!("创建工作区恢复表失败: {error}"))?;
+        conn.pragma_update(None, "user_version", 9)
+            .map_err(|error| format!("更新 SQLite schema 版本失败: {error}"))?;
+    }
+
     Ok(())
 }
 
@@ -221,7 +234,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert_eq!(session_table_exists, 1);
         assert_eq!(control_table_exists, 1);
     }

@@ -9,11 +9,18 @@ import i18n from "@/i18n";
 import { useAppStore } from "@/store";
 import AppLayout from "./layout/AppLayout";
 import { BackgroundCloseController } from "./BackgroundCloseController";
+import { startWorkspaceRecoverySync } from "@/store/slices/workspaceRecovery";
+import { TerminalHistoryDrawer } from "./TerminalHistoryDrawer";
 
 /** 主窗口专用入口；语音窗口不加载工作区组件和项目后台任务。 */
 export default function MainWindow({ persistentSettingsReady }: { persistentSettingsReady: boolean }) {
   const projectPath = useAppStore((state) => state.currentProject?.path ?? null);
   useRecentProjectSync();
+
+  useEffect(() => {
+    if (!persistentSettingsReady) return;
+    return startWorkspaceRecoverySync();
+  }, [persistentSettingsReady]);
 
   useEffect(() => {
     if (!persistentSettingsReady) return;
@@ -55,5 +62,5 @@ export default function MainWindow({ persistentSettingsReady }: { persistentSett
     return startClipboardSessionSync();
   }, [persistentSettingsReady]);
 
-  return <><BackgroundCloseController /><AppLayout /></>;
+  return <><BackgroundCloseController /><TerminalHistoryDrawer /><AppLayout /></>;
 }

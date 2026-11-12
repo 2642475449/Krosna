@@ -45,14 +45,15 @@ export function BackgroundCloseController() {
 
   return (
     <>
-      <Modal open={promptOpen && !exitPreparing && !closePreparing} title={t("background.closeTitle")} onCancel={() => setPromptOpen(false)}
+      <Modal open={promptOpen && !exitPreparing && !closePreparing} title={t("background.closeTitle")} width={640} onCancel={() => setPromptOpen(false)}
         closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
         footer={[
           <Button key="cancel" disabled={busy} onClick={() => setPromptOpen(false)}>{t("common.cancel")}</Button>,
-          <Button key="close" disabled={busy} onClick={() => void chooseWorkspaceClose(false).catch(reportError)}>{t("background.closeNow")}</Button>,
+          <Button key="close" danger disabled={busy} onClick={() => void chooseWorkspaceClose(false).catch(reportError)}>{t("background.closeNow")}</Button>,
           <Button key="background" type="primary" loading={busy} onClick={() => void chooseWorkspaceClose(true).catch(reportError)}>{t("background.keepRunning")}</Button>,
         ]}>
-        <p className="mb-4">{t("background.closeDescription")}</p>
+        <p className="mb-2">{t("background.closeDescription")}</p>
+        <p className="mb-4">{t("background.closeStopDescription")}</p>
         <Checkbox checked={remember} disabled={busy} onChange={(event) => setRemember(event.target.checked)}>{t("background.remember")}</Checkbox>
       </Modal>
       <Modal open={documentPromptOpen && !exitPreparing && !closePreparing} title={t("background.unsavedTitle")}

@@ -124,6 +124,7 @@ pub fn run() {
         .manage(live_asr_sessions)
         .manage(ContentSearchState::default())
         .manage(SearchIndexState::default())
+        .manage(commands::runner_output::RunnerOutputSnapshots::default())
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if commands::background::is_workspace(window.label()) {
@@ -244,6 +245,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::runner_output::save_runner_output,
+            commands::runner_output::read_runner_output,
+            commands::runner_output::remove_runner_output,
+            commands::workspace_recovery::get_workspace_restore_enabled,
+            commands::workspace_recovery::set_workspace_restore_enabled,
+            commands::workspace_recovery::read_workspace_recovery,
+            commands::workspace_recovery::save_workspace_recovery,
+            commands::workspace_recovery::read_terminal_recovery,
+            commands::workspace_recovery::save_terminal_recovery,
             commands::remote_hosts::list_remote_hosts,
             commands::remote_hosts::save_remote_host,
             commands::remote_hosts::delete_remote_host,
@@ -477,6 +487,13 @@ pub fn run() {
             commands::git::git_watch_start,
             commands::git::git_watch_stop,
         ])
-        .run(context)
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Err(error) = app.state::<commands::runner_output::RunnerOutputSnapshots>().cleanup() {
+                    log::warn!("Failed to clean up runner output snapshots: {error}");
+                }
+            }
+        });
 }

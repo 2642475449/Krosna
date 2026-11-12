@@ -1,4 +1,34 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { RunnerOutputSnapshot } from "@/lib/runnerOutputSnapshot";
+
+export function getWorkspaceRestoreEnabled(): Promise<boolean> {
+  return invoke("get_workspace_restore_enabled");
+}
+
+export function setWorkspaceRestoreEnabled(enabled: boolean): Promise<void> {
+  return invoke("set_workspace_restore_enabled", { enabled });
+}
+
+export function onWorkspaceRestoreSettingsChanged(handler: (enabled: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>("workspace-restore-settings-changed", (event) => handler(event.payload));
+}
+
+export function readWorkspaceRecovery(projectPath: string): Promise<unknown> {
+  return invoke("read_workspace_recovery", { projectPath });
+}
+
+export function saveWorkspaceRecovery(projectPath: string, payload: import("@/lib/workspaceRecovery").WorkspaceRecoveryPayload): Promise<void> {
+  return invoke("save_workspace_recovery", { projectPath, payload });
+}
+
+export function readTerminalRecovery(projectPath: string, sessionId: string): Promise<RunnerOutputSnapshot | null> {
+  return invoke("read_terminal_recovery", { projectPath, sessionId });
+}
+
+export function saveTerminalRecovery(projectPath: string, sessionId: string, snapshot: RunnerOutputSnapshot): Promise<void> {
+  return invoke("save_terminal_recovery", { projectPath, sessionId, snapshot });
+}
+
 export { listenPtyEvent } from "./ptyEvents";
 import type { PtyGridSize } from "../terminalSizeReconcile";
 export { resolveTerminalLink } from "./terminalLinks";
@@ -102,6 +132,18 @@ import type {
   ScheduledTaskRun,
   ScheduledTaskSchedule,
 } from "@/types";
+
+export async function saveRunnerOutput(sessionId: string, snapshot: RunnerOutputSnapshot): Promise<void> {
+  await invoke("save_runner_output", { sessionId, snapshot });
+}
+
+export async function readRunnerOutput(sessionId: string): Promise<RunnerOutputSnapshot> {
+  return await invoke("read_runner_output", { sessionId });
+}
+
+export async function removeRunnerOutput(sessionId: string): Promise<void> {
+  await invoke("remove_runner_output", { sessionId });
+}
 
 export async function loadQuickCommands(projectPath: string | null): Promise<TerminalQuickCommand[]> {
   return await invoke("load_quick_commands", { projectPath });

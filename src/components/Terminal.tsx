@@ -76,7 +76,7 @@ import { TerminalLinkDialog } from "@/components/terminal/TerminalLinkDialog";
 import { getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { canRestoreTerminalInputCursor, createTerminalAgentInterrupt } from "@/lib/terminalAgentInterrupt";
-import { getTerminalTheme } from "@/lib/terminalTheme";
+import { getTerminalTheme, TERMINAL_FONT_FAMILY } from "@/lib/terminalTheme";
 import {
   createTerminalAgentUserResponse,
   getAgentTurnInputResponseBaseline,
@@ -101,6 +101,17 @@ import { handleRunnerLogShortcut } from "@/lib/runnerLogShortcuts";
 import { createRunnerLogSearch } from "@/lib/runnerLogSearch";
 import { createRunnerLogScroll } from "@/lib/runnerLogScroll";
 import { EMPTY_RUNNER_LOG_SEARCH, useBottomRunnerStore } from "@/store/slices/bottomRunner";
+import {
+  failRunnerOutputRestore,
+  markRunnerOutputExited,
+  markRunnerOutputRestored,
+  registerRunnerOutputTerminal,
+  useRunnerOutputStore,
+} from "@/store/slices/runnerOutput";
+import { captureRunnerOutputSnapshot, restoreRunnerOutputSnapshot } from "@/lib/runnerOutputSnapshot";
+import { captureTerminalRecoverySnapshot } from "@/lib/terminalRecoverySnapshot";
+import { restoreShellTerminalHistory, shouldRestoreShellHistory } from "@/lib/terminalShellRecovery";
+import { loadTerminalRecovery, markTerminalRecoveryDirty, markTerminalRecoveryReady, registerTerminalRecovery, useTerminalRecoveryStore } from "@/store/slices/terminalRecovery";
 import { useTerminalDiagnosticsStore } from "@/store/slices/terminalDiagnosticsSlice";
 import { createTerminalCommandWatcher } from "@/lib/terminalCommandWatcher";
 import { installTerminalTextSelection } from "@/lib/terminalTextSelection";
@@ -259,6 +270,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const [isExternalFileDragOver, setIsExternalFileDragOver] = useState(false);
   const [isAgentFileDragOver, setIsAgentFileDragOver] = useState(false);
   const [contextMenuSelection, setContextMenuSelection] = useState("");
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [installedAgents, setInstalledAgents] = useState<AgentCliInfo[]>([]);
   const [sideQuestionDraft, setSideQuestionDraft] = useState<SideQuestionDraft | null>(null);
   const [sideQuestionText, setSideQuestionText] = useState("");
@@ -501,6 +513,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       })),
     },
     { type: "divider" },
+    ...(!runnerOptions && currentSession ? [{
+      key: "view-history",
+      label: t("terminal.viewHistory"),
+      icon: <ReloadOutlined />,
+    }] : []),
     {
       key: "clear-input",
       label: t(runnerOptions ? "bottomRunner.clear" : "terminal.clearInput"),
@@ -516,7 +533,12 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
   const handleContextMenuClick = useCallback(
     async (key: string) => {
+      setContextMenuOpen(false);
       const term = terminalRef.current;
+      if (key === "view-history" && currentSession && !runnerOptions) {
+        useTerminalRecoveryStore.getState().setHistorySession(currentSession);
+        return;
+      }
       if (key.startsWith("ask-in-sidebar:")) {
         const agentId = key.slice("ask-in-sidebar:".length);
         const agent = installedAgents.find((item) => item.id === agentId);
@@ -600,6 +622,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   }, [closeSideQuestionComposer, sideQuestionDraft, sideQuestionText, t]);
 
   const handleContextMenuOpenChange = useCallback((open: boolean) => {
+    setContextMenuOpen(open);
     if (!open) return;
     const term = terminalRef.current;
     setContextMenuSelection(term?.hasSelection() ? term.getSelection() : "");
@@ -906,6 +929,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
+    let initialRunnerSnapshot = runnerOptionsRef.current
+      ? useRunnerOutputStore.getState().entries[sessionId]?.snapshot : undefined;
+    const lifetime = new AbortController();
+    const restoringShellHistory = !runnerOptionsRef.current && shouldRestoreShellHistory(
+      useAppStore.getState().sessions.find((session) => session.id === sessionId),
+    );
+    let restoringTerminalOutput = Boolean(initialRunnerSnapshot) || restoringShellHistory;
+    let unregisterRunnerOutput = () => {};
+    let unregisterTerminalRecovery = () => {};
     const webLinkHandler = createTerminalWebLinkHandler(
       (uri) => {
         linkActivationGateRef.current.activate(() => setPendingTerminalLink({ kind: "external", href: uri }));
@@ -919,7 +951,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     );
 
     const term = new XTerm({
-      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      ...(initialRunnerSnapshot ? { cols: initialRunnerSnapshot.cols, rows: initialRunnerSnapshot.rows } : {}),
+      fontFamily: TERMINAL_FONT_FAMILY,
       fontSize,
       theme: termTheme.theme,
       minimumContrastRatio: termTheme.minimumContrastRatio,
@@ -1019,9 +1052,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       },
       onResults: (index, count) => useBottomRunnerStore.getState().setLogSearchResults(sessionId, index, count),
     }) : null;
-    runnerSearch?.update(useBottomRunnerStore.getState().searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
+    if (!restoringTerminalOutput) {
+      runnerSearch?.update(useBottomRunnerStore.getState().searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
+    }
     const unsubscribeRunner = runnerOptionsRef.current ? useBottomRunnerStore.subscribe((state, previous) => {
-      runnerSearch?.update(state.searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
+      if (!restoringTerminalOutput) runnerSearch?.update(state.searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
       if (state.autoScroll !== previous.autoScroll) runnerScrollController?.setFollowing(state.autoScroll);
     }) : () => {};
 
@@ -1037,6 +1072,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       : null;
 
     const commandLifecycleDisposable = term.parser.registerOscHandler(133, (data) => {
+      // 恢复的是已结束的画面，不能再次触发命令完成或其他进程副作用。
+      if (restoringTerminalOutput) return true;
       const marker = data.split(";", 1)[0];
       if (marker !== "A" && marker !== "B" && marker !== "C" && marker !== "D") {
         return false;
@@ -1234,6 +1271,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
             : undefined,
           () => {
             onParsed();
+            if (output.length > 0 && !runnerOptionsRef.current) markTerminalRecoveryDirty(sessionId);
             finishRunnerWrite?.();
           },
         );
@@ -1256,6 +1294,14 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           outputAcknowledgements.schedule();
         }, () => useBottomRunnerStore.getState().colorizeLogs)
       : null;
+    const drainRunnerOutput = async () => {
+      await outputAcknowledgements.track(() => {
+        runnerLogOutput?.flush();
+        outputFrameGate.flush();
+        imeOutputGate.compositionEnd();
+      });
+      if (lifetime.signal.aborted) throw new Error("Runner terminal was disposed");
+    };
     setDiagnostics(runtimeId, { sessionId, ...outputMonitor.snapshot() });
 
     const enqueueInput = createTerminalInputQueue();
@@ -1294,8 +1340,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         }).catch((error: unknown) => console.warn("Failed to reconcile terminal interrupt:", error));
       },
     });
-    const titleDisposable = term.onTitleChange((title) => interruptTracker.observeTitle(title));
+    const titleDisposable = term.onTitleChange((title) => {
+      if (!restoringTerminalOutput) interruptTracker.observeTitle(title);
+    });
     const programStatusDisposable = term.parser.registerOscHandler(7501, (data) => {
+      if (restoringTerminalOutput) return true;
       if (data === "?") {
         void enqueueInput(() => ptyInput(sessionId, "\x1b]7501;?\x1b\\")).catch(reportRuntimeInputError);
       } else {
@@ -1304,7 +1353,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       }
       return true;
     });
-    const parsedDisposable = term.onWriteParsed(() => interruptTracker.observeScreen());
+    const parsedDisposable = term.onWriteParsed(() => {
+      if (!restoringTerminalOutput) interruptTracker.observeScreen();
+    });
     // 用实时 store 订阅覆盖终端重建与后台标签；只有离开运行状态时才请求一次恢复。
     const unsubscribeSession = useAppStore.subscribe((state, previous) => {
       const session = state.sessions.find((item) => item.id === sessionId);
@@ -1426,7 +1477,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       error: reportPasteError,
     });
     pasteGateRef.current = pasteGate;
-    const inputDisposable = term.onData((data) => pasteGate.input(data));
+    const inputDisposable = term.onData((data) => {
+      if (!restoringTerminalOutput) pasteGate.input(data);
+    });
     const handleNativePaste = (event: ClipboardEvent) => {
       if (!event.clipboardData) return;
       event.preventDefault();
@@ -1515,7 +1568,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       term.resize(runnerOptionsRef.current.wordWrap ? size.cols : Math.max(1024, size.cols), size.rows);
     };
     const measureGrid = () => {
-      if (isTerminalDisposed || document.hidden || !intersectsViewport
+      if (isTerminalDisposed || restoringTerminalOutput || document.hidden || !intersectsViewport
         || container.clientWidth === 0 || container.clientHeight === 0) return null;
       fitGrid();
       return { rows: term.rows, cols: term.cols };
@@ -1625,7 +1678,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const outputPromise = listenPtyEvent(
       "pty-output",
       (event) => {
-        if (event.payload.session_id === sessionId) {
+        if (!isTerminalDisposed && !restoringTerminalOutput && event.payload.session_id === sessionId) {
           return outputAcknowledgements.track(() => {
             if (runnerLogOutput) runnerLogOutput.write(event.payload.data);
             else outputFrameGate.write(event.payload.data);
@@ -1636,7 +1689,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const voiceInputPromise = listen<{ sessionId: string; text: string }>(
       "voice-terminal-input",
       (event) => {
-        if (event.payload.sessionId !== sessionId || !event.payload.text) {
+        if (isTerminalDisposed || event.payload.sessionId !== sessionId || !event.payload.text) {
           return;
         }
         // 使用终端粘贴协议，避免分段或列表中的换行被当作回车提交。
@@ -1651,7 +1704,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const exitPromise = listenPtyEvent(
       "pty-exit",
       (event) => {
-        if (event.payload.session_id === sessionId) {
+        if (!isTerminalDisposed && event.payload.session_id === sessionId) {
           runnerLogOutput?.flush();
           outputFrameGate.flush();
           terminalCommandWatcherRef.current.reset();
@@ -1668,16 +1721,68 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           imeOutputGate.write(`\r\n\x1b[33m[${exitMessage}]\x1b[0m\r\n`);
           onExitRef.current?.();
           runnerOptionsRef.current?.onCommandComplete(sessionId, event.payload.code);
+          if (runnerOptionsRef.current) {
+            // 真实退出且尾部文本全部解析之后，才能把此视图纳入归档预算。
+            void drainRunnerOutput().then(() => {
+              if (!isTerminalDisposed) markRunnerOutputExited(sessionId);
+            }).catch((error: unknown) => {
+              if (!isTerminalDisposed) console.warn("Failed to drain runner output:", error);
+            });
+          }
         }
       }
     );
 
-    void Promise.all([outputPromise, exitPromise]).then(() => {
+    if (!runnerOptionsRef.current && currentSessionPathRef.current) {
+      unregisterTerminalRecovery = registerTerminalRecovery(sessionId, currentSessionPathRef.current, {
+        capture: async () => {
+          await drainRunnerOutput();
+          return captureTerminalRecoverySnapshot(term);
+        },
+      });
+    }
+    void Promise.all([outputPromise, exitPromise]).then(async () => {
+      if (initialRunnerSnapshot) {
+        await restoreRunnerOutputSnapshot(term, initialRunnerSnapshot, { signal: lifetime.signal });
+        if (isTerminalDisposed) return;
+        restoringTerminalOutput = false;
+        markRunnerOutputRestored(sessionId);
+        initialRunnerSnapshot = undefined;
+        runnerSearch?.update(useBottomRunnerStore.getState().searchBySession[sessionId] ?? EMPTY_RUNNER_LOG_SEARCH);
+      }
+      if (restoringShellHistory) {
+        try {
+          const snapshot = await loadTerminalRecovery(currentSessionPathRef.current, sessionId);
+          if (isTerminalDisposed || lifetime.signal.aborted) return;
+          if (snapshot) await restoreShellTerminalHistory(term, snapshot, lifetime.signal);
+        } catch (error) {
+          if (isTerminalDisposed || lifetime.signal.aborted) return;
+          // 坏画面不阻止重新打开 Shell；旧命令不会被重新提交。
+          console.warn("Could not restore shell history:", error);
+        }
+        if (isTerminalDisposed || lifetime.signal.aborted) return;
+        restoringTerminalOutput = false;
+        // 标记由 useResumeSession 在新进程成功启动后清除；失败重试仍需等待历史回放。
+      }
       if (!isTerminalDisposed) {
+        if (runnerOptionsRef.current) {
+          unregisterRunnerOutput = registerRunnerOutputTerminal(sessionId, {
+            capture: async () => {
+              await drainRunnerOutput();
+              return captureRunnerOutputSnapshot(term);
+            },
+            estimateBytes: () => term.cols * (term.buffer.normal.length + term.buffer.alternate.length) * 12,
+          });
+        }
         syncSize();
+        if (!runnerOptionsRef.current) markTerminalRecoveryReady(sessionId);
         runnerOptionsRef.current?.onReady(sessionId);
       }
-    }).catch((error: unknown) => console.warn("Failed to initialize runner terminal listeners:", error));
+    }).catch((error: unknown) => {
+      if (isTerminalDisposed) return;
+      if (initialRunnerSnapshot) failRunnerOutputRestore(sessionId, error);
+      else console.warn("Failed to initialize runner terminal listeners:", error);
+    });
 
     const currentWindow = getCurrentWindow();
     const dropPromise = currentWindow.onDragDropEvent((event) => {
@@ -1719,6 +1824,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     return () => {
       container.removeEventListener("mousedown", handleMouseShortcut, true);
       isTerminalDisposed = true;
+      unregisterTerminalRecovery();
+      lifetime.abort();
+      unregisterRunnerOutput();
       window.removeEventListener("terminal:clear", handleRunnerClear);
       container.removeEventListener("wheel", onRunnerWheel);
       container.removeEventListener("pointerup", onRunnerPointerUp);
@@ -1859,6 +1967,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     <>
       <div className="flex h-full min-h-0 w-full flex-col">
       <Dropdown
+        open={contextMenuOpen}
         menu={{
           items: contextMenuItems,
           onClick: ({ key }) => handleContextMenuClick(key),

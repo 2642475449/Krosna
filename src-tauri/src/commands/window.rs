@@ -386,10 +386,6 @@ fn restored_window_context(
 }
 
 fn restorable_project_path(settings: &PersistentSettingsRecord) -> Option<String> {
-    if !settings.startup_restore_last_project {
-        return None;
-    }
-
     settings
         .last_project_path
         .as_deref()
@@ -1015,7 +1011,7 @@ mod tests {
     }
 
     #[test]
-    fn startup_restore_respects_the_user_setting() {
+    fn startup_restore_ignores_the_legacy_disabled_setting() {
         let project = temporary_project("restore-disabled");
         let database = Database::open_in_memory();
         let mut settings = PersistentSettingsRecord::default();
@@ -1025,8 +1021,11 @@ mod tests {
 
         let registry = WindowRegistry::new();
         let context = restored_window_context(&registry, "main", &database);
-        assert!(context.mode == WindowMode::Launcher);
-        assert!(context.project_path.is_none());
+        assert!(context.mode == WindowMode::Project);
+        assert_eq!(
+            context.project_path.as_deref(),
+            Some(normalize_path(project.to_str().unwrap()).unwrap().as_str())
+        );
 
         std::fs::remove_dir_all(project).unwrap();
     }

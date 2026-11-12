@@ -6,6 +6,7 @@ import type { Session, TerminalQuickCommand } from "@/types";
 import type { BottomRunnerTab, TerminalShell } from "../types";
 import { isRunnerRunning, runnerExitStatus, useBottomRunnerStore } from "./bottomRunner";
 import { useQuickCommandUsageStore } from "./quickCommandUsage";
+import { forgetRunnerOutput } from "./runnerOutput";
 
 // 所有异步操作按 sessionId 关联；重跑使用新 ID，晚到的退出事件不会污染新任务。
 const pending = new Map<string, { ready: Promise<void>; resolve: () => void; cancelled: boolean }>();
@@ -70,7 +71,13 @@ async function disposeRunner(tab: BottomRunnerTab) {
   stopping.delete(tab.sessionId);
   try { await closePty(tab.sessionId); }
   catch (error) { console.warn("Failed to close runner PTY:", error); }
-  finally { updateRunnerSession(tab, null); }
+  finally {
+    updateRunnerSession(tab, null);
+    useAppStore.getState().clearTerminalExitCode(tab.sessionId);
+    useAppStore.getState().clearTerminalCompletionIntegration(tab.sessionId);
+    try { await forgetRunnerOutput(tab.sessionId); }
+    catch (error) { console.warn("Failed to remove runner output snapshot:", error); }
+  }
 }
 
 export async function closeRunnerTab(tab: BottomRunnerTab) {

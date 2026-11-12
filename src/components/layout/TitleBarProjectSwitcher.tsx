@@ -205,10 +205,6 @@ function TitleBarProjectSwitcher() {
         event.preventDefault();
         event.stopPropagation();
         setRememberOpenChoice((checked) => !checked);
-      } else if (key === "enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        void confirmProjectOpen("current_window");
       }
     }
 

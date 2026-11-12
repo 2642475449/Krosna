@@ -3,7 +3,9 @@ import { act, createElement, useEffect, useRef, type ComponentProps, type ReactN
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ editors: [] as any[], props: new Map<string, any>() }));
+// Monaco 的测试替身只实现本组件使用的接口；viewState 保留为开放结构以覆盖不同 Monaco 状态版本。
+const fixture = vi.hoisted(() => ({ editors: [] as any[], props: new Map<string, any>(),
+  app: { themeCategory: "dark", editorFontSize: 14, tabsById: {} as Record<string, { kind: string }> } }));
 vi.mock("@/lib/monacoRuntime", () => ({
   Uri: { file: (path: string) => ({ with: ({ query }: { query: string }) => ({ toString: () => `${path}?${query}` }) }) },
   Range: class { constructor(..._args: number[]) {} },
@@ -14,10 +16,12 @@ vi.mock("@/lib/monaco", () => ({
   getMonacoLanguage: () => "typescript", getMonacoThemeName: () => "vs-dark",
   getMonacoTypography: () => ({}), observeMonacoTheme: () => ({ dispose: vi.fn() }),
 }));
-vi.mock("@/store", () => ({ useAppStore: (select: (state: unknown) => unknown) => select({
-  themeCategory: "dark", editorFontSize: 14,
+vi.mock("@/store", () => ({ useAppStore: Object.assign((select: (state: unknown) => unknown) => select(fixture.app), {
+  getState: () => fixture.app,
 }) }));
-vi.mock("@/store/slices/fileEditorStatus", () => ({ useFileEditorStatusStore: { getState: () => ({ removeEditorStatus: vi.fn() }) } }));
+vi.mock("@/store/slices/fileEditorStatus", () => ({ useFileEditorStatusStore: {
+  getState: () => ({ removeEditorStatus: vi.fn(), setEditorStatus: vi.fn() }),
+} }));
 vi.mock("./MonacoContextMenu", () => ({ default: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@monaco-editor/react", () => ({
   loader: { config: vi.fn() },
@@ -26,6 +30,14 @@ vi.mock("@monaco-editor/react", () => ({
     fixture.props.set(props.path, props);
     useEffect(() => {
       const subscriptions: any[] = [];
+      const cursorListeners = new Set<() => void>();
+      const scrollListeners = new Set<() => void>();
+      const subscribe = (listeners: Set<() => void>, callback: () => void) => {
+        listeners.add(callback);
+        const subscription = { dispose: vi.fn(() => listeners.delete(callback)) };
+        subscriptions.push(subscription);
+        return subscription;
+      };
       const instance = {
         path: initial.current.path,
         view: { cursorState: [], viewState: { scrollTop: 200 }, contributionsState: {} },
@@ -33,17 +45,35 @@ vi.mock("@monaco-editor/react", () => ({
         restoreViewState: vi.fn((view) => { instance.view = view; }),
         addCommand: vi.fn(), layout: vi.fn(), focus: vi.fn(),
         setSelection: vi.fn(), revealRangeInCenter: vi.fn(),
-        onDidScrollChange: vi.fn(() => { const subscription = { dispose: vi.fn() }; subscriptions.push(subscription); return subscription; }),
+        position: { lineNumber: 1, column: 1 }, scrollTop: 200, scrollLeft: 0,
+        getPosition: vi.fn(() => instance.position),
+        setPosition: vi.fn((position: { lineNumber: number; column: number }) => { instance.position = position; }),
+        getScrollTop: vi.fn(() => instance.scrollTop), getScrollLeft: vi.fn(() => instance.scrollLeft),
+        setScrollPosition: vi.fn((scroll: { scrollTop: number; scrollLeft: number }) => {
+          instance.scrollTop = scroll.scrollTop; instance.scrollLeft = scroll.scrollLeft;
+        }),
+        getModel: vi.fn(() => ({ getOptions: () => ({ tabSize: 2, insertSpaces: true }),
+          getLanguageId: () => "typescript", getEOL: () => "\n" })),
+        onDidChangeCursorPosition: vi.fn((callback: () => void) => subscribe(cursorListeners, callback)),
+        onDidChangeModel: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeModelContent: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeModelOptions: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeModelLanguage: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidScrollChange: vi.fn((callback: () => void) => subscribe(scrollListeners, callback)),
+        fireCursorChange: () => [...cursorListeners].forEach((listener) => listener()),
+        fireScrollChange: () => [...scrollListeners].forEach((listener) => listener()),
         dispose: vi.fn(() => subscriptions.forEach((subscription) => subscription.dispose())),
       };
       fixture.editors.push(instance);
-      initial.current.onMount(instance, { KeyMod: { CtrlCmd: 1 }, KeyCode: { KeyS: 2 } });
+      initial.current.onMount(instance, { KeyMod: { CtrlCmd: 1 }, KeyCode: { KeyS: 2 },
+        languages: { getLanguages: () => [{ id: "typescript", aliases: ["TypeScript"] }] } });
       return () => { fixture.props.delete(instance.path); instance.dispose(); };
     }, []);
     return createElement("div", { "data-editor": props.path });
   },
 }));
 import MonacoTextEditor from "./MonacoTextEditor";
+import { useWorkspaceRecoveryStore } from "@/store/slices/workspaceRecovery";
 
 let root: Root;
 let container: HTMLDivElement;
@@ -54,6 +84,8 @@ beforeEach(() => {
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { frames.push(callback); return frames.length; });
   fixture.editors = [];
   fixture.props.clear();
+  fixture.app.tabsById = {};
+  useWorkspaceRecoveryStore.setState({ editorViews: {} });
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -129,4 +161,61 @@ it("preserves restored position instead of repeating an old navigation, but appl
   render({ isActive: true, revealTarget: nextTarget });
   act(() => { frames.splice(0).forEach((callback) => callback(0)); });
   expect(fixture.editors[2].revealRangeInCenter).toHaveBeenCalledTimes(1);
+});
+
+it("restores persisted file cursor and scroll positions and keeps them after first layout", () => {
+  const filePath = "D:/synthetic/review.ts";
+  fixture.app.tabsById.file = { kind: "file" };
+  const view = { lineNumber: 42, column: 7, scrollTop: 864, scrollLeft: 32 };
+  useWorkspaceRecoveryStore.getState().setEditorView(filePath, view);
+  render({ statusTabId: "file" });
+  const editor = fixture.editors[0];
+  expect(editor.setPosition).toHaveBeenCalledWith({ lineNumber: 42, column: 7 });
+  expect(editor.setScrollPosition).toHaveBeenCalledWith({ scrollTop: 864, scrollLeft: 32 });
+  // 模拟 Monaco 首轮布局重置滚动位置；下一帧应重新应用恢复值。
+  editor.scrollTop = 0; editor.scrollLeft = 0;
+  act(() => frames.splice(0).forEach((callback) => callback(0)));
+  expect(editor.scrollTop).toBe(864);
+  expect(editor.scrollLeft).toBe(32);
+  expect(editor.revealRangeInCenter).not.toHaveBeenCalled();
+});
+
+it("saves current workspace file position on cursor, scroll and unmount into the real recovery store", () => {
+  const filePath = "D:/synthetic/review.ts";
+  fixture.app.tabsById.file = { kind: "file" };
+  render({ statusTabId: "file" });
+  const editor = fixture.editors[0];
+  editor.position = { lineNumber: 50, column: 6 };
+  editor.scrollTop = 920; editor.scrollLeft = 16;
+  act(() => editor.fireCursorChange());
+  expect(useWorkspaceRecoveryStore.getState().editorViews[filePath])
+    .toEqual({ lineNumber: 50, column: 6, scrollTop: 920, scrollLeft: 16 });
+  editor.scrollTop = 1100;
+  act(() => editor.fireScrollChange());
+  expect(useWorkspaceRecoveryStore.getState().editorViews[filePath]?.scrollTop).toBe(1100);
+  editor.position = { lineNumber: 70, column: 2 };
+  act(() => root.render(null));
+  expect(useWorkspaceRecoveryStore.getState().editorViews[filePath])
+    .toEqual({ lineNumber: 70, column: 2, scrollTop: 1100, scrollLeft: 16 });
+});
+
+it("uses a new explicit navigation instead of restoring the old persisted file location", () => {
+  const filePath = "D:/synthetic/review.ts";
+  useWorkspaceRecoveryStore.getState().setEditorView(filePath,
+    { lineNumber: 42, column: 7, scrollTop: 864, scrollLeft: 32 });
+  render({ revealTarget: { requestId: "new-navigation", lineNumber: 90, startColumn: 1, endColumn: 3 } });
+  act(() => frames.splice(0).forEach((callback) => callback(0)));
+  expect(fixture.editors[0].setPosition).not.toHaveBeenCalled();
+  expect(fixture.editors[0].setScrollPosition).not.toHaveBeenCalled();
+  expect(fixture.editors[0].revealRangeInCenter).toHaveBeenCalled();
+});
+
+it("does not overwrite persisted workspace positions from an auxiliary editor", () => {
+  const filePath = "D:/synthetic/review.ts";
+  const view = { lineNumber: 42, column: 7, scrollTop: 864, scrollLeft: 32 };
+  useWorkspaceRecoveryStore.getState().setEditorView(filePath, view);
+  render();
+  fixture.editors[0].position = { lineNumber: 1, column: 1 };
+  act(() => root.render(null));
+  expect(useWorkspaceRecoveryStore.getState().editorViews[filePath]).toEqual(view);
 });

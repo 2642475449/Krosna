@@ -1,6 +1,10 @@
 import type { ITheme } from "@xterm/xterm";
 import type { ThemeMode } from "@/store";
 
+// 英文保留等宽排版；中文使用界面无衬线字体，避免 monospace 回退到宋体。
+export const TERMINAL_FONT_FAMILY =
+  "'Cascadia Code', 'Fira Code', Consolas, 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif";
+
 export const TERMINAL_MINIMUM_CONTRAST_RATIO = 4.5;
 
 export type TerminalColorScheme = "light" | "dark";

@@ -1,22 +1,25 @@
-import { Switch, message } from "antd";
+import { Select, message } from "antd";
 import { useTranslation } from "react-i18next";
-import { saveBackgroundSettings, useBackgroundStore } from "@/store/slices/background";
+import { getWorkspaceCloseBehavior, saveWorkspaceCloseBehavior, useBackgroundStore, type WorkspaceCloseBehavior } from "@/store/slices/background";
 import { SettingRow } from "./SettingRow";
 
 export function BackgroundSettings() {
   const { t } = useTranslation();
   const { settings, ready, busy } = useBackgroundStore();
-  return <>
-    {(["runInBackground", "askBeforeClose"] as const).map((key) => (
-      <SettingRow key={key} label={t(`background.${key}`)}>
-        <Switch checked={settings[key]} disabled={!ready || busy} loading={busy}
-          aria-label={t(`background.${key}`)} onChange={(checked) => {
-            const next = { ...settings, [key]: checked };
-            // 主动指定关闭行为后立即生效；仍可单独重新打开询问。
-            if (key === "runInBackground") next.askBeforeClose = false;
-            void saveBackgroundSettings(next).catch((error: unknown) => message.error(t("background.actionFailed", { error: String(error) })));
-          }} />
-      </SettingRow>
-    ))}
-  </>;
+  const behavior = getWorkspaceCloseBehavior(settings);
+  return (
+    <SettingRow label={t("background.closeBehavior")} description={t(`background.closeBehaviorDescription.${behavior}`)}>
+      <Select<WorkspaceCloseBehavior>
+        className="w-[280px] max-w-full"
+        value={behavior}
+        disabled={!ready || busy}
+        loading={busy || !ready}
+        aria-label={t("background.closeBehavior")}
+        options={(["ask", "background", "close"] as const).map((value) => ({ value, label: t(`background.closeBehaviorOption.${value}`) }))}
+        onChange={(value) => {
+          void saveWorkspaceCloseBehavior(value).catch((error: unknown) => message.error(t("background.actionFailed", { error: String(error) })));
+        }}
+      />
+    </SettingRow>
+  );
 }

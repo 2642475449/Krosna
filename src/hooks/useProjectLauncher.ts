@@ -7,6 +7,8 @@ import { getExistingProjectPaths, openProjectWindow } from "@/lib/api";
 import type { ProjectOpenDisposition } from "@/types";
 import { useAppStore } from "@/store";
 import { broadcastRecentProjectOpened } from "@/hooks/useRecentProjectSync";
+import { flushWorkspaceRecovery, initializeRecoverableWindowContext } from "@/store/slices/workspaceRecovery";
+import { flushTerminalRecovery } from "@/store/slices/terminalRecovery";
 
 function sortRecentProjects<T extends { lastOpenedAt: number }>(items: T[]) {
   return [...items].sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
@@ -18,7 +20,6 @@ export function useProjectLauncher() {
   const windowLabel = useAppStore((s) => s.windowLabel);
   const windowMode = useAppStore((s) => s.windowMode);
   const recentProjectsState = useAppStore((s) => s.recentProjects);
-  const initializeWindowContext = useAppStore((s) => s.initializeWindowContext);
   const setRecentProjects = useAppStore((s) => s.setRecentProjects);
 
   const recentProjects = useMemo(
@@ -32,9 +33,12 @@ export function useProjectLauncher() {
       const disposition: ProjectOpenDisposition = requestedDisposition ?? "auto";
 
       const previousProjectPath = currentProject?.path ?? null;
+      await flushWorkspaceRecovery();
+      await flushTerminalRecovery(previousProjectPath ?? undefined);
       const context = await openProjectWindow(path, disposition);
       if (
         disposition === "current_window" &&
+        context.windowLabel === windowLabel &&
         previousProjectPath &&
         context.projectPath !== previousProjectPath
       ) {
@@ -67,7 +71,7 @@ export function useProjectLauncher() {
       });
 
       if (context.windowLabel === windowLabel) {
-        initializeWindowContext(context);
+        await initializeRecoverableWindowContext(context);
         return;
       }
 
@@ -75,7 +79,7 @@ export function useProjectLauncher() {
         await getCurrentWindow().close().catch(() => {});
       }
     },
-    [currentProject?.path, initializeWindowContext, windowLabel, windowMode]
+    [currentProject?.path, windowLabel, windowMode]
   );
 
   const selectProjectFolder = useCallback(async (): Promise<string | null> => {

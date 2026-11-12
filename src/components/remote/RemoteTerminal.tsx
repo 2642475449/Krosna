@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useAppStore } from "@/store";
-import { getTerminalTheme } from "@/lib/terminalTheme";
+import { getTerminalTheme, TERMINAL_FONT_FAMILY } from "@/lib/terminalTheme";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createPtyResizeGate } from "@/lib/terminalResize";
@@ -42,7 +42,7 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     const term = new XTerm({
       theme: colors.theme, minimumContrastRatio: colors.minimumContrastRatio,
       fontSize: settings.terminalFontSize,
-      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      fontFamily: TERMINAL_FONT_FAMILY,
       cursorBlink: settings.terminalCursorBlink, scrollback: settings.terminalScrollback,
       disableStdin: true,
     });
@@ -158,7 +158,7 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
     const colors = getTerminalTheme(useAppStore.getState().activeTheme());
     const term = new XTerm({
       rows: 8, cols: 100, fontSize: 13, theme: colors.theme, minimumContrastRatio: colors.minimumContrastRatio,
-      fontFamily: "'Cascadia Code', Consolas, monospace", scrollback: 1000, cursorBlink: true, reflowCursorLine: true,
+      fontFamily: TERMINAL_FONT_FAMILY, scrollback: 1000, cursorBlink: true, reflowCursorLine: true,
     });
     initializePtyTextLayout(term);
     const fit = new FitAddon();

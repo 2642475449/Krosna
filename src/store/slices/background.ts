@@ -6,6 +6,15 @@ import {
 } from "@/lib/api";
 import { useApplicationUpdateStore } from "./applicationUpdate";
 import { discardWorkspaceDocuments, flushWorkspaceDocuments, pauseWorkspaceDocumentAutoSave } from "@/lib/workspaceClose";
+import { flushWorkspaceRecovery } from "./workspaceRecovery";
+import { flushTerminalRecovery } from "./terminalRecovery";
+
+export type WorkspaceCloseBehavior = "ask" | "background" | "close";
+
+/** 兼容既有双开关设置；询问开启时，它就是实际生效的关闭行为。 */
+export function getWorkspaceCloseBehavior(settings: BackgroundSettings): WorkspaceCloseBehavior {
+  return settings.askBeforeClose ? "ask" : settings.runInBackground ? "background" : "close";
+}
 
 interface BackgroundState {
   settings: BackgroundSettings;
@@ -62,6 +71,13 @@ export async function saveBackgroundSettings(settings: BackgroundSettings): Prom
   }
 }
 
+export async function saveWorkspaceCloseBehavior(behavior: WorkspaceCloseBehavior): Promise<void> {
+  await saveBackgroundSettings({
+    runInBackground: behavior === "background",
+    askBeforeClose: behavior === "ask",
+  });
+}
+
 // 下载更新时沿用原有关闭保护，避免销毁下载所属窗口。
 function checkUpdateGuard(): void {
   const phase = useApplicationUpdateStore.getState().phase;
@@ -92,6 +108,13 @@ async function finishWorkspaceClose(background: boolean, remember: boolean): Pro
     if (!background) {
       const unsaved = await flushWorkspaceDocuments();
       if (unsaved.length) { showDocumentPrompt("close", unsaved, remember); return false; }
+      try {
+        await flushTerminalRecovery();
+        await flushWorkspaceRecovery();
+      } catch (error) {
+        console.error("Could not save workspace before close", error);
+        throw new Error("workspace-exit-recovery-save-failed");
+      }
     }
     if (remember) {
       const settings = { runInBackground: background, askBeforeClose: false };
@@ -129,6 +152,16 @@ export async function prepareWorkspaceExit(nonce: string): Promise<void> {
     const unsaved = await flushWorkspaceDocuments();
     if (useBackgroundStore.getState().exitPreparationNonce !== nonce) return;
     ready = unsaved.length === 0;
+    if (ready) {
+      try {
+        await flushTerminalRecovery();
+        await flushWorkspaceRecovery();
+      } catch (error) {
+        ready = false;
+        console.error("Could not save workspace before exit", error);
+        throw new Error("workspace-exit-recovery-save-failed");
+      }
+    }
     if (!ready) showDocumentPrompt("resolve", unsaved);
   } finally {
     if (useBackgroundStore.getState().exitPreparationNonce === nonce) {

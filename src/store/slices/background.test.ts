@@ -1,9 +1,15 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { completeWorkspaceClose, exitBackgroundApplication, getBackgroundSettings, setBackgroundSettings, acknowledgeWorkspaceExit } from "@/lib/api";
 import { chooseWorkspaceClose, requestWorkspaceClose, useBackgroundStore, cancelWorkspaceDocumentClose,
-  resolveWorkspaceDocumentClose, prepareWorkspaceExit, cancelPreparedWorkspaceExit } from "./background";
+  resolveWorkspaceDocumentClose, prepareWorkspaceExit, cancelPreparedWorkspaceExit,
+  getWorkspaceCloseBehavior, saveWorkspaceCloseBehavior, type WorkspaceCloseBehavior } from "./background";
 import { useApplicationUpdateStore } from "./applicationUpdate";
 import { discardWorkspaceDocuments, flushWorkspaceDocuments } from "@/lib/workspaceClose";
+import { flushWorkspaceRecovery } from "./workspaceRecovery";
+import { flushTerminalRecovery } from "./terminalRecovery";
+
+vi.mock("./workspaceRecovery", () => ({ flushWorkspaceRecovery: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("./terminalRecovery", () => ({ flushTerminalRecovery: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock("@/lib/workspaceClose", () => ({
   flushWorkspaceDocuments: vi.fn().mockResolvedValue([]),
@@ -26,8 +32,43 @@ beforeEach(() => {
     documentPromptOpen: false, documentCloseIntent: "resolve", documentCloseRemember: false, unsavedPaths: [], exitPreparing: false, closePreparing: false, exitPreparationNonce: null });
   vi.mocked(flushWorkspaceDocuments).mockResolvedValue([]);
   vi.mocked(discardWorkspaceDocuments).mockResolvedValue([]);
+  vi.mocked(flushWorkspaceRecovery).mockResolvedValue(undefined);
+  vi.mocked(flushTerminalRecovery).mockResolvedValue(undefined);
   useApplicationUpdateStore.setState({ phase: "idle" });
   vi.mocked(getBackgroundSettings).mockResolvedValue({ runInBackground: false, askBeforeClose: true });
+});
+
+it.each([
+  [{ runInBackground: false, askBeforeClose: true }, "ask"],
+  [{ runInBackground: true, askBeforeClose: true }, "ask"],
+  [{ runInBackground: true, askBeforeClose: false }, "background"],
+  [{ runInBackground: false, askBeforeClose: false }, "close"],
+] as const)("shows the actual behavior for legacy settings %j", (settings, behavior) => {
+  expect(getWorkspaceCloseBehavior(settings)).toBe(behavior);
+});
+
+it.each<WorkspaceCloseBehavior>(["ask", "background", "close"])("persists and executes the selected %s behavior", async (behavior) => {
+  // 从截图中的双开状态开始，选择一次后保存为明确的单一行为。
+  useBackgroundStore.setState({ settings: { runInBackground: true, askBeforeClose: true } });
+  await saveWorkspaceCloseBehavior(behavior);
+  const settings = useBackgroundStore.getState().settings;
+  expect(settings).toEqual({ runInBackground: behavior === "background", askBeforeClose: behavior === "ask" });
+  expect(setBackgroundSettings).toHaveBeenCalledWith(settings);
+  expect(getWorkspaceCloseBehavior(settings)).toBe(behavior);
+  vi.mocked(getBackgroundSettings).mockResolvedValue(settings);
+  await requestWorkspaceClose();
+  expect(useBackgroundStore.getState().promptOpen).toBe(behavior === "ask");
+  if (behavior === "ask") expect(completeWorkspaceClose).not.toHaveBeenCalled();
+  else expect(completeWorkspaceClose).toHaveBeenCalledWith(behavior === "background");
+});
+
+it("keeps the saved behavior visible when a new choice cannot be saved", async () => {
+  const settings = { runInBackground: true, askBeforeClose: false };
+  useBackgroundStore.setState({ settings });
+  vi.mocked(setBackgroundSettings).mockRejectedValueOnce(new Error("storage unavailable"));
+  await expect(saveWorkspaceCloseBehavior("close")).rejects.toThrow("storage unavailable");
+  expect(useBackgroundStore.getState()).toMatchObject({ settings, busy: false });
+  expect(completeWorkspaceClose).not.toHaveBeenCalled();
 });
 
 it("asks on first close without closing the workspace", async () => {
@@ -189,4 +230,82 @@ it("ignores stale close buttons while a cross-window exit is preparing", async (
   await chooseWorkspaceClose(true);
   expect(completeWorkspaceClose).not.toHaveBeenCalled();
   expect(flushWorkspaceDocuments).not.toHaveBeenCalled();
+});
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+}
+
+it("waits for terminal history and then workspace recovery writes before closing", async () => {
+  let finishTerminal: () => void = () => {};
+  let finishWorkspace: () => void = () => {};
+  vi.mocked(flushTerminalRecovery).mockReturnValueOnce(new Promise<void>((resolve) => { finishTerminal = resolve; }));
+  vi.mocked(flushWorkspaceRecovery).mockReturnValueOnce(new Promise<void>((resolve) => { finishWorkspace = resolve; }));
+  const closing = chooseWorkspaceClose(false);
+  await flushMicrotasks();
+  expect(flushTerminalRecovery).toHaveBeenCalledOnce();
+  expect(flushWorkspaceRecovery).not.toHaveBeenCalled();
+  expect(completeWorkspaceClose).not.toHaveBeenCalled();
+  finishTerminal(); await flushMicrotasks();
+  expect(flushWorkspaceRecovery).toHaveBeenCalledOnce();
+  expect(completeWorkspaceClose).not.toHaveBeenCalled();
+  finishWorkspace(); await closing;
+  expect(completeWorkspaceClose).toHaveBeenCalledWith(false);
+});
+
+it.each(["terminal", "workspace"] as const)("blocks direct close when %s recovery cannot be saved", async (kind) => {
+  vi.mocked(kind === "terminal" ? flushTerminalRecovery : flushWorkspaceRecovery).mockRejectedValueOnce(new Error("disk full"));
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await expect(chooseWorkspaceClose(false)).rejects.toThrow("workspace-exit-recovery-save-failed");
+    expect(completeWorkspaceClose).not.toHaveBeenCalled();
+    expect(setBackgroundSettings).not.toHaveBeenCalled();
+    expect(useBackgroundStore.getState()).toMatchObject({ closePreparing: false, busy: false });
+  } finally { error.mockRestore(); }
+});
+
+it("hides into the background without flushing or restarting live terminal state", async () => {
+  await chooseWorkspaceClose(true);
+  expect(flushTerminalRecovery).not.toHaveBeenCalled();
+  expect(flushWorkspaceRecovery).not.toHaveBeenCalled();
+  expect(flushWorkspaceDocuments).not.toHaveBeenCalled();
+  expect(completeWorkspaceClose).toHaveBeenCalledWith(true);
+});
+
+it("waits for both recovery writes before acknowledging a cross-window exit", async () => {
+  let finishTerminal: () => void = () => {};
+  let finishWorkspace: () => void = () => {};
+  vi.mocked(flushTerminalRecovery).mockReturnValueOnce(new Promise<void>((resolve) => { finishTerminal = resolve; }));
+  vi.mocked(flushWorkspaceRecovery).mockReturnValueOnce(new Promise<void>((resolve) => { finishWorkspace = resolve; }));
+  const preparing = prepareWorkspaceExit("recovery");
+  await flushMicrotasks();
+  expect(acknowledgeWorkspaceExit).not.toHaveBeenCalled();
+  finishTerminal(); await flushMicrotasks();
+  expect(flushWorkspaceRecovery).toHaveBeenCalledOnce();
+  expect(acknowledgeWorkspaceExit).not.toHaveBeenCalled();
+  finishWorkspace(); await preparing;
+  expect(acknowledgeWorkspaceExit).toHaveBeenCalledWith("recovery", true);
+});
+
+it.each(["terminal", "workspace"] as const)("rejects cross-window exit when %s recovery fails", async (kind) => {
+  vi.mocked(kind === "terminal" ? flushTerminalRecovery : flushWorkspaceRecovery).mockRejectedValueOnce(new Error("disk full"));
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await expect(prepareWorkspaceExit("failed-recovery")).rejects.toThrow("workspace-exit-recovery-save-failed");
+    expect(acknowledgeWorkspaceExit).toHaveBeenCalledWith("failed-recovery", false);
+    expect(useBackgroundStore.getState().exitPreparing).toBe(false);
+    expect(completeWorkspaceClose).not.toHaveBeenCalled();
+  } finally { error.mockRestore(); }
+});
+
+it.each(["terminal", "workspace"] as const)("does not acknowledge a cancelled exit nonce after %s recovery finishes", async (kind) => {
+  let finish: () => void = () => {};
+  vi.mocked(kind === "terminal" ? flushTerminalRecovery : flushWorkspaceRecovery)
+    .mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+  const preparing = prepareWorkspaceExit("cancel-during-recovery");
+  await flushMicrotasks();
+  cancelPreparedWorkspaceExit("cancel-during-recovery");
+  finish(); await preparing;
+  expect(acknowledgeWorkspaceExit).not.toHaveBeenCalled();
+  expect(useBackgroundStore.getState()).toMatchObject({ exitPreparing: false, exitPreparationNonce: null });
 });

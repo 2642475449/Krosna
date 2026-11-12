@@ -212,6 +212,10 @@ export interface Session {
   agentId?: AgentId;
   agentExecutablePath?: string | null;
   agentSessionId?: string | null;
+  /** 创建时的启动配置；恢复原会话时沿用，不重新套用全局默认值。 */
+  launchConfigSnapshot?: SessionLaunchOptions;
+  /** 仅当前进程：工作区恢复后，先回放终端画面再创建替代进程。 */
+  workspaceRestorePending?: boolean;
   claudeSkipPermissions?: boolean | null;
   antigravityDangerouslySkipPermissions?: boolean | null;
   antigravitySandbox?: boolean | null;

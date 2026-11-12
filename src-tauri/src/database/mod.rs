@@ -4,6 +4,7 @@ pub mod clipboard;
 pub mod project_icons;
 pub mod remote;
 pub mod schema;
+pub mod workspace_recovery;
 
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};

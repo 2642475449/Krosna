@@ -607,3 +607,43 @@ export interface RemoteWorkspaceState {
   setError: (hostId: string, error: string | null) => void;
   setSessionSnapshot: (hostId: string, session: RemoteSession) => void;
 }
+
+export type RunnerOutputPhase = "live" | "saving" | "archived" | "loading" | "restore-error";
+
+export interface RunnerOutputEntry {
+  phase: RunnerOutputPhase;
+  visible: boolean;
+  exited: boolean;
+  estimatedBytes: number;
+  snapshot?: import("@/lib/runnerOutputSnapshot").RunnerOutputSnapshot;
+  error: string | null;
+}
+
+export interface RunnerOutputState {
+  entries: Record<string, RunnerOutputEntry>;
+}
+
+export interface TerminalRecoveryEntry {
+  phase: "idle" | "loading" | "ready" | "error";
+  snapshot: import("@/lib/runnerOutputSnapshot").RunnerOutputSnapshot | null;
+  error: string | null;
+}
+
+export interface TerminalRecoveryState {
+  entries: Record<string, TerminalRecoveryEntry>;
+  historySession: Session | null;
+  setHistorySession: (session: Session | null) => void;
+}
+
+export interface WorkspaceRecoveryState {
+  enabled: boolean;
+  settingsReady: boolean;
+  savingSetting: boolean;
+  projectPath: string | null;
+  phase: "idle" | "loading" | "ready" | "error";
+  error: string | null;
+  restoreQueue: string[];
+  editorViews: Record<string, import("@/lib/workspaceRecovery").RecoveredEditorView>;
+  setEnabled: (enabled: boolean) => Promise<void>;
+  setEditorView: (path: string, view: import("@/lib/workspaceRecovery").RecoveredEditorView) => void;
+}

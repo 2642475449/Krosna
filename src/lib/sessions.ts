@@ -52,6 +52,7 @@ export function toPersistedSession(session: Session): Session {
   return {
     ...normalizeSessionTitles(session),
     active: false,
+    workspaceRestorePending: undefined,
     status,
   };
 }
