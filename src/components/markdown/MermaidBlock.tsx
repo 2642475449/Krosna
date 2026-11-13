@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckOutlined, CopyOutlined, FullscreenExitOutlined, FullscreenOutlined } from "@ant-design/icons";
+import { FullscreenExitOutlined, FullscreenOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import mermaid from "mermaid";
+import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 
 // 每次渲染都使用新 ID，避免不同分块、分屏或异步重绘操作彼此的 SVG。
 let mermaidIdCounter = 0;
@@ -10,19 +12,13 @@ export function MermaidBlock({ code }: { code: string }) {
   const { t } = useTranslation();
   const [svg, setSvg] = useState("");
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const { isCopied, markCopied } = useCopyFeedback(1600);
+  const copied = isCopied();
   // React 按对象引用更新 innerHTML，保持引用也能避免复制/全屏操作重建 SVG 节点。
   const svgMarkup = useMemo(() => ({ __html: svg }), [svg]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const diagramRef = useRef<HTMLDivElement | null>(null);
-  const copyResetTimerRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (copyResetTimerRef.current !== null) {
-      window.clearTimeout(copyResetTimerRef.current);
-    }
-  }, []);
 
   useEffect(() => {
     const syncFullscreenState = () => {
@@ -74,13 +70,9 @@ export function MermaidBlock({ code }: { code: string }) {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(svg);
-      setCopied(true);
-      if (copyResetTimerRef.current !== null) {
-        window.clearTimeout(copyResetTimerRef.current);
-      }
-      copyResetTimerRef.current = window.setTimeout(() => setCopied(false), 1600);
+      markCopied();
     } catch {
-      setCopied(false);
+      // 剪贴板写入失败时保持未复制状态，避免错误提示误导
     }
   };
 
@@ -119,7 +111,7 @@ export function MermaidBlock({ code }: { code: string }) {
               aria-label={t("fileTabs.mermaidCopy")}
               title={t(copied ? "fileTabs.mermaidCopied" : "fileTabs.mermaidCopy")}
             >
-              {copied ? <CheckOutlined /> : <CopyOutlined />}
+              {<CopyFeedbackIcon copied={copied} />}
             </button>
           </div>
           <div ref={diagramRef} className="app-markdown-mermaid-diagram" dangerouslySetInnerHTML={svgMarkup} />

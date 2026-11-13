@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { DownOutlined } from "@ant-design/icons";
 
 interface SettingsSectionProps {
@@ -51,13 +51,25 @@ export function SettingsField({ label, htmlFor, children }: { label: string; htm
 }
 
 export function SettingsDisclosure({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
   return (
-    <details className="app-settings-disclosure group">
-      <summary>
-        <DownOutlined aria-hidden="true" className="text-[10px] group-open:rotate-180" />
-        {title}
-      </summary>
-      <div className="pt-3">{children}</div>
-    </details>
+    <div className="app-settings-disclosure" data-open={open ? "true" : "false"}>
+      <button
+        type="button"
+        className="app-settings-disclosure__trigger"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <DownOutlined aria-hidden="true" className="app-settings-disclosure__chevron text-[10px]" />
+        <span>{title}</span>
+      </button>
+      <div id={panelId} className="app-accordion" data-open={open ? "true" : "false"} aria-hidden={!open}>
+        <div className="app-accordion__inner">
+          <div className="pt-3">{children}</div>
+        </div>
+      </div>
+    </div>
   );
 }

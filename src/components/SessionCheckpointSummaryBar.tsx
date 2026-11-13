@@ -109,7 +109,7 @@ function SessionCheckpointSummaryBar({ session }: { session: Session }) {
             background: `color-mix(in srgb, ${toneColor(summary.tone)} 9%, transparent)`,
           }}
         >
-          <span key={`${session.id}:${summary.tone}`} className="app-checkpoint-status-text">{statusText}</span>
+          <span key={`${session.id}:${summary.tone}:${summary.pendingTurns}:${summary.files}`} className="app-checkpoint-status-text">{statusText}</span>
         </span>
 
         <RightOutlined

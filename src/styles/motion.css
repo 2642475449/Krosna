@@ -124,8 +124,59 @@
 
 .app-checkpoint-tone-icon,
 .app-checkpoint-status { transition: color var(--cs-motion-normal) ease, background-color var(--cs-motion-normal) ease; }
-.app-checkpoint-status-text { animation: app-content-enter var(--cs-motion-normal) ease; }
+.app-checkpoint-status-text { display: inline-block; animation: app-text-swap var(--cs-motion-normal) var(--cs-motion-ease); }
 .app-checkpoint-summary[data-feedback="reviewed"] .app-checkpoint-tone-icon { animation: app-status-arrive 480ms var(--cs-motion-ease); }
+
+.app-text-swap {
+  display: inline-block;
+  animation: app-text-swap var(--cs-motion-fast) var(--cs-motion-ease);
+}
+
+.app-copy-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: app-copy-confirm var(--cs-motion-fast) var(--cs-motion-ease);
+}
+
+.app-copy-icon.is-copied {
+  color: var(--cs-success);
+}
+
+/* 通过网格轨道过渡高度，避免用内联高度测量或改变外部容器流。 */
+.app-accordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--cs-motion-normal) var(--cs-motion-ease),
+    opacity var(--cs-motion-fast) var(--cs-motion-ease),
+    visibility 0s linear var(--cs-motion-normal);
+}
+
+.app-accordion[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows var(--cs-motion-normal) var(--cs-motion-ease),
+    opacity var(--cs-motion-normal) var(--cs-motion-ease),
+    visibility 0s linear 0s;
+}
+
+.app-accordion__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-quota-ring-svg {
+  transition: color var(--cs-motion-normal) ease;
+}
+
+.app-quota-ring-progress {
+  transition: stroke-dasharray 240ms var(--cs-motion-ease);
+}
 
 .app-empty-artwork { width: 112px; height: 80px; }
 .app-empty-ground { fill: var(--cs-border); opacity: 0.5; }
@@ -162,6 +213,16 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes app-text-swap {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes app-copy-confirm {
+  from { opacity: 0.4; transform: scale(0.82); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* Ant Design 的开合仍使用自身生命周期；减少动态效果时保留完成事件。 */
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar-frame,
@@ -187,6 +248,13 @@
   .app-checkpoint-tone-icon,
   .app-checkpoint-status,
   .app-checkpoint-status-text,
+  .app-text-swap,
+  .app-copy-icon,
+  .app-accordion,
+  .app-quota-ring-svg,
+  .app-quota-ring-progress,
+  .app-ledger-popover,
+  .app-settings-disclosure__chevron,
   .app-empty-artwork * {
     animation: none !important;
     transition: none !important;

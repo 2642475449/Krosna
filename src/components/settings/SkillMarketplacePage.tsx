@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
-import { ArrowLeftOutlined, CopyOutlined, EyeOutlined, GithubOutlined, GlobalOutlined, LinkOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, EyeOutlined, GithubOutlined, GlobalOutlined, LinkOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { Alert, Avatar, Button, Empty, Input, Spin, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { openExternalUrl } from "@/lib/api";
+import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { MARKETPLACE_CATEGORIES, marketplaceBrowseView, marketplaceInstallCommand, marketplaceDetailErrorKind, marketplaceRepositoryUrl, marketplaceSkillKey, marketplaceSkillUrl, marketplaceIsGitHubSource } from "@/lib/skillMarketplace";
 import { skillMarkdownBody } from "@/lib/skills";
 import { useSkillMarketplaceStore } from "@/store/slices/skillMarketplaceSlice";
@@ -19,6 +21,7 @@ export default function SkillMarketplacePage({ isActive }: Props) {
   const { t, i18n } = useTranslation();
   const market = useSkillMarketplaceStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { isCopied, markCopied } = useCopyFeedback();
   const isSearch = [...market.query.trim()].length >= 2;
   const detail = market.detail;
   const initialLoading = !market.results && !market.error;
@@ -54,7 +57,11 @@ export default function SkillMarketplacePage({ isActive }: Props) {
 
   async function copyCommand() {
     if (!installCommand) return;
-    try { await navigator.clipboard.writeText(installCommand); message.success(t("common.copied")); }
+    try {
+      await navigator.clipboard.writeText(installCommand);
+      markCopied("install");
+      message.success(t("common.copied"));
+    }
     catch (reason) { message.error(t("settings.skills.operationFailed", { reason: String(reason) })); }
   }
 
@@ -101,7 +108,9 @@ export default function SkillMarketplacePage({ isActive }: Props) {
           <p className="app-skills-secondary text-xs mb-3">{t("settings.skillMarket.manualInstallHint")}</p>
           {installCommand ? <>
             <pre className="app-skills-content whitespace-pre-wrap break-all mb-3"><code>{installCommand}</code></pre>
-            <Button block icon={<CopyOutlined />} onClick={() => void copyCommand()}>{t("settings.skillMarket.copyCommand")}</Button>
+            <Button block icon={<CopyFeedbackIcon copied={isCopied("install")} />} onClick={() => void copyCommand()}>
+              {t(isCopied("install") ? "common.copied" : "settings.skillMarket.copyCommand")}
+            </Button>
           </> : <p className="app-skills-secondary text-xs">{t("settings.skillMarket.commandUnavailable")}</p>}
           <p className="app-skills-secondary text-xs mt-3 mb-3">{t("settings.skillMarket.commandHint")}</p>
           <Button type="link" className="!px-0" icon={<LinkOutlined />} onClick={() => market.selected && void openSource(marketplaceSkillUrl(market.selected))}>{t("settings.skillMarket.viewListing")}</Button>

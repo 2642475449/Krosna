@@ -1,8 +1,13 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useWorkbenchFeedback } from "@/lib/workbenchFeedback";
 
 export function WorkbenchFeedback({ children }: { children: ReactNode }) {
   const notice = useWorkbenchFeedback((state) => state.notice);
+  const hadNoticeRef = useRef(false);
+  if (notice) {
+    hadNoticeRef.current = true;
+  }
+
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => {
@@ -16,9 +21,11 @@ export function WorkbenchFeedback({ children }: { children: ReactNode }) {
   return <>
     <span role="status" aria-live="polite" aria-atomic="true"
       className={notice ? "min-w-0 truncate" : "sr-only"} title={notice?.text}>
-      {notice?.text ?? ""}
+      {notice ? <span key={notice.text} className="app-text-swap">{notice.text}</span> : ""}
     </span>
-    <div className={notice ? "hidden" : "flex min-w-0 flex-1 items-center"}>
+    <div
+      className={notice ? "hidden" : `flex min-w-0 flex-1 items-center${hadNoticeRef.current ? " app-text-swap" : ""}`}
+    >
       {children}
     </div>
   </>;

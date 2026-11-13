@@ -4,13 +4,14 @@ import {
   CheckOutlined,
   CloseOutlined,
   CodeOutlined,
-  CopyOutlined,
   ReloadOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Popover, Select, Spin, Switch, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { TASK_CHOICES, useLaunchChoiceLabel } from "@/hooks/useLaunchChoiceLabel";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
 import { AgentIcon } from "@/components/AgentIcon";
 import { QuotaUsageRing } from "@/components/layout/QuotaUsageRing";
 import { AgentQuotaCard } from "@/components/settings/AgentQuotaCard";
@@ -94,6 +95,7 @@ export function AgentsPage() {
   const [quotas, setQuotas] = useState<Quotas>(EMPTY_QUOTAS);
   const [editingId, setEditingId] = useState<AiAgentId | null>(null);
   const [showCommand, setShowCommand] = useState(false);
+  const { isCopied, markCopied } = useCopyFeedback();
   const quotaRequestRef = useRef<{ promise: Promise<void>; forceRefresh: boolean; seq: number } | null>(null);
   const quotaRequestSeqRef = useRef(0);
   const lastQuotaRefreshAtRef = useRef(0);
@@ -201,15 +203,16 @@ export function AgentsPage() {
     message.success(t("settings.agents.defaultChanged", { name: AGENT_DEFINITIONS[agentId].displayName }));
   }, [agents, setDefaultAgentId, t]);
 
-  const copyText = useCallback(async (value: string, successText: string, failedText: string) => {
+  const copyText = useCallback(async (key: string, value: string, successText: string, failedText: string) => {
     try {
       await navigator.clipboard.writeText(value);
+      markCopied(key);
       message.success(successText);
     } catch (error) {
       console.error("Failed to copy agent text:", error);
       message.error(failedText);
     }
-  }, []);
+  }, [markCopied]);
 
   const togglePopover = useCallback((id: AiAgentId, triggerEl?: HTMLElement | null) => {
     if (editingId === id) {
@@ -572,12 +575,13 @@ export function AgentsPage() {
                                 aria-label={t("settings.agents.details.copyPath")}
                                 title={t("settings.agents.details.copyPath")}
                                 onClick={() => void copyText(
+                                  `${agent.id}:path`,
                                   agent.executablePath!,
                                   t("settings.agents.details.pathCopied"),
                                   t("settings.agents.details.pathCopyFailed"),
                                 )}
                               >
-                                <CopyOutlined />
+                                <CopyFeedbackIcon copied={isCopied(`${agent.id}:path`)} />
                               </button>
                             )}
                           </div>
@@ -623,6 +627,7 @@ export function AgentsPage() {
                               <button
                                 type="button"
                                 onClick={() => void copyText(
+                                  `${agent.id}:install:${item.shell}`,
                                   item.command,
                                   t("settings.agents.installCommandCopied", {
                                     name: definition.displayName,
@@ -631,7 +636,8 @@ export function AgentsPage() {
                                   t("settings.agents.installCommandCopyFailed"),
                                 )}
                               >
-                                <CopyOutlined /> {t("common.copy")}
+                                <CopyFeedbackIcon copied={isCopied(`${agent.id}:install:${item.shell}`)} />{" "}
+                                {t(isCopied(`${agent.id}:install:${item.shell}`) ? "common.copied" : "common.copy")}
                               </button>
                             </div>
                           ))}
@@ -655,47 +661,55 @@ export function AgentsPage() {
                         </footer>
                       )}
 
-                      {agent.installed && showCommand && (
-                        <div className="app-agent-cmd-stack">
-                          <div className="app-agent-cmd-drawer">
-                            <div>
-                              <span className="app-agent-cmd-label">{t("settings.agents.popover.launchCommandLabel")}</span>
-                              <code>{launchCommand}</code>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => void copyText(
-                                launchCommand,
-                                t("settings.agents.launchCommandCopied"),
-                                t("settings.agents.installCommandCopyFailed"),
-                              )}
-                            >
-                              <CopyOutlined /> {t("common.copy")}
-                            </button>
-                          </div>
-                          {definition.installCommands.map((item) => (
-                            <div className="app-agent-cmd-drawer" key={item.shell}>
-                              <div>
-                                <span className="app-agent-cmd-label">
-                                  {t("settings.agents.popover.installCommandLabel", { shell: item.shell })}
-                                </span>
-                                <code>{item.command}</code>
+                      {agent.installed && (
+                        <div className="app-accordion" data-open={showCommand ? "true" : "false"} aria-hidden={!showCommand}>
+                          <div className="app-accordion__inner">
+                            <div className="app-agent-cmd-stack">
+                              <div className="app-agent-cmd-drawer">
+                                <div>
+                                  <span className="app-agent-cmd-label">{t("settings.agents.popover.launchCommandLabel")}</span>
+                                  <code>{launchCommand}</code>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => void copyText(
+                                    `${agent.id}:launch`,
+                                    launchCommand,
+                                    t("settings.agents.launchCommandCopied"),
+                                    t("settings.agents.installCommandCopyFailed"),
+                                  )}
+                                >
+                                  <CopyFeedbackIcon copied={isCopied(`${agent.id}:launch`)} />{" "}
+                                  {t(isCopied(`${agent.id}:launch`) ? "common.copied" : "common.copy")}
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => void copyText(
-                                  item.command,
-                                  t("settings.agents.installCommandCopied", {
-                                    name: definition.displayName,
-                                    shell: item.shell,
-                                  }),
-                                  t("settings.agents.installCommandCopyFailed"),
-                                )}
-                              >
-                                <CopyOutlined /> {t("common.copy")}
-                              </button>
+                              {definition.installCommands.map((item) => (
+                                <div className="app-agent-cmd-drawer" key={item.shell}>
+                                  <div>
+                                    <span className="app-agent-cmd-label">
+                                      {t("settings.agents.popover.installCommandLabel", { shell: item.shell })}
+                                    </span>
+                                    <code>{item.command}</code>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => void copyText(
+                                      `${agent.id}:install:${item.shell}`,
+                                      item.command,
+                                      t("settings.agents.installCommandCopied", {
+                                        name: definition.displayName,
+                                        shell: item.shell,
+                                      }),
+                                      t("settings.agents.installCommandCopyFailed"),
+                                    )}
+                                  >
+                                    <CopyFeedbackIcon copied={isCopied(`${agent.id}:install:${item.shell}`)} />{" "}
+                                    {t(isCopied(`${agent.id}:install:${item.shell}`) ? "common.copied" : "common.copy")}
+                                  </button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          </div>
                         </div>
                       )}
                   </LedgerRowPopover>

@@ -1,7 +1,6 @@
 import { useState, type FC } from "react";
 import {
   AppstoreOutlined,
-  CopyOutlined,
   GithubOutlined,
   GlobalOutlined,
   ReloadOutlined,
@@ -15,6 +14,8 @@ import packageJson from "../../../package.json";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER } from "@/lib/agents";
 import { openExternalUrl } from "@/lib/api";
 import { AgentIcon } from "@/components/AgentIcon";
+import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingRow } from "@/components/settings/SettingRow";
 import { AboutFlowBackdrop } from "./AboutFlowBackdrop";
@@ -113,6 +114,7 @@ const THIRD_PARTY_LIBRARIES: ThirdPartyNotice[] = [
 export const AboutPage: FC = () => {
   const { t } = useTranslation();
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+  const { isCopied, markCopied } = useCopyFeedback();
   const [thirdPartyModalOpen, setThirdPartyModalOpen] = useState(false);
 
   const supportedAgents = AI_AGENT_ORDER.map((id) => ({
@@ -156,6 +158,7 @@ export const AboutPage: FC = () => {
 
     try {
       await navigator.clipboard.writeText(diagnostics);
+      markCopied("diagnostics");
       message.success(t("settings.about.diagnosticsCopied"));
     } catch {
       message.error(t("settings.about.copyFailed"));
@@ -165,6 +168,7 @@ export const AboutPage: FC = () => {
   const handleCopyLicense = async () => {
     try {
       await navigator.clipboard.writeText(MIT_LICENSE_TEXT);
+      markCopied("license");
       message.success(t("common.copied"));
     } catch {
       message.error(t("settings.about.copyFailed"));
@@ -307,8 +311,8 @@ export const AboutPage: FC = () => {
       <SettingsSection
         title={t("settings.about.softwareInfo")}
         actions={
-          <Button icon={<CopyOutlined />} onClick={() => void handleCopyDiagnostics()}>
-            {t("settings.about.copyDiagnostics")}
+          <Button icon={<CopyFeedbackIcon copied={isCopied("diagnostics")} />} onClick={() => void handleCopyDiagnostics()}>
+            {t(isCopied("diagnostics") ? "common.copied" : "settings.about.copyDiagnostics")}
           </Button>
         }
       >
@@ -330,8 +334,8 @@ export const AboutPage: FC = () => {
         open={licenseModalOpen}
         onCancel={() => setLicenseModalOpen(false)}
         footer={[
-          <Button key="copy" icon={<CopyOutlined />} onClick={() => void handleCopyLicense()}>
-            {t("common.copy")}
+          <Button key="copy" icon={<CopyFeedbackIcon copied={isCopied("license")} />} onClick={() => void handleCopyLicense()}>
+            {t(isCopied("license") ? "common.copied" : "common.copy")}
           </Button>,
           <Button key="close" type="primary" onClick={() => setLicenseModalOpen(false)}>
             {t("common.close")}
