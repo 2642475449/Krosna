@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   computeLedgerPopoverPosition,
@@ -54,7 +54,9 @@ export function LedgerRowPopover({
   const getAnchorElRef = useRef(getAnchorEl);
   getAnchorElRef.current = getAnchorEl;
 
-  useLayoutEffect(() => {
+  // 父级行使用回调 ref，重渲染时会先清空、再于 layout 阶段重新挂载。
+  // 子组件的 layout effect 先于父级 ref 挂载，必须在整棵树提交后读取锚点。
+  useEffect(() => {
     if (!open || !popoverRef.current) return;
     const anchorEl = getAnchorElRef.current();
     if (!anchorEl) return;
@@ -85,6 +87,7 @@ export function LedgerRowPopover({
       el.style.width = `${pos.width}px`;
       el.style.maxHeight = `${pos.maxHeight}px`;
       el.classList.toggle("is-flip-up", pos.flipUp);
+      el.style.visibility = "visible";
     };
 
     updatePosition();
@@ -166,6 +169,7 @@ export function LedgerRowPopover({
       ref={popoverRef}
       id={id}
       className={className}
+      style={{ visibility: "hidden" }}
       role="dialog"
       aria-modal="false"
       aria-label={ariaLabel}

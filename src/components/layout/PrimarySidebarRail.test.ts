@@ -1,4 +1,6 @@
-import { createElement } from "react";
+// @vitest-environment happy-dom
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import i18n from "@/i18n";
@@ -49,4 +51,32 @@ it.each(["theme", "language"] as const)("exposes the %s submenu and exactly one 
 it("connects the settings trigger to its menu and announces its collapsed state", () => {
   const markup = renderToStaticMarkup(createElement(PrimarySidebarRail));
   expect(markup).toMatch(/<button[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*aria-controls="[^"]+"/);
+});
+
+it("opens settings popover menu when clicking the gear button", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(createElement(PrimarySidebarRail)));
+    const gearBtn = host.querySelector(".app-nav-settings-gear")?.closest("button");
+    expect(gearBtn).toBeTruthy();
+    expect(gearBtn?.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector(".ant-popover:not(.ant-popover-hidden)")).toBeFalsy();
+
+    await act(async () => {
+      gearBtn!.click();
+    });
+
+    expect(gearBtn?.getAttribute("aria-expanded")).toBe("true");
+    const popup = document.querySelector(".ant-popover:not(.ant-popover-hidden)");
+    expect(popup).toBeTruthy();
+    expect(popup?.textContent).toContain(i18n.t("common.settings"));
+    expect(popup?.textContent).toContain(i18n.t("settings.quickMenu.theme"));
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
 });

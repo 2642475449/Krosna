@@ -377,6 +377,7 @@ function PrimarySidebarRail() {
   const gitAheadCount = useAppStore((s) => s.gitAheadCount);
   const gitBehindCount = useAppStore((s) => s.gitBehindCount);
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [quickSettingsTooltipOpen, setQuickSettingsTooltipOpen] = useState(false);
   const [quickSettingsSubmenu, setQuickSettingsSubmenu] = useState<QuickSettingsSubmenu>(null);
   const quickSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const quickSettingsMenuId = useId();
@@ -384,6 +385,9 @@ function PrimarySidebarRail() {
   const remoteWorkspaceVisible = useRemoteWorkspaceStore((state) => state.visible);
 
   const handleQuickSettingsOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      setQuickSettingsTooltipOpen(false);
+    }
     setQuickSettingsOpen(open);
     setQuickSettingsSubmenu((activeSubmenu) =>
       getQuickSettingsSubmenuOnPopoverChange(open, activeSubmenu)
@@ -508,33 +512,42 @@ function PrimarySidebarRail() {
           <CloudServerOutlined className="text-[18px]" />
         </RailButton>
         <BottomRunnerRailButton />
-        <Popover
-          trigger="click"
-          placement="rightBottom"
-          content={(
-            <SettingsMenu
-              open={quickSettingsOpen}
-              menuId={quickSettingsMenuId}
-              activeSubmenu={quickSettingsSubmenu}
-              onClose={handleCloseQuickSettings}
-              onCheckVersion={() => void handleCheckVersion()}
-              onToggleSubmenu={handleToggleQuickSettingsSubmenu}
-              onClearSubmenu={() => setQuickSettingsSubmenu(null)}
-              checkingForUpdate={checkingForUpdate}
-            />
-          )}
-          open={quickSettingsOpen}
-          onOpenChange={handleQuickSettingsOpenChange}
-          styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
+        <Tooltip
+          title={t("common.settings")}
+          placement="right"
+          mouseEnterDelay={0.4}
+          open={!quickSettingsOpen && quickSettingsTooltipOpen}
+          onOpenChange={setQuickSettingsTooltipOpen}
         >
-          <div>
-            <RailButton
-              active={quickSettingsOpen}
-              title={t("common.settings")}
-              tooltipOpen={quickSettingsOpen ? false : undefined}
-              buttonRef={quickSettingsButtonRef}
-              expanded={quickSettingsOpen}
-              controls={quickSettingsMenuId}
+          <Popover
+            trigger={["click"]}
+            placement="rightBottom"
+            content={(
+              <SettingsMenu
+                open={quickSettingsOpen}
+                menuId={quickSettingsMenuId}
+                activeSubmenu={quickSettingsSubmenu}
+                onClose={handleCloseQuickSettings}
+                onCheckVersion={() => void handleCheckVersion()}
+                onToggleSubmenu={handleToggleQuickSettingsSubmenu}
+                onClearSubmenu={() => setQuickSettingsSubmenu(null)}
+                checkingForUpdate={checkingForUpdate}
+              />
+            )}
+            open={quickSettingsOpen}
+            onOpenChange={handleQuickSettingsOpenChange}
+            getPopupContainer={() => document.body}
+            styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
+          >
+            <button
+              type="button"
+              ref={quickSettingsButtonRef}
+              aria-haspopup="menu"
+              aria-expanded={quickSettingsOpen}
+              aria-controls={quickSettingsMenuId}
+              aria-label={t("common.settings")}
+              data-active={quickSettingsOpen ? "true" : "false"}
+              className="app-rail-button app-marker-host app-marker-rail h-10 w-10 flex items-center justify-center rounded-md"
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
@@ -542,12 +555,11 @@ function PrimarySidebarRail() {
                   handleQuickSettingsOpenChange(true);
                 }
               }}
-              onClick={() => {}}
             >
               <SettingOutlined className="app-nav-settings-gear text-[18px]" />
-            </RailButton>
-          </div>
-        </Popover>
+            </button>
+          </Popover>
+        </Tooltip>
       </div>
     </aside>
   );

@@ -244,6 +244,11 @@ it("manages trigger ARIA attributes, portal popover mounting, Select-open Escape
   expect(popover).not.toBeNull();
   expect(host.contains(popover)).toBe(false);
   expect(popover?.classList.contains("app-ledger-popover")).toBe(true);
+  // 挂载到 body 并不代表可见：打开时必须已经取得行锚点并写入视口坐标。
+  expect(popover?.style.top).toMatch(/px$/);
+  expect(popover?.style.left).toMatch(/px$/);
+  expect(popover?.style.width).toBe("468px");
+  expect(popover?.style.visibility).toBe("visible");
   for (const btn of claudeActionBtns) {
     expect(btn.getAttribute("aria-expanded")).toBe("true");
   }
@@ -281,6 +286,31 @@ it("manages trigger ARIA attributes, portal popover mounting, Select-open Escape
   } finally {
     window.requestAnimationFrame = origRaf;
   }
+});
+
+it("positions each agent action popover when opening, switching, and reopening", async () => {
+  await act(async () => root.render(createElement(AgentsPage)));
+  await flushMicrotasks();
+
+  for (const id of ["claude", "codex", "qoder", "claude"]) {
+    const button = host.querySelector<HTMLButtonElement>(
+      `.app-agent-cell-actions [aria-controls="app-agent-popover-${id}"]`,
+    );
+    expect(button).not.toBeNull();
+    await act(async () => button!.click());
+
+    const popover = document.body.querySelector<HTMLElement>(`#app-agent-popover-${id}`);
+    expect(document.body.querySelectorAll(".app-agent-popover")).toHaveLength(1);
+    expect(button?.getAttribute("aria-expanded")).toBe("true");
+    expect(popover?.style.top).toMatch(/px$/);
+    expect(popover?.style.left).toMatch(/px$/);
+    expect(popover?.style.visibility).toBe("visible");
+  }
+
+  await act(async () => {
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  });
+  expect(document.body.querySelector(".app-agent-popover")).toBeNull();
 });
 
 it("runs forceRefresh alongside an in-flight passive refresh and preserves ok quota cache on unavailable fetches", async () => {

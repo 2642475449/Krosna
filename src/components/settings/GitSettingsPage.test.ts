@@ -259,6 +259,10 @@ it("avoids cross-page agent class coupling and edits/saves a profile through the
   const popover = document.body.querySelector<HTMLElement>("#app-git-popover-concise[role='dialog']");
   expect(popover).not.toBeNull();
   expect(host.contains(popover)).toBe(false);
+  expect(popover?.style.top).toMatch(/px$/);
+  expect(popover?.style.left).toMatch(/px$/);
+  expect(popover?.style.width).toBe("500px");
+  expect(popover?.style.visibility).toBe("visible");
   for (const btn of conciseTriggers) {
     expect(btn.getAttribute("aria-expanded")).toBe("true");
   }
