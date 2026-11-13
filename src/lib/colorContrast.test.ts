@@ -72,3 +72,30 @@ it("keeps every text and surface pair above WCAG AA in all themes", () => {
   }
   expect(failures).toEqual([]);
 });
+
+it("keeps semantic status aliases unified and readable across all themes", () => {
+  const darkThemes = ["dark-starry", "dark-mocha"] as const;
+  const darkSurfaces = ["bg-app", "bg-card-solid", "bg-elevated", "bg-hover"] as const;
+  const semanticTokens = ["success", "warning", "error"] as const;
+
+  for (const theme of THEMES) {
+    const variables = readThemeVariables(themeCss, theme);
+    expect(variables.success, `${theme} --cs-success`).toBe(variables["accent-green"]);
+    expect(variables.warning, `${theme} --cs-warning`).toBe(variables["accent-yellow"]);
+    expect(variables.error, `${theme} --cs-error`).toBe(variables.danger);
+  }
+
+  const failures: string[] = [];
+  for (const theme of darkThemes) {
+    const variables = readThemeVariables(themeCss, theme);
+    for (const token of semanticTokens) {
+      for (const surface of darkSurfaces) {
+        const ratio = getContrastRatio(variables[token], variables[surface]);
+        if (ratio < MIN_TEXT_CONTRAST_RATIO) {
+          failures.push(`${theme}: --cs-${token} on --cs-${surface} = ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+  }
+  expect(failures).toEqual([]);
+});

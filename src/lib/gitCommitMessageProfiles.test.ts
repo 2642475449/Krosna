@@ -102,5 +102,26 @@ describe("git commit message profiles", () => {
     expect(createDuplicateGitCommitMessageProfileName("适中", existing, "副本")).toBe(
       "适中 副本 2",
     );
+
+    const longName = "a".repeat(80);
+    const firstLongCopy = createDuplicateGitCommitMessageProfileName(
+      longName,
+      [{ id: "long", name: longName, instructions: "规则" }],
+      "副本",
+    );
+    expect(firstLongCopy.length).toBeLessThanOrEqual(80);
+    expect(firstLongCopy).toMatch(/副本$/);
+
+    const secondLongCopy = createDuplicateGitCommitMessageProfileName(
+      longName,
+      [
+        { id: "long", name: longName, instructions: "规则" },
+        { id: "long-copy-1", name: firstLongCopy, instructions: "规则" },
+      ],
+      "副本",
+    );
+    expect(secondLongCopy.length).toBeLessThanOrEqual(80);
+    expect(secondLongCopy).not.toBe(firstLongCopy);
+    expect(secondLongCopy).toMatch(/副本 2$/);
   });
 });

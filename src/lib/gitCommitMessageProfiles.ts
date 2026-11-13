@@ -195,6 +195,11 @@ export function resetSingleBuiltInGitCommitMessageProfile(
   return profiles.map((profile) => (profile.id === profileId ? builtIn : profile));
 }
 
+function buildBoundedCopyName(base: string, suffix: string): string {
+  const maxBaseLength = Math.max(1, 80 - suffix.length);
+  return `${base.slice(0, maxBaseLength).trimEnd()}${suffix}`.slice(0, 80).trim();
+}
+
 /** 生成不重名的克隆方案名称，例如“适中 副本”或“适中 副本 2” */
 export function createDuplicateGitCommitMessageProfileName(
   baseName: string,
@@ -205,17 +210,17 @@ export function createDuplicateGitCommitMessageProfileName(
   const taken = new Set(
     existingProfiles.map((profile) => profile.name.trim().toLocaleLowerCase()),
   );
-  const firstCandidate = `${normalizedBase} ${copySuffix}`.slice(0, 80).trim();
+  const firstCandidate = buildBoundedCopyName(normalizedBase, ` ${copySuffix}`);
   if (!taken.has(firstCandidate.toLocaleLowerCase())) {
     return firstCandidate;
   }
   for (let index = 2; index <= 99; index += 1) {
-    const candidate = `${normalizedBase} ${copySuffix} ${index}`.slice(0, 80).trim();
+    const candidate = buildBoundedCopyName(normalizedBase, ` ${copySuffix} ${index}`);
     if (!taken.has(candidate.toLocaleLowerCase())) {
       return candidate;
     }
   }
-  return `${normalizedBase.slice(0, 60)} ${Date.now()}`;
+  return buildBoundedCopyName(normalizedBase, ` ${Date.now()}`);
 }
 
 export function normalizeDefaultGitCommitMessageProfileId(

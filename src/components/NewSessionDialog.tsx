@@ -9,7 +9,7 @@ import { quotaWindows } from "@/lib/usageQuota";
 import { getAntigravityGeminiQuotaWindows } from "@/lib/antigravityQuota";
 import type { AgentCliInfo, AiAgentId, ClaudeEffortInfo, Session, SessionLaunchOptions } from "@/types";
 import { AgentIcon } from "@/components/AgentIcon";
-import { TASK_CHOICES, useLaunchChoiceLabel } from "@/components/AgentLaunchConfigPanel";
+import { TASK_CHOICES, useLaunchChoiceLabel } from "@/hooks/useLaunchChoiceLabel";
 import { useDefaultInstalledAgentSelection } from "@/hooks/useDefaultInstalledAgentSelection";
 import { useAppStore } from "@/store";
 import { getDefaultSessionTitle } from "@/lib/sessionTitles";
@@ -186,7 +186,15 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
                   <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-[var(--cs-text-tertiary)]">
                     <span>{formatAgentVersion(agent.version, agent.name)}</span>
                     {quotas[agent.id] != null && (
-                      <span style={{ color: quotas[agent.id]! <= 5 ? "var(--cs-danger)" : quotas[agent.id]! <= 20 ? "var(--cs-warning)" : "var(--cs-success)" }}>
+                      <span
+                        className={
+                          quotas[agent.id]! <= 5
+                            ? "text-[var(--cs-error)]"
+                            : quotas[agent.id]! <= 20
+                              ? "text-[var(--cs-warning)]"
+                              : "text-[var(--cs-success)]"
+                        }
+                      >
                         · {quotas[agent.id]}%
                       </span>
                     )}
