@@ -43,12 +43,22 @@ beforeEach(async () => {
   useAppStore.getState().currentProject!.path = "D:/repo";
   useAppStore.getState().sessions.length = 0;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const resizeCallbacks = new Set<ResizeObserverCallback>();
+  resizeHost = (width) => {
+    for (const callback of resizeCallbacks) {
+      callback([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver);
+    }
+  };
   vi.stubGlobal("ResizeObserver", class {
+    private callback: ResizeObserverCallback;
     constructor(callback: ResizeObserverCallback) {
-      resizeHost = (width) => callback([{ contentRect: { width } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+      this.callback = callback;
+      resizeCallbacks.add(callback);
     }
     observe() {}
-    disconnect() {}
+    disconnect() {
+      resizeCallbacks.delete(this.callback);
+    }
   });
   useAuxiliaryDockStore.setState({ open: false, widths: {}, initialWidths: {}, tabs: [], activeTabId: null });
   host = document.createElement("div");

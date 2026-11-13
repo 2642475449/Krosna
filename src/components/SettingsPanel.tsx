@@ -3299,7 +3299,7 @@ function SettingsPanel() {
         ref={contentScrollRef}
         className="app-settings-scroll"
       >
-        <div className={`app-settings-content ${contentLayout}`} data-settings-page={activePage}>
+        <div key={activePage} className={`app-settings-content ${contentLayout}`} data-settings-page={activePage}>
           <PageComponent />
         </div>
       </div>

@@ -286,29 +286,31 @@ export function GitBranchPanel({
       </div>
 
       {/* 创建分支输入框 */}
-      {showCreateInput && (
-        <div className="flex items-center gap-1 px-2 pb-1.5">
-          <Input
-            size="small"
-            value={newBranchName}
-            onChange={(e) => setNewBranchName(e.target.value)}
-            placeholder={t("sidebar.gitBranchNamePlaceholder")}
-            onPressEnter={() => void handleCreateBranch()}
-            style={{ fontSize: 12 }}
-            disabled={blocked}
-          />
-          <Button
-            size="small"
-            type="primary"
-            loading={creating}
-            disabled={blocked || !newBranchName.trim()}
-            onClick={() => void handleCreateBranch()}
-            style={{ fontSize: 12 }}
-          >
-            {t("common.create")}
-          </Button>
+      <div className="app-accordion" data-open={showCreateInput ? "true" : "false"} aria-hidden={!showCreateInput}>
+        <div className="app-accordion__inner">
+          <div className="flex items-center gap-1 px-2 pb-1.5">
+            <Input
+              size="small"
+              value={newBranchName}
+              onChange={(e) => setNewBranchName(e.target.value)}
+              placeholder={t("sidebar.gitBranchNamePlaceholder")}
+              onPressEnter={() => void handleCreateBranch()}
+              style={{ fontSize: 12 }}
+              disabled={blocked || !showCreateInput}
+            />
+            <Button
+              size="small"
+              type="primary"
+              loading={creating}
+              disabled={blocked || !showCreateInput || !newBranchName.trim()}
+              onClick={() => void handleCreateBranch()}
+              style={{ fontSize: 12 }}
+            >
+              {t("common.create")}
+            </Button>
+          </div>
         </div>
-      )}
+      </div>
 
       {error && <div role="alert" className="px-3 py-2 text-xs text-[var(--cs-error)]">
         {t("sidebar.gitRefreshFailed", { detail: error })}

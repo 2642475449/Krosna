@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Dropdown, Input, Modal, Select, message } from "antd";
+import { Button, Dropdown, Input, Modal, Select, message } from "antd";
 import type { MenuProps } from "antd";
 import { EllipsisOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -92,13 +92,7 @@ export function GitRemoteToolbar({
     await useGitRemoteStore.getState().fetchUpdates(projectPath, true);
     const error = useGitRemoteStore.getState().fetchErrors[projectPath];
     if (error) {
-      message.error({
-        key: `git-fetch:${projectPath}`,
-        content: <span>{t("sidebar.gitFetchFailed")} <button type="button"
-          className="text-[var(--cs-primary)] underline" onClick={() => setErrorDetails(error)}>
-          {t("sidebar.gitErrorDetails")}
-        </button></span>,
-      });
+      setErrorDetails(error);
     } else {
       message.success(t("sidebar.remoteActions.fetched"));
     }
@@ -206,9 +200,34 @@ export function GitRemoteToolbar({
           <EllipsisOutlined />
         </button>
       </Dropdown>
-      <Modal open={errorDetails !== null} title={t("sidebar.gitFetchFailed")}
-        onCancel={() => setErrorDetails(null)} footer={null}>
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all select-text">{errorDetails}</pre>
+      <Modal
+        open={errorDetails !== null}
+        title={t("sidebar.gitFetchFailed")}
+        onCancel={() => setErrorDetails(null)}
+        footer={[
+          <Button
+            key="copy"
+            onClick={async () => {
+              if (errorDetails) {
+                await navigator.clipboard.writeText(errorDetails);
+                message.success(t("common.copied"));
+              }
+            }}
+          >
+            {t("common.copy")}
+          </Button>,
+          <Button
+            key="close"
+            type="primary"
+            onClick={() => setErrorDetails(null)}
+          >
+            {t("common.close")}
+          </Button>,
+        ]}
+      >
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all select-text font-mono text-xs p-3 rounded bg-[var(--cs-bg-hover)] text-[var(--cs-text-secondary)]">
+          {errorDetails}
+        </pre>
       </Modal>
       <Modal
         open={dialog !== null}

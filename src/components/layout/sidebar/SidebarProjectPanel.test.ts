@@ -6,13 +6,14 @@ import type { FileTreeEntry } from "@/types";
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), search: vi.fn(), open: vi.fn(), drag: vi.fn(), rename: vi.fn(),
+  createFile: vi.fn(), createDirectory: vi.fn(), readClipboard: vi.fn(), copy: vi.fn(),
 }));
 vi.mock("@/store", () => ({ useAppStore: (select: (state: unknown) => unknown) => select({ setResourceDragState: mocks.drag }) }));
 vi.mock("@/lib/api", () => ({
   listProjectDirectory: mocks.list, searchProjectEntries: mocks.search,
-  renameProjectEntry: mocks.rename, copyExternalEntry: vi.fn(), copyProjectEntries: vi.fn(),
-  createProjectDirectory: vi.fn(), createProjectFile: vi.fn(), deleteProjectEntry: vi.fn(),
-  moveProjectEntries: vi.fn(), readClipboardFilePaths: vi.fn(),
+  renameProjectEntry: mocks.rename, copyExternalEntry: vi.fn(), copyProjectEntries: mocks.copy,
+  createProjectDirectory: mocks.createDirectory, createProjectFile: mocks.createFile, deleteProjectEntry: vi.fn(),
+  moveProjectEntries: vi.fn(), readClipboardFilePaths: mocks.readClipboard,
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onDragDropEvent: async () => () => {} }) }));
 vi.mock("@/lib/explorer", () => ({ EXPLORER_REVEAL_PATH_EVENT: "reveal", EXPLORER_SELECT_ALL_EVENT: "select-all", takePendingExplorerRevealPath: () => null }));
@@ -37,6 +38,18 @@ const activePath = () => document.getElementById(tree().getAttribute("aria-activ
 async function press(key: string, options: KeyboardEventInit = {}) {
   await act(async () => { tree().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...options })); });
 }
+async function openContextMenu(target: HTMLElement) {
+  await act(async () => {
+    target.dispatchEvent(new MouseEvent("mousedown", { button: 2, bubbles: true, cancelable: true }));
+    target.dispatchEvent(new MouseEvent("contextmenu", { button: 2, bubbles: true, cancelable: true }));
+  });
+}
+async function clickMenuItem(text: string) {
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    .find((element) => element.textContent === text);
+  expect(item).toBeDefined();
+  await act(async () => item!.click());
+}
 async function mount() {
   await act(async () => {
     root.render(React.createElement(SidebarProjectPanel, {
@@ -54,6 +67,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.list.mockImplementation(async (_root, path) => listing(path ?? project.path, path ? [child] : [folder, file]));
   mocks.search.mockResolvedValue([]);
+  mocks.createFile.mockImplementation(async (_root, parent, name) => `${parent}/${name}`);
+  mocks.createDirectory.mockImplementation(async (_root, parent, name) => `${parent}/${name}`);
+  mocks.readClipboard.mockResolvedValue([]);
+  mocks.copy.mockResolvedValue([]);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -161,4 +178,80 @@ it("resumes keyboard navigation after refreshing away an open context menu", asy
   await act(async () => tree().focus());
   await press("End");
   expect(activePath()).toBe(file.path);
+});
+
+it.each([
+  ["sidebar.createFile", "createFile", "untitled"],
+  ["sidebar.createFolder", "createDirectory", "new-folder"],
+] as const)("creates at the project root from blank space via %s despite an auto-selected first folder", async (label, method, name) => {
+  const agents = entry(".agents", "directory");
+  mocks.list.mockImplementation(async (_root, path) => listing(path ?? project.path, path ? [] : [agents, file]));
+  await mount();
+  expect(activePath()).toBe(agents.path);
+
+  await openContextMenu(tree());
+  await clickMenuItem(label);
+
+  expect(mocks[method]).toHaveBeenCalledExactlyOnceWith(project.path, project.path, name);
+});
+
+it("creates at the project root from blank space after selecting a nested file", async () => {
+  await mount();
+  await press("ArrowRight");
+  await press("ArrowRight");
+  expect(activePath()).toBe(child.path);
+  await openContextMenu(tree());
+  await clickMenuItem("sidebar.createFile");
+  expect(mocks.createFile).toHaveBeenCalledExactlyOnceWith(project.path, project.path, "untitled");
+});
+
+it("keeps folder row creation scoped to that folder", async () => {
+  await mount();
+  await openContextMenu(host.querySelector<HTMLElement>(".app-file-tree-row")!);
+  await clickMenuItem("sidebar.createFile");
+  expect(mocks.createFile).toHaveBeenCalledExactlyOnceWith(project.path, folder.path, "untitled");
+});
+
+it("clears row selection when clicking blank space and resumes navigation from the first row", async () => {
+  await mount();
+  await press("End");
+  expect(activePath()).toBe(file.path);
+  await act(async () => {
+    tree().dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true }));
+  });
+  expect(host.querySelectorAll('[role="treeitem"][aria-selected="true"]')).toHaveLength(0);
+  expect(tree().hasAttribute("aria-activedescendant")).toBe(false);
+  await press("ArrowDown");
+  expect(activePath()).toBe(folder.path);
+});
+
+it("does not reselect the first folder when dismissing the blank-space menu", async () => {
+  await mount();
+  await openContextMenu(tree());
+  const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+  await act(async () => menu.focus());
+  await act(async () => menu.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "Escape", keyCode: 27, bubbles: true, cancelable: true,
+  })));
+  expect(document.activeElement).toBe(tree());
+  expect(host.querySelectorAll('[role="treeitem"][aria-selected="true"]')).toHaveLength(0);
+});
+
+it.each(["keyboard", "blank menu"])("pastes into the intended directory via %s", async (source) => {
+  await mount();
+  await press("End");
+  await press("c", { ctrlKey: true });
+  await press("Home");
+  expect(activePath()).toBe(folder.path);
+
+  if (source === "keyboard") {
+    await press("v", { ctrlKey: true });
+  } else {
+    await openContextMenu(tree());
+    await clickMenuItem("common.paste");
+  }
+
+  expect(mocks.copy).toHaveBeenCalledExactlyOnceWith(
+    project.path, [file.path], source === "keyboard" ? folder.path : project.path,
+  );
 });

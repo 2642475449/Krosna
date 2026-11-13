@@ -368,18 +368,6 @@ html, body, #root {
   color: var(--cs-text-primary);
 }
 
-.app-tab-chrome[data-active="true"]::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 12px;
-  width: 24px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--cs-primary);
-  pointer-events: none;
-}
-
 .app-marker-top[data-active="true"]::before,
 .app-marker-bottom[data-active="true"]::before,
 .app-marker-left[data-active="true"]::before,

@@ -11,6 +11,8 @@ import type { AgentCliInfo, AiAgentId, ClaudeEffortInfo, Session, SessionLaunchO
 import { AgentIcon } from "@/components/AgentIcon";
 import { TASK_CHOICES, useLaunchChoiceLabel } from "@/hooks/useLaunchChoiceLabel";
 import { useDefaultInstalledAgentSelection } from "@/hooks/useDefaultInstalledAgentSelection";
+import { useCopyFeedback } from "@/hooks/useCopyFeedback";
+import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
 import { useAppStore } from "@/store";
 import { getDefaultSessionTitle } from "@/lib/sessionTitles";
 
@@ -43,6 +45,8 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
   const [overrides, setOverrides] = useState<Partial<Record<AiAgentId, string>>>({});
   const [effortInfo, setEffortInfo] = useState<ClaudeEffortInfo | null>(null);
   const [quotas, setQuotas] = useState<Partial<Record<AiAgentId, number>>>({});
+  const { isCopied, markCopied } = useCopyFeedback();
+  const commandCopied = isCopied("command");
   const submitting = useRef(false);
   useEffect(() => {
     if (!open) return;
@@ -93,6 +97,7 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
   const copyCommand = () => {
     if (!command) return;
     void navigator.clipboard.writeText(command).then(() => {
+      markCopied("command");
       message.success(t("newSession.commandCopied"));
     });
   };
@@ -113,6 +118,18 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
   const choices = agentId && agentId in TASK_CHOICES ? TASK_CHOICES[agentId as keyof typeof TASK_CHOICES] : null;
   const defaultTask = base ? (base as unknown as Record<string, string>)[taskKey] : "inherit";
   const defaultLabel = agentId === "claude" && defaultTask === "inherit" ? t(`statusBar.effort.${effortInfo?.effectiveLevel ?? "auto"}`) : agentId ? choiceLabel(agentId, defaultTask) : "";
+  const [lastTask, setLastTask] = useState<{ agentId: AiAgentId; choices: readonly string[]; taskKey: string; defaultLabel: string } | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setLastTask(null);
+      return;
+    }
+    if (choices && agentId) {
+      setLastTask({ agentId, choices, taskKey, defaultLabel });
+    }
+  }, [open, choices, agentId, taskKey, defaultLabel]);
+  const taskOpen = Boolean(choices && agentId);
+  const displayTask = taskOpen && choices && agentId ? { agentId, choices, taskKey, defaultLabel } : lastTask;
   return <Modal open={open} title={null} closable={false} footer={null} width={580} keyboard={!selectOpen} className="app-session-launcher-modal" classNames={{ mask: "app-session-launcher-mask" }} onCancel={() => { if (!creating) onCancel(); }} afterOpenChange={visible => {
     // 默认回车创建会话，避免 Modal 将焦点放在标题编辑按钮上。
     if (visible) focusCreateButton();
@@ -187,13 +204,14 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
                     <span>{formatAgentVersion(agent.version, agent.name)}</span>
                     {quotas[agent.id] != null && (
                       <span
-                        className={
+                        key={quotas[agent.id]}
+                        className={`app-text-swap ${
                           quotas[agent.id]! <= 5
                             ? "text-[var(--cs-error)]"
                             : quotas[agent.id]! <= 20
                               ? "text-[var(--cs-warning)]"
                               : "text-[var(--cs-success)]"
-                        }
+                        }`}
                       >
                         · {quotas[agent.id]}%
                       </span>
@@ -205,16 +223,21 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
           />
         )}
       </div>
-      {choices && agentId && <div className="app-launcher-task"><div className="mb-2 flex justify-between gap-2 text-xs text-[var(--cs-text-secondary)]"><span>{t(agentId === "qoder" ? "newSession.qoderPermissionMode" : agentId === "antigravity" ? "newSession.antigravityMode" : "newSession.effort")}</span><span>{t("newSession.defaultValue", { value: defaultLabel })}</span></div><div className="app-launcher-pills">{choices.filter(value => value !== "dont_ask").map(value => <button type="button" key={value} disabled={creating} aria-pressed={taskValue === value} onClick={() => setOverrides(current => ({ ...current, [agentId]: value }))}>{choiceLabel(agentId, value)}</button>)}</div></div>}
+      <div className="app-accordion" data-open={taskOpen ? "true" : "false"} aria-hidden={!taskOpen}>
+        <div className="app-accordion__inner">
+          {displayTask && <div className="app-launcher-task"><div className="mb-2 flex justify-between gap-2 text-xs text-[var(--cs-text-secondary)]"><span>{t(displayTask.agentId === "qoder" ? "newSession.qoderPermissionMode" : displayTask.agentId === "antigravity" ? "newSession.antigravityMode" : "newSession.effort")}</span><span>{t("newSession.defaultValue", { value: displayTask.defaultLabel })}</span></div><div className="app-launcher-pills">{displayTask.choices.filter(value => value !== "dont_ask").map(value => <button type="button" key={value} disabled={creating || !taskOpen} aria-pressed={(overrides[displayTask.agentId] ?? "inherit") === value} onClick={() => setOverrides(current => ({ ...current, [displayTask.agentId]: value }))}>{choiceLabel(displayTask.agentId, value)}</button>)}</div></div>}
+        </div>
+      </div>
       <div className="app-launcher-footer">
         <button
           type="button"
-          className="app-launcher-command"
+          className="app-launcher-command flex items-center gap-1.5"
           disabled={!command}
           aria-label={t("newSession.commandCopyHint")}
           onMouseDown={e => e.preventDefault()}
           onClick={copyCommand}
         >
+          {command && <CopyFeedbackIcon copied={commandCopied} />}
           <code aria-label={t("newSession.commandPreview")}>$ {command}</code>
         </button>
         <Button disabled={creating} onClick={onCancel}>{t("common.cancel")}</Button>

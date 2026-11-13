@@ -4,7 +4,6 @@ import {
   CheckOutlined,
   CloseOutlined,
   CodeOutlined,
-  CopyOutlined,
   BoldOutlined,
   EditOutlined,
   ItalicOutlined,
@@ -18,6 +17,7 @@ import {
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { MermaidBlock } from "./MermaidBlock";
+import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
 import { readProjectImage } from "@/lib/api";
 import type { ElementContent, Root, RootContent } from "hast";
 import {
@@ -949,8 +949,8 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
           aria-label={copied ? "已复制" : "复制代码"}
           title={copied ? "已复制" : "复制代码"}
         >
-          {copied ? <CheckOutlined /> : <CopyOutlined />}
-          <span>{copied ? "已复制" : "复制"}</span>
+          <CopyFeedbackIcon copied={copied} />
+          <span key={copied ? "copied" : "copy"} className="app-text-swap">{copied ? "已复制" : "复制"}</span>
         </button>
       </div>
       <pre

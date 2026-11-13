@@ -9,8 +9,9 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
@@ -84,6 +85,9 @@ export default function AuxiliaryDock({
   const [fileSearching, setFileSearching] = useState(false);
   const [hostWidth, setHostWidth] = useState(0);
   const dockRef = useRef<HTMLElement>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
   const closingSessionIdsRef = useRef(new Set<string>());
 
   useLayoutEffect(() => {
@@ -332,7 +336,8 @@ export default function AuxiliaryDock({
       >
         {tabs.length > 0 ? (
           <div
-            className="app-shell-chrome app-glass-tabbar flex min-h-9 shrink-0 items-end overflow-x-auto"
+            ref={tabListRef}
+            className="app-shell-chrome app-glass-tabbar app-tabbar-tabs flex min-h-9 shrink-0 items-end overflow-x-auto"
             style={{ background: "transparent" }}
           >
             {tabs.map((tab) => {
@@ -351,11 +356,14 @@ export default function AuxiliaryDock({
               return (
                 <Dropdown key={tab.id} trigger={["contextMenu"]} menu={tabMenu(tab)}>
                   <div
+                    ref={(el) => {
+                      tabRefs.current[tab.id] = el;
+                    }}
                     role="tab"
                     tabIndex={active ? 0 : -1}
                     aria-selected={active}
                     data-active={active ? "true" : "false"}
-                    className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${active ? "app-glass-tab-active" : ""} group flex max-w-52 shrink-0 cursor-pointer items-center gap-1.5 px-3 text-xs`}
+                    className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${active ? "app-glass-tab-active" : ""} group flex max-w-52 shrink-0 cursor-pointer items-center gap-1.5 px-3 text-xs`}
                     style={{ fontStyle: tab.preview ? "italic" : "normal" }}
                     title={displayTitle}
                     onClick={() => activateTab(tab.id)}
@@ -395,6 +403,7 @@ export default function AuxiliaryDock({
                 </Dropdown>
               );
             })}
+            <TabSelectionIndicator listRef={tabListRef} tabRefs={tabRefs} activeTabId={activeTabId} tabIds={tabIds} />
             <Dropdown
               trigger={["click"]}
               menu={{

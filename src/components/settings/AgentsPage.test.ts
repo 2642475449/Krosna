@@ -393,3 +393,20 @@ it("runs forceRefresh alongside an in-flight passive refresh and preserves ok qu
 
   expect(codexRow?.querySelectorAll(".app-quota-ring").length).toBe(2);
 });
+
+it("renders global permission preset buttons with Yolo before Manual", async () => {
+  await act(async () => {
+    root.render(createElement(AgentsPage));
+  });
+  await flushMicrotasks();
+
+  const segmentButtons = host.querySelectorAll<HTMLButtonElement>(".app-agent-segment button");
+  expect(segmentButtons.length).toBe(2);
+  expect(segmentButtons[0].textContent?.trim()).toBe("Yolo");
+  expect(segmentButtons[1].textContent?.trim()).toBe("手动");
+
+  await act(async () => {
+    segmentButtons[0].click();
+  });
+  expect(mocks.storeState.setAllAgentPermissionDefaults).toHaveBeenCalledTimes(1);
+});

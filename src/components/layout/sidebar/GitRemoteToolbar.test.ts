@@ -5,8 +5,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const ui = vi.hoisted(() => ({ menu: null as any, error: vi.fn(), success: vi.fn() }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("antd", () => ({
+  Button: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => createElement("button", { onClick }, children),
   Dropdown: ({ children, menu }: { children: ReactNode; menu: unknown }) => { ui.menu = menu; return children; },
-  Modal: ({ open, children }: { open: boolean; children: ReactNode }) => open ? createElement("div", { role: "dialog" }, children) : null,
+  Modal: ({ open, children, footer }: { open: boolean; children: ReactNode; footer?: ReactNode }) => open ? createElement("div", { role: "dialog" }, children, footer) : null,
   Input: () => null, Select: () => null,
   message: { error: ui.error, success: ui.success, warning: vi.fn() },
 }));
@@ -25,7 +26,7 @@ beforeEach(() => {
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
-it("keeps fetch in the overflow menu and opens failure details only on request", async () => {
+it("keeps fetch in the overflow menu and directly opens failure dialog when fetch fails", async () => {
   await act(async () => root.render(createElement(GitRemoteToolbar, { projectPath: "/repo", branch: null, disabled: false, refresh: vi.fn(), menuItems: [], onMenuClick: vi.fn() })));
   expect(host.querySelectorAll("button")).toHaveLength(1);
   expect(host.textContent).not.toContain("old failure");
@@ -34,8 +35,9 @@ it("keeps fetch in the overflow menu and opens failure details only on request",
   vi.mocked(gitFetch).mockResolvedValue({ success: false, message: "proxy unavailable" });
   await act(async () => { ui.menu.onClick({ key: "remote-fetch" }); });
   expect(gitFetch).toHaveBeenCalledWith("/repo");
-  expect(ui.error).toHaveBeenCalledTimes(1);
-  expect(host.querySelector('[role="dialog"]')).toBeNull();
-  await act(async () => { ui.menu.onClick({ key: "remote-error" }); });
+  expect(ui.error).not.toHaveBeenCalled();
+  expect(host.querySelector('[role="dialog"]')).not.toBeNull();
   expect(host.querySelector('[role="dialog"]')?.textContent).toContain("proxy unavailable");
+  expect(host.querySelector('[role="dialog"]')?.textContent).toContain("common.copy");
+  expect(host.querySelector('[role="dialog"]')?.textContent).toContain("common.close");
 });

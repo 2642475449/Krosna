@@ -311,17 +311,17 @@ export function AgentsPage() {
           <div className="app-agent-segment" role="group" aria-label={t("settings.agents.permissions.groupAria")}>
             <button
               type="button"
-              aria-pressed={globalPreset === "manual"}
-              onClick={() => setAllDefaults(applyGlobalPermissionPreset(permissionDefaults, "manual"))}
-            >
-              {t("settings.agents.permissions.manual")}
-            </button>
-            <button
-              type="button"
               aria-pressed={globalPreset === "yolo"}
               onClick={() => setAllDefaults(applyGlobalPermissionPreset(permissionDefaults, "yolo"))}
             >
               {t("settings.agents.permissions.yolo")}
+            </button>
+            <button
+              type="button"
+              aria-pressed={globalPreset === "manual"}
+              onClick={() => setAllDefaults(applyGlobalPermissionPreset(permissionDefaults, "manual"))}
+            >
+              {t("settings.agents.permissions.manual")}
             </button>
           </div>
           {globalPreset === "custom" && (

@@ -804,7 +804,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                 style={{ color: "var(--cs-text-primary)" }}
                 onClick={toggleGitChangesCollapsed}
               >
-                <DownOutlined className={`text-[9px] transition-transform ${gitChangesCollapsed ? "-rotate-90" : ""}`} />
+                <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!gitChangesCollapsed} />
                 <span>{t("sidebar.gitChangesPanel")}</span>
               </button>
               <div className="flex items-center gap-1">
@@ -826,8 +826,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
               </div>
             </div>
 
-            {!gitChangesCollapsed && (
-              <div>
+            <div className="app-accordion" data-open={!gitChangesCollapsed ? "true" : "false"} aria-hidden={gitChangesCollapsed}>
+              <div className="app-accordion__inner">
+                <div>
                 {/* Commit composer */}
                 <GitCommitComposer
                   remoteReady={remoteReady}
@@ -915,8 +916,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                     <span className="text-sm">{t("sidebar.gitNoChanges")}</span>
                   </div>
                 )}
+                </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 

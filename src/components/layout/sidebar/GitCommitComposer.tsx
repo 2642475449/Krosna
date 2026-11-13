@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, Dropdown, Input, message, Modal, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -166,9 +166,18 @@ export function GitCommitComposer({
     []
   );
 
+  const [composerShake, setComposerShake] = useState(false);
+  useEffect(() => {
+    if (!composerShake) return;
+    const timer = window.setTimeout(() => setComposerShake(false), 260);
+    return () => window.clearTimeout(timer);
+  }, [composerShake]);
+
   const runCommitAction = useCallback(
     async (action: (message: string) => Promise<void>) => {
       if (!trimmedMessage) {
+        setComposerShake(false);
+        requestAnimationFrame(() => setComposerShake(true));
         message.warning(t("sidebar.gitCommitEmptyMessage"));
         return;
       }
@@ -357,7 +366,7 @@ export function GitCommitComposer({
   return (
     <div className="shrink-0 px-2 pb-1.5 pt-1.5">
       <div
-        className="git-commit-composer mb-2 overflow-hidden rounded-[8px]"
+        className={`git-commit-composer mb-2 overflow-hidden rounded-[8px] ${composerShake ? "app-error-shake" : ""}`}
         style={{
           background: commitComposerBackground,
           border: `1px solid ${commitComposerBorder}`,
@@ -492,7 +501,7 @@ export function GitCommitComposer({
                 boxShadow: "none",
               }}
             >
-              <span>{primaryActionText}</span>
+              <span key={primaryAction} className="app-text-swap">{primaryActionText}</span>
             </Button>
           </span>
         </Tooltip>

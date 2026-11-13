@@ -145,16 +145,16 @@ export function TaskMonitorPanel({
         <Tooltip title={t("taskMonitor.overview", { count: summary.totalProjects })}>
           <div className="app-task-monitor-stat-pill" data-variant="default">
             <AppstoreOutlined className="text-[var(--cs-text-tertiary)]" />
-            <span className="tabular-nums font-semibold">{summary.totalProjects}</span>
+            <span key={summary.totalProjects} className="app-digit-pop font-semibold">{summary.totalProjects}</span>
             <span className="app-task-monitor-stat-label">{t("taskMonitor.projectsUnit")}</span>
           </div>
         </Tooltip>
 
         {summary.running > 0 && (
           <Tooltip title={t("taskMonitor.runningHint", { count: summary.running })}>
-            <div className="app-task-monitor-stat-pill" data-variant="running">
+            <div className="app-task-monitor-stat-pill app-badge-pop" data-variant="running">
               <LoadingOutlined spin />
-              <span className="tabular-nums font-semibold">{summary.running}</span>
+              <span key={summary.running} className="app-digit-pop font-semibold">{summary.running}</span>
               <span className="app-task-monitor-stat-label">{t("taskMonitor.runningUnit")}</span>
             </div>
           </Tooltip>
@@ -162,9 +162,9 @@ export function TaskMonitorPanel({
 
         {summary.error > 0 && (
           <Tooltip title={t("taskMonitor.errorHint", { count: summary.error })}>
-            <div className="app-task-monitor-stat-pill" data-variant="error">
+            <div className="app-task-monitor-stat-pill app-badge-pop" data-variant="error">
               <CloseCircleOutlined />
-              <span className="tabular-nums font-semibold">{summary.error}</span>
+              <span key={summary.error} className="app-digit-pop font-semibold">{summary.error}</span>
               <span className="app-task-monitor-stat-label">{t("taskMonitor.errorUnit")}</span>
             </div>
           </Tooltip>
@@ -172,9 +172,9 @@ export function TaskMonitorPanel({
 
         {summary.completed > 0 && (
           <Tooltip title={t("taskMonitor.completedHint", { count: summary.completed })}>
-            <div className="app-task-monitor-stat-pill" data-variant="completed">
+            <div className="app-task-monitor-stat-pill app-badge-pop" data-variant="completed">
               <CheckCircleOutlined />
-              <span className="tabular-nums font-semibold">{summary.completed}</span>
+              <span key={summary.completed} className="app-digit-pop font-semibold">{summary.completed}</span>
               <span className="app-task-monitor-stat-label">{t("taskMonitor.completedUnit")}</span>
             </div>
           </Tooltip>

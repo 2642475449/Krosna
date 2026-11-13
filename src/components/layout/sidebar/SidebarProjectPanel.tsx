@@ -381,6 +381,7 @@ function SidebarProjectPanel({
   onOpenFile,
 }: SidebarProjectPanelProps) {
   const { t } = useTranslation();
+  const projectRootPath = currentProject?.path ?? "";
   const [rootEntries, setRootEntries] = useState<FileTreeEntry[]>([]);
   const [loadedDirectories, setLoadedDirectories] = useState<Record<string, FileTreeEntry[]>>({});
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
@@ -743,8 +744,11 @@ function SidebarProjectPanel({
     if (!open && document.activeElement?.closest(".ant-dropdown")) {
       treeContainerRef.current?.focus({ preventScroll: true });
     }
-  }, [setContextMenuPath]);
-  const projectRootPath = currentProject?.path ?? "";
+    if (!open && path === "__background__") {
+      // Returning focus from the menu must not reselect the first folder.
+      selectOnlyPath(projectRootPath);
+    }
+  }, [projectRootPath, selectOnlyPath, setContextMenuPath]);
   const knownEntries = useMemo(
     () => [
       ...rootEntries,
@@ -807,16 +811,16 @@ function SidebarProjectPanel({
     () => buildSearchRelevantPaths(projectRootPath, searchResults),
     [projectRootPath, searchResults]
   );
-  const backgroundSelectedPath = useMemo(() => {
+  const relevantSelectedPath = useMemo(() => {
     if (!isSearchMode || !selectedPath) {
       return selectedPath;
     }
 
     return searchRelevantPaths.has(normalizePath(selectedPath)) ? selectedPath : projectRootPath;
   }, [isSearchMode, projectRootPath, searchRelevantPaths, selectedPath]);
-  const backgroundCreateTargetPath = useMemo(
-    () => getDefaultCreateDirectory(projectRootPath, backgroundSelectedPath, selectedEntryKind === "directory"),
-    [backgroundSelectedPath, projectRootPath, selectedEntryKind]
+  const selectionTargetDirectory = useMemo(
+    () => getDefaultCreateDirectory(projectRootPath, relevantSelectedPath, selectedEntryKind === "directory"),
+    [relevantSelectedPath, projectRootPath, selectedEntryKind]
   );
   const canCopySelection = actionableSelectedEntries.length > 0 && !renameSubmitting;
   const canCutSelection = canCopySelection;
@@ -1455,20 +1459,21 @@ function SidebarProjectPanel({
     ({ key, domEvent }) => {
       domEvent.preventDefault();
       domEvent.stopPropagation();
-      selectOnlyPath(backgroundCreateTargetPath);
+      // Blank space represents the project root, independently of keyboard selection.
+      selectOnlyPath(projectRootPath);
 
       if (key === "create-file") {
-        void handleCreateResource("file", backgroundCreateTargetPath);
+        void handleCreateResource("file", projectRootPath);
         return;
       }
 
       if (key === "create-folder") {
-        void handleCreateResource("directory", backgroundCreateTargetPath);
+        void handleCreateResource("directory", projectRootPath);
         return;
       }
 
       if (key === "paste") {
-        void handlePasteFromClipboard(backgroundCreateTargetPath);
+        void handlePasteFromClipboard(projectRootPath);
         return;
       }
 
@@ -1478,15 +1483,15 @@ function SidebarProjectPanel({
       }
 
       if (key === "open-current-directory") {
-        onOpenInFileManager(backgroundCreateTargetPath);
+        onOpenInFileManager(projectRootPath);
         return;
       }
 
       if (key === "find-in-directory") {
-        openGlobalTextSearch(backgroundCreateTargetPath);
+        openGlobalTextSearch(projectRootPath);
       }
     },
-    [backgroundCreateTargetPath, handleCreateResource, handlePasteFromClipboard, handleRefresh, onOpenInFileManager, selectOnlyPath]
+    [projectRootPath, handleCreateResource, handlePasteFromClipboard, handleRefresh, onOpenInFileManager, selectOnlyPath]
   );
 
   const backgroundMenuItems = useMemo<MenuProps["items"]>(
@@ -1930,7 +1935,7 @@ function SidebarProjectPanel({
         if (!canPaste) return;
         event.preventDefault();
         event.stopPropagation();
-        void handlePasteFromClipboard(backgroundCreateTargetPath);
+        void handlePasteFromClipboard(selectionTargetDirectory);
         return;
       }
 
@@ -1945,12 +1950,12 @@ function SidebarProjectPanel({
       if (event.key === "Escape" && selectedPaths.length > 1) {
         event.preventDefault();
         event.stopPropagation();
-        selectOnlyPath(selectedPath ?? backgroundCreateTargetPath);
+        selectOnlyPath(selectedPath ?? selectionTargetDirectory);
       }
     },
     [
       actionableSelectedEntries,
-      backgroundCreateTargetPath,
+      selectionTargetDirectory,
       canCopySelection,
       canCutSelection,
       canDeleteSelection,
@@ -2051,8 +2056,9 @@ function SidebarProjectPanel({
             }}
             onMouseDown={(event) => {
               const target = event.target as HTMLElement | null;
-              if (!target?.closest(".app-file-tree-row")) {
+              if (target && event.currentTarget.contains(target) && !target.closest(".app-file-tree-row")) {
                 treeContainerRef.current?.focus();
+                selectOnlyPath(projectRootPath);
               }
             }}
             onContextMenu={(event) => {
@@ -2060,7 +2066,7 @@ function SidebarProjectPanel({
               if (target?.closest(".app-file-tree-row")) {
                 return;
               }
-              selectOnlyPath(backgroundCreateTargetPath);
+              selectOnlyPath(projectRootPath);
             }}
             onKeyDown={handleTreeKeyDown}
           >

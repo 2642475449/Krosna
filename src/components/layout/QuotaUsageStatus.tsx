@@ -267,24 +267,28 @@ function CodexResetCreditList({
           {t("statusBar.codexUsage.resetCredits", { count })}
         </div>
       )}
-      {expanded && sortedCredits.length > 0 ? (
-        <div className="space-y-0.5 border-l border-[var(--cs-border-sidebar)] pl-2 text-[var(--cs-text-tertiary)]">
-          {sortedCredits.map((credit, index) => (
-            <div key={`${credit.expiresAt ?? "unknown"}-${index}`} className="tabular-nums">
-              {credit.expiresAt == null
-                ? t("statusBar.codexUsage.resetCreditExpiryUnknown", { index: index + 1 })
-                : t("statusBar.codexUsage.resetCreditExpiresAt", {
-                  index: index + 1,
-                  time: formatExpiry(credit.expiresAt),
-                })}
+      <div className="app-accordion" data-open={expanded && (sortedCredits.length > 0 || fallbackExpiresAt != null) ? "true" : "false"} aria-hidden={!expanded}>
+        <div className="app-accordion__inner">
+          {sortedCredits.length > 0 ? (
+            <div className="space-y-0.5 border-l border-[var(--cs-border-sidebar)] pl-2 text-[var(--cs-text-tertiary)]">
+              {sortedCredits.map((credit, index) => (
+                <div key={`${credit.expiresAt ?? "unknown"}-${index}`} className="tabular-nums">
+                  {credit.expiresAt == null
+                    ? t("statusBar.codexUsage.resetCreditExpiryUnknown", { index: index + 1 })
+                    : t("statusBar.codexUsage.resetCreditExpiresAt", {
+                      index: index + 1,
+                      time: formatExpiry(credit.expiresAt),
+                    })}
+                </div>
+              ))}
             </div>
-          ))}
+          ) : fallbackExpiresAt != null ? (
+            <div className="text-[var(--cs-text-tertiary)]">
+              {t("statusBar.codexUsage.resetCreditNextExpiresAt", { time: formatExpiry(fallbackExpiresAt) })}
+            </div>
+          ) : null}
         </div>
-      ) : expanded && fallbackExpiresAt != null ? (
-        <div className="text-[var(--cs-text-tertiary)]">
-          {t("statusBar.codexUsage.resetCreditNextExpiresAt", { time: formatExpiry(fallbackExpiresAt) })}
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }

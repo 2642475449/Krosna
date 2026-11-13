@@ -4,7 +4,6 @@ import {
   InboxOutlined,
   PushpinOutlined,
   PushpinFilled,
-  RightOutlined,
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Empty, Tooltip } from "antd";
@@ -240,13 +239,13 @@ function SidebarSessionsPanel({
             >
               {pinnedSessions.length}
             </span>
-            {pinnedCollapsed ? (
-              <RightOutlined className="text-[9px]" />
-            ) : (
-              <DownOutlined className="text-[9px]" />
-            )}
+            <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!pinnedCollapsed} />
           </div>
-          {!pinnedCollapsed && pinnedSessions.map(renderSessionItem)}
+          <div className="app-accordion" data-open={!pinnedCollapsed ? "true" : "false"} aria-hidden={pinnedCollapsed}>
+            <div className="app-accordion__inner">
+              {pinnedSessions.map(renderSessionItem)}
+            </div>
+          </div>
         </>
       )}
       {pinnedSessions.length > 0 && normalSessions.length > 0 && (
@@ -275,13 +274,13 @@ function SidebarSessionsPanel({
             >
               {normalSessions.length}
             </span>
-            {sessionsCollapsed ? (
-              <RightOutlined className="text-[9px]" />
-            ) : (
-              <DownOutlined className="text-[9px]" />
-            )}
+            <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!sessionsCollapsed} />
           </div>
-          {!sessionsCollapsed && normalSessions.map(renderSessionItem)}
+          <div className="app-accordion" data-open={!sessionsCollapsed ? "true" : "false"} aria-hidden={sessionsCollapsed}>
+            <div className="app-accordion__inner">
+              {normalSessions.map(renderSessionItem)}
+            </div>
+          </div>
         </>
       )}
     </div>

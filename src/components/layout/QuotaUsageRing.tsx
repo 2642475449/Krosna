@@ -13,7 +13,7 @@ export function QuotaUsageRing({ label, descriptionLabel = label, remaining }: {
         <circle cx="14" cy="14" r="11" fill="none" stroke="currentColor" strokeWidth="2.5"
           className="app-quota-ring-progress"
           pathLength="100" strokeDasharray={`${value} ${100 - value}`} transform="rotate(-90 14 14)" />
-        <text x="14" y="14" dy=".35em" textAnchor="middle" fill="var(--cs-text-secondary)" className="text-[9px] font-medium tabular-nums">{value}</text>
+        <text key={value} x="14" y="14" dy=".35em" textAnchor="middle" fill="var(--cs-text-secondary)" className="app-text-swap text-[9px] font-medium tabular-nums">{value}</text>
       </svg>
     </span>
   );

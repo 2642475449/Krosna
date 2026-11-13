@@ -12,10 +12,11 @@
 .app-settings-nav__item { position: relative; display: flex; width: 100%; min-height: 34px; align-items: center; justify-content: center; gap: 10px; margin-bottom: 2px; padding: 6px 9px; border-radius: 6px; color: var(--cs-text-secondary); background: transparent; text-align: left; transition: background-color 140ms, color 140ms; }
 .app-settings-nav__item:hover, .app-settings-nav__search-button:hover { background: var(--cs-bg-hover); color: var(--cs-text-primary); }
 .app-settings-nav__item[aria-current="page"] { background: var(--cs-bg-active); color: var(--cs-primary); font-weight: 500; }
-.app-settings-nav__item[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px; border-radius: 2px; background: var(--cs-primary); }
+.app-settings-nav__item[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px; border-radius: 2px; background: var(--cs-primary); animation: app-nav-indicator-in var(--cs-motion-fast) var(--cs-motion-spring); }
+@keyframes app-nav-indicator-in { from { transform: scaleY(0.3); opacity: 0.4; } to { transform: scaleY(1); opacity: 1; } }
 .app-settings-nav__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .app-settings-scroll { flex: 1; min-width: 0; overflow-y: auto; scrollbar-gutter: stable; }
-.app-settings-content { width: 100%; max-width: 1000px; margin-inline: auto; padding: 30px 40px 40px; }
+.app-settings-content { width: 100%; max-width: 1000px; margin-inline: auto; padding: 30px 40px 40px; animation: app-content-enter var(--cs-motion-fast) var(--cs-motion-ease); }
 .app-settings-content--wide { max-width: 1200px; }
 .app-settings-content--about { max-width: 1280px; }
 .app-settings-page-header { margin-bottom: 24px; }
@@ -26,12 +27,12 @@
 .app-settings-page-header__decoration { flex-shrink: 0; color: var(--cs-primary); }
 .app-settings-toolbar { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
 .app-settings-scope-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--cs-border-card); }
-.app-settings-scope-tabs > button { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 2px solid transparent; color: var(--cs-text-secondary); font-size: 13px; }
+.app-settings-scope-tabs > button { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 2px solid transparent; color: var(--cs-text-secondary); font-size: 13px; transition: border-color var(--cs-motion-fast) var(--cs-motion-ease), color var(--cs-motion-fast) var(--cs-motion-ease); }
 .app-settings-scope-tabs > button[aria-pressed="true"] { border-bottom-color: var(--cs-primary); color: var(--cs-primary); }
 .app-settings-scope-tabs > button:disabled { opacity: .5; cursor: not-allowed; }
 .app-settings-scope-tabs > button > span { padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--cs-text-secondary); background: var(--cs-bg-hover); }
 .app-settings-choices { display: flex; flex-wrap: wrap; min-width: 0; gap: 4px; }
-.app-settings-choices > button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 6px; color: var(--cs-text-secondary); font-size: 12px; }
+.app-settings-choices > button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid transparent; border-radius: 6px; color: var(--cs-text-secondary); font-size: 12px; transition: background-color var(--cs-motion-fast) var(--cs-motion-ease), color var(--cs-motion-fast) var(--cs-motion-ease), border-color var(--cs-motion-fast) var(--cs-motion-ease); }
 .app-settings-choices > button:hover { color: var(--cs-text-primary); background: var(--cs-bg-hover); }
 .app-settings-choices > button[aria-pressed="true"] { color: var(--cs-primary); background: var(--cs-bg-active); border-color: var(--cs-primary); }
 .app-settings-section { min-width: 0; border-top: 1px solid var(--cs-border-card); padding: 20px 0; }

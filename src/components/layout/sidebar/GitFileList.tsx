@@ -171,12 +171,11 @@ export function GitFileList({
           style={{ color: "var(--cs-text-primary)" }}
           onClick={onToggleCollapse}
         >
-          <DownOutlined className={`text-[9px] transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+          <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!collapsed} />
           <span>{sectionTitle}</span>
         </button>
         <div className="flex items-center gap-1">
-          <span
-            className="inline-flex items-center justify-center rounded-full px-1.5 text-[10px] leading-[16px] font-medium"
+          <span key={files.length} className="app-badge-pop inline-flex items-center justify-center rounded-full px-1.5 text-[10px] leading-[16px] font-medium tabular-nums"
             style={{
               color: "var(--cs-text-secondary)",
               background: "color-mix(in srgb, var(--cs-text-secondary) 10%, transparent)",

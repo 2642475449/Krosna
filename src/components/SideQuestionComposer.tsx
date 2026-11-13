@@ -184,23 +184,31 @@ export function SideQuestionComposer({
           </div>
         ) : null}
 
-        {context?.kind === "resources" && context.resourceContext.containsDirectory ? (
-          <Alert
-            type="info"
-            showIcon
-            title={t("sidebar.sideQuestionDirectoryTitle")}
-            description={t("sidebar.sideQuestionDirectoryHint")}
-          />
-        ) : null}
+        <div className="app-accordion" data-open={Boolean(context?.kind === "resources" && context.resourceContext.containsDirectory)}>
+          <div className="app-accordion__inner">
+            {context?.kind === "resources" && context.resourceContext.containsDirectory ? (
+              <Alert
+                type="info"
+                showIcon
+                title={t("sidebar.sideQuestionDirectoryTitle")}
+                description={t("sidebar.sideQuestionDirectoryHint")}
+              />
+            ) : null}
+          </div>
+        </div>
 
-        {(context?.kind === "terminal" || context?.kind === "file") && context.selection.potentialSecret ? (
-          <Alert
-            type="warning"
-            showIcon
-            title={t("terminal.sensitiveSideQuestionTitle")}
-            description={t("terminal.sensitiveSideQuestionDraftHint")}
-          />
-        ) : null}
+        <div className="app-accordion" data-open={Boolean((context?.kind === "terminal" || context?.kind === "file") && context.selection.potentialSecret)}>
+          <div className="app-accordion__inner">
+            {(context?.kind === "terminal" || context?.kind === "file") && context.selection.potentialSecret ? (
+              <Alert
+                type="warning"
+                showIcon
+                title={t("terminal.sensitiveSideQuestionTitle")}
+                description={t("terminal.sensitiveSideQuestionDraftHint")}
+              />
+            ) : null}
+          </div>
+        </div>
       </div>
     </Modal>
   );

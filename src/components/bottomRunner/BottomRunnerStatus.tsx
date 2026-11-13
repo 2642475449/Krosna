@@ -10,7 +10,7 @@ import type { BottomRunnerTabStatus } from "@/store/types";
 import "./bottomRunner.css";
 
 export function RunnerStatusIcon({ status }: { status: BottomRunnerTabStatus }) {
-  return <span className="app-bottom-runner-icon inline-flex" data-status={status} aria-hidden="true">
+  return <span key={status} className="app-bottom-runner-icon inline-flex" data-status={status} aria-hidden="true">
     {status === "starting" || status === "running" ? <LoadingOutlined />
       : status === "success" || status === "completed" ? <CheckCircleOutlined />
         : status === "error" ? <CloseCircleOutlined /> : <StopOutlined />}
@@ -31,11 +31,11 @@ export function BottomRunnerRailButton() {
       onMouseDown={(event) => event.preventDefault()} onClick={() => useBottomRunnerStore.getState().toggleOpen()}
       className="app-bottom-runner-rail app-rail-button relative flex h-10 w-10 items-center justify-center rounded-md">
       <WorkbenchGlyph kind="runner" />
-      {runningCount > 0 && <span aria-hidden="true"
-        className="app-bottom-runner-running-count pointer-events-none absolute bottom-0 right-0 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none">
+      {runningCount > 0 && <span key={runningCount} aria-hidden="true"
+        className="app-bottom-runner-running-count app-badge-pop pointer-events-none absolute bottom-0 right-0 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none tabular-nums">
         {runningCount}
       </span>}
-      {tabs.some((tab) => tab.status === "error") && <span className="app-bottom-runner-badge absolute right-1 top-1 h-2.5 w-2.5 rounded-full" />}
+      {tabs.some((tab) => tab.status === "error") && <span className="app-bottom-runner-badge app-badge-pop absolute right-1 top-1 h-2.5 w-2.5 rounded-full" />}
     </button>
   </Tooltip>;
 }

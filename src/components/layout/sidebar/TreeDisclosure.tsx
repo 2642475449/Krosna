@@ -1,4 +1,4 @@
-import { DownOutlined, LoadingOutlined, RightOutlined } from "@ant-design/icons";
+import { DownOutlined, LoadingOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 
 export function TreeDisclosure({ expanded, loading }: { expanded: boolean; loading: boolean }) {
@@ -13,6 +13,6 @@ export function TreeDisclosure({ expanded, loading }: { expanded: boolean; loadi
   }, [loading]);
 
   return <span className="app-file-tree-arrow" aria-hidden="true">
-    {loading && showLoading ? <LoadingOutlined spin /> : expanded ? <DownOutlined /> : <RightOutlined />}
+    {loading && showLoading ? <LoadingOutlined spin /> : <DownOutlined className="app-disclosure-chevron" data-open={expanded} />}
   </span>;
 }
