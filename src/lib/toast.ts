@@ -60,6 +60,7 @@ export const TOAST_NOTIFICATION_CONFIG: NotificationConfig = {
 };
 
 let notificationApi: NotificationInstance = staticNotification;
+const toastDurations = new Map<Key, NotificationArgsProps["duration"]>();
 
 function ExpandableToastText({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -159,6 +160,15 @@ function isToastOptions(input: ToastInput): input is ToastOptions {
   );
 }
 
+function getToastKey(level: ToastLevel, title: ReactNode, description: ReactNode): Key | undefined {
+  // Only derive keys from plain text. Custom React content keeps its own lifecycle.
+  const isText = (value: ReactNode) => value == null || typeof value === "string" || typeof value === "number";
+  if (!isText(title) || !isText(description)) return undefined;
+  const normalize = (value: ReactNode) => value == null ? null : stripAnsiEscapeSequences(String(value));
+  // Use full text before truncation so distinct error details never share a key.
+  return `krosna-toast:${JSON.stringify([level, normalize(title), normalize(description)])}`;
+}
+
 export function createToastArgs(
   level: ToastLevel,
   input: ToastInput,
@@ -166,13 +176,13 @@ export function createToastArgs(
   const options: ToastOptions = isToastOptions(input) ? input : { content: input };
   const hasTitle = options.title !== undefined;
   const duration = options.duration ?? DEFAULT_DURATION[level];
+  const title = hasTitle ? options.title : options.content;
+  const description = hasTitle ? options.description ?? options.content : options.description;
 
   return {
-    title: guardToastText(hasTitle ? options.title : options.content),
-    description: hasTitle
-      ? guardToastText(options.description ?? options.content)
-      : guardToastText(options.description),
-    key: options.key,
+    title: guardToastText(title),
+    description: guardToastText(description),
+    key: options.key ?? getToastKey(level, title, description),
     duration,
     onClose: options.onClose,
     onClick: options.onClick,
@@ -187,7 +197,25 @@ export function createToastArgs(
 }
 
 function show(level: ToastLevel, input: ToastInput) {
-  notificationApi[level](createToastArgs(level, input));
+  const args = createToastArgs(level, input);
+  const { key, duration, onClose } = args;
+  if (key !== undefined) {
+    if (typeof duration === "number" && duration > 0) {
+      // This notification version resets its timer only when duration changes.
+      // Alternate by 1ms on updates to restart both progress and hover-aware timing.
+      args.duration = toastDurations.get(key) === duration ? duration + 0.001 : duration;
+    }
+    toastDurations.set(key, args.duration);
+    // Match the visible stack's bound; never retain arbitrary feedback text.
+    if (toastDurations.size > TOAST_NOTIFICATION_CONFIG.maxCount!) {
+      toastDurations.delete(toastDurations.keys().next().value!);
+    }
+    args.onClose = () => {
+      toastDurations.delete(key);
+      onClose?.();
+    };
+  }
+  notificationApi[level](args);
 }
 
 export interface ToastMessageApi {
@@ -206,7 +234,11 @@ export const message: ToastMessageApi = {
   warning: (input) => show("warning", input),
   error: (input) => show("error", input),
   open: (input) => show("info", input),
-  destroy: (key) => notificationApi.destroy(key),
+  destroy: (key) => {
+    if (key === undefined) toastDurations.clear();
+    else toastDurations.delete(key);
+    notificationApi.destroy(key);
+  },
   useMessage: () => [message, null] as const,
 };
 
@@ -216,6 +248,7 @@ export function ToastHost() {
   useEffect(() => {
     notificationApi = notification;
     return () => {
+      toastDurations.clear();
       notificationApi = staticNotification;
     };
   }, [notification]);

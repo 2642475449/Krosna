@@ -72,6 +72,35 @@ describe("toast policy", () => {
       duration: 5,
     });
   });
+
+  it("merges repeated text feedback across string and options calls", () => {
+    const first = createToastArgs("success", "已复制启动命令");
+    expect(first.key).toBeDefined();
+    expect(createToastArgs("success", { content: "已复制启动命令" }).key).toBe(first.key);
+    expect(createToastArgs("success", "\u001b[32m已复制启动命令\u001b[0m").key).toBe(first.key);
+  });
+
+  it("keeps different levels, titles and full descriptions separate", () => {
+    const content = "x".repeat(TOAST_TEXT_LIMIT);
+    const keys = [
+      createToastArgs("success", content).key,
+      createToastArgs("error", content).key,
+      createToastArgs("success", `${content}a`).key,
+      createToastArgs("success", `${content}b`).key,
+      createToastArgs("error", { title: "读取失败", content: "项目 A" }).key,
+      createToastArgs("error", { title: "读取失败", content: "项目 B" }).key,
+      createToastArgs("error", { title: "写入失败", content: "项目 A" }).key,
+    ];
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("preserves explicit keys including zero and leaves custom content unkeyed", () => {
+    expect(createToastArgs("info", { key: 0, content: "处理中" }).key).toBe(0);
+    const content = createElement("strong", null, "自定义内容");
+    expect(createToastArgs("info", content).key).toBeUndefined();
+    expect(createToastArgs("info", { content: "说明", title: content }).key).toBeUndefined();
+    expect(createToastArgs("info", { content: "说明", description: content }).key).toBeUndefined();
+  });
   it("preserves text at or below the global limit", () => {
     const content = "a".repeat(TOAST_TEXT_LIMIT);
     expect(guardToastText(content)).toBe(content);
