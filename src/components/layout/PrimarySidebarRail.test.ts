@@ -48,6 +48,19 @@ it.each(["theme", "language"] as const)("exposes the %s submenu and exactly one 
     : `settings.languageName.${initialState.language}`));
 });
 
+it("renders theme submenu options in light/dark/system order with monochrome svg icons", () => {
+  const markup = renderMenu("theme");
+  const options = markup.match(/<button[^>]*role="menuitemradio"[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  expect(options).toHaveLength(3);
+  expect(options[0]).toContain(i18n.t("settings.general.appearance.light"));
+  expect(options[1]).toContain(i18n.t("settings.general.appearance.dark"));
+  expect(options[2]).toContain(i18n.t("settings.general.appearance.system"));
+  for (const option of options) {
+    expect(option).toContain("<svg");
+    expect(option).not.toContain("rounded-full");
+  }
+});
+
 it("connects the settings trigger to its menu and announces its collapsed state", () => {
   const markup = renderToStaticMarkup(createElement(PrimarySidebarRail));
   expect(markup).toMatch(/<button[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*aria-controls="[^"]+"/);

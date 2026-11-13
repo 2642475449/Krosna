@@ -52,26 +52,53 @@ function RailButton({ active = false, title, label, tooltipOpen, buttonRef, expa
 interface QuickThemeModeOption {
   key: ThemeCategory;
   labelKey: string;
-  accent: string;
 }
 
 const quickThemeModeOptions: QuickThemeModeOption[] = [
   {
-    key: "dark",
-    labelKey: "settings.general.appearance.dark",
-    accent: "#f5bd69",
-  },
-  {
     key: "light",
     labelKey: "settings.general.appearance.light",
-    accent: "#4f6cf7",
+  },
+  {
+    key: "dark",
+    labelKey: "settings.general.appearance.dark",
   },
   {
     key: "system",
     labelKey: "settings.general.appearance.system",
-    accent: "#94a3b8",
   },
 ];
+
+function ThemeModeIcon({ mode, active }: { mode: ThemeCategory; active: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`h-3.5 w-3.5 shrink-0 ${active ? "text-[var(--cs-primary)]" : "text-[var(--cs-text-secondary)]"}`}
+    >
+      {mode === "light" && (
+        <>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </>
+      )}
+      {mode === "dark" && (
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+      )}
+      {mode === "system" && (
+        <>
+          <rect x="3" y="4" width="18" height="12" rx="2" />
+          <path d="M8 20h8M12 16v4" />
+        </>
+      )}
+    </svg>
+  );
+}
 
 const SETTINGS_ID = "__settings__";
 
@@ -296,11 +323,7 @@ export function SettingsMenu({
                 onClick={() => handleSelectThemeCategory(opt.key)}
               >
                 <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ background: opt.accent }}
-                  />
+                  <ThemeModeIcon mode={opt.key} active={isSelected} />
                   <span className="text-sm">{t(opt.labelKey)}</span>
                 </span>
                 {isSelected && (
