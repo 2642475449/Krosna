@@ -1,0 +1,119 @@
+﻿.design-c { --s-bg:#edf1ed; --s-panel:#f9fcf8; --s-text:#182c23; --s-muted:#5c7064; --s-line:#c4d1c7; --s-accent:#117c50; --s-soft:#dceade; --s-ok:#117c50; --dc-alert:#a75d20; min-height:calc(100vh - 70px); background:var(--s-bg); color:var(--s-text); padding:0 40px; font-family:'Segoe UI','Microsoft YaHei',sans-serif; font-size:14px; }
+.design-c[data-mode='dark'] { --s-bg:#101916; --s-panel:#17221d; --s-text:#e3eee5; --s-muted:#97ab9e; --s-line:#34483b; --s-accent:#aff37c; --s-soft:#223b28; --s-ok:#aff37c; --dc-alert:#f1c57c; }
+.design-c button:not([class*='ant-']) { color:inherit; font:inherit; cursor:pointer; border:0; background:none; }
+.design-c button:disabled { opacity:.65; cursor:wait; }
+.design-c button:focus-visible,.design-c code:focus-visible { outline:2px solid var(--s-accent); outline-offset:4px; }
+.design-c p,.design-c h1,.design-c h2 { margin:0; }
+.design-c .dc-masthead { min-height:76px; display:flex; justify-content:space-between; align-items:center; gap:22px; border-bottom:1px solid var(--s-line); }
+.design-c .dc-brand { display:flex; align-items:center; gap:17px; font-family:'Cascadia Code','Consolas',monospace; font-size:12px; letter-spacing:1.2px; color:var(--s-muted); }
+.design-c .dc-brand strong { font-size:16px; color:var(--s-text); letter-spacing:1.7px; }
+.design-c .dc-mark { font-size:22px; color:var(--s-text); letter-spacing:-4px; font-weight:700; border:1px solid var(--s-line); width:37px; height:37px; display:grid; grid-template-columns:1fr 1fr; place-items:center; padding:0 5px; }
+.design-c .dc-mark > span { color:var(--s-accent); }
+.design-c .dc-slash { opacity:.5; font-size:20px; }
+.design-c .dc-scan { display:flex; align-items:center; gap:23px; }
+.design-c .dc-scan > span { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--s-muted); }
+.design-c .dc-scan b { font-family:'Consolas',monospace; font-weight:400; margin-left:5px; }
+.design-c .dc-scan i,.design-c .dc-footer i { display:inline-block; width:5px; height:5px; background:var(--s-accent); border-radius:100%; }
+.design-c .dc-scan > button { display:flex; gap:9px; align-items:center; padding:9px 15px; border:1px solid var(--s-line); font-size:13px; }
+.design-c .dc-scan > button:hover { border-color:var(--s-accent); background:var(--s-soft); }
+.design-c .dc-heading { padding:37px 0 31px; display:flex; justify-content:space-between; align-items:flex-end; gap:30px; }
+.design-c .dc-overline { color:var(--s-muted); font-family:'Cascadia Code','Consolas',monospace; font-size:11px; letter-spacing:1.7px; display:flex; gap:24px; }
+.design-c h1 { font-size:38px; font-weight:600; letter-spacing:-1.8px; line-height:1.5; margin-top:5px; }
+.design-c h1 > span { color:var(--s-accent); margin-left:6px; font-family:'Consolas',monospace; }
+.design-c .dc-description { color:var(--s-muted); margin-top:5px; font-size:13px; }
+.design-c .dc-environment { border-left:1px solid var(--s-line); padding-left:24px; min-width:160px; }
+.design-c .dc-environment > span { display:block; font-family:'Consolas',monospace; font-size:35px; line-height:1.1; color:var(--s-accent); }
+.design-c .dc-environment small { font-size:17px; color:var(--s-muted); }
+.design-c .dc-environment p { color:var(--s-muted); font-size:12px; margin-top:9px; }
+.design-c .dc-environment b { color:var(--dc-alert); font-weight:400; margin-left:16px; }
+.design-c .dc-policy { display:grid; grid-template-columns:minmax(180px,.7fr) minmax(0,2fr); border:1px solid var(--s-line); background:var(--s-panel); margin-bottom:29px; }
+.design-c .dc-policy-label { position:relative; padding:17px 22px; display:flex; flex-direction:column; gap:4px; border-right:1px solid var(--s-line); }
+.design-c .dc-policy-label > span { font-size:10px; font-family:'Consolas',monospace; letter-spacing:1.3px; color:var(--s-muted); }
+.design-c .dc-policy-label strong { font-size:14px; font-weight:500; }
+.design-c .dc-policy-label em { position:absolute; right:20px; bottom:19px; font-style:normal; font-size:11px; color:var(--dc-alert); }
+.design-c .dc-policy-options { display:grid; grid-template-columns:1fr 1fr; }
+.design-c .dc-policy-options > button { display:flex; align-items:center; gap:13px; padding:15px 22px; text-align:left; border-right:1px solid var(--s-line); }
+.design-c .dc-policy-options > button:last-child { border-right:0; }
+.design-c .dc-policy-options > button:hover { background:var(--s-soft); }
+.design-c .dc-policy-options .dc-policy-active { box-shadow:inset 0 -3px var(--s-accent); background:var(--s-soft); }
+.design-c .dc-radio { width:14px; height:14px; border:1px solid var(--s-muted); border-radius:50%; flex-shrink:0; }
+.design-c .dc-policy-active .dc-radio { border-color:var(--s-accent); box-shadow:inset 0 0 0 3px var(--s-panel); background:var(--s-accent); }
+.design-c .dc-policy-options strong { font-size:15px; font-weight:500; display:block; }
+.design-c .dc-policy-options small { display:block; font-size:13px; color:var(--s-muted); margin-top:4px; }
+.design-c .dc-policy-code { font-size:11px; font-family:'Consolas',monospace; letter-spacing:1px; color:var(--s-muted); margin-left:auto; }
+.design-c .dc-section-label { display:flex; justify-content:space-between; gap:25px; font-size:13px; color:var(--s-muted); margin-bottom:12px; }
+.design-c .dc-section-label > span:first-child { font-family:'Consolas',monospace; color:var(--s-accent); }
+.design-c .dc-section-label b { font-family:'Segoe UI','Microsoft YaHei',sans-serif; color:var(--s-text); font-size:13px; font-weight:500; margin-left:10px; }
+.design-c .dc-agent-strip { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); border:1px solid var(--s-line); }
+.design-c .dc-agent-selector { text-align:left; padding:15px 17px 17px; border-right:1px solid var(--s-line); min-width:0; background:var(--s-panel); }
+.design-c .dc-agent-selector:last-child { border-right:0; }
+.design-c .dc-agent-selector:hover { background:var(--s-soft); }
+.design-c .dc-agent-selector.dc-selected { background:var(--s-soft); box-shadow:inset 0 3px var(--s-accent); }
+.design-c .dc-selector-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:17px; font-size:13px; }
+.design-c .dc-agent-index { font-family:'Consolas',monospace; color:var(--s-muted); }
+.design-c .dc-default-flag { color:var(--s-accent); border:1px solid var(--s-line); padding:0 5px; }
+.design-c .dc-ready { color:var(--s-muted); }
+.design-c .dc-not-ready { color:var(--dc-alert); }
+.design-c .dc-selector-identity { display:flex; align-items:center; gap:9px; min-height:35px; }
+.design-c .dc-icon { background:#edf4ed; display:grid; place-items:center; width:35px; height:35px; padding:3px; border-radius:3px; flex-shrink:0; }
+.design-c .dc-selector-identity strong { font-size:15px; font-weight:550; line-height:1.5; overflow-wrap:anywhere; }
+.design-c .dc-selector-version { display:flex; align-items:center; flex-wrap:wrap; gap:5px 10px; font-size:13px; color:var(--s-muted); font-family:'Consolas',monospace; margin-top:14px; }
+.design-c .dc-update { color:var(--dc-alert); display:inline-flex; align-items:center; gap:3px; }
+.design-c .dc-selector-quota { display:block; font-size:13px; color:var(--s-muted); margin-top:7px; }
+.design-c .dc-active-agent { margin-top:31px; }
+.design-c .dc-active-heading { display:flex; align-items:center; justify-content:space-between; gap:25px; margin-bottom:18px; }
+.design-c .dc-section-index { font-family:'Consolas',monospace; font-size:10px; letter-spacing:1.5px; color:var(--s-muted); }
+.design-c h2 { font-size:26px; letter-spacing:-.7px; font-weight:500; display:flex; align-items:center; gap:16px; margin-top:3px; }
+.design-c h2 > span { font-family:'Consolas',monospace; font-size:10px; letter-spacing:1px; color:var(--s-accent); border:1px solid var(--s-line); padding:2px 6px; }
+.design-c .dc-active-actions { display:flex; align-items:center; gap:24px; }
+.design-c .dc-link { display:inline-flex; align-items:center; gap:10px; color:var(--s-muted); font-size:13px; }
+.design-c .dc-link:hover { color:var(--s-accent); }
+.design-c .dc-primary { display:inline-flex; gap:17px; align-items:center; justify-content:center; padding:10px 17px; background:var(--s-accent); color:var(--s-bg); font-size:13px; font-weight:600; }
+.design-c[data-mode='light'] .dc-primary { color:#fff; }
+.design-c .dc-current-default { display:inline-flex; align-items:center; gap:8px; color:var(--s-accent); font-size:13px; padding:10px 0; }
+.design-c .dc-workspace { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); border:1px solid var(--s-line); background:var(--s-panel); }
+.design-c .dc-command-zone { padding:23px; min-width:0; border-right:1px solid var(--s-line); }
+.design-c .dc-console { background:#0b1510; color:#dceee0; border:1px solid #324c3a; }
+.design-c .dc-console-header { display:flex; align-items:center; justify-content:space-between; gap:15px; padding:12px 16px; border-bottom:1px solid #263f2e; font-size:10px; font-family:'Consolas',monospace; color:#9bbba5; letter-spacing:1px; }
+.design-c .dc-console-header > span { display:inline-flex; align-items:center; gap:9px; }
+.design-c .dc-console-header i { width:5px; height:5px; background:#aff37c; }
+.design-c .dc-console-header > button { display:inline-flex; align-items:center; gap:6px; color:#bbd4c1; font-family:'Segoe UI','Microsoft YaHei',sans-serif; font-size:11px; }
+.design-c .dc-console-header > button:hover { color:#aff37c; }
+.design-c .dc-console-command { display:flex; gap:14px; padding:25px 20px; min-height:132px; }
+.design-c .dc-console-command > span { color:#aff37c; font-size:18px; }
+.design-c .dc-console-command code { font-family:'Cascadia Code','Consolas',monospace; font-size:14px; line-height:1.95; overflow-wrap:anywhere; white-space:pre-wrap; user-select:all; }
+.design-c .dc-console-footer { display:flex; justify-content:space-between; gap:15px; padding:11px 16px; border-top:1px solid #263f2e; font-size:10px; color:#8eaf99; }
+.design-c .dc-console-footer > span:first-child { font-family:'Consolas',monospace; letter-spacing:1px; }
+.design-c .dc-agent-facts { display:grid; grid-template-columns:1fr 1fr; gap:25px; margin-top:23px; }
+.design-c .dc-agent-facts > div { display:flex; flex-direction:column; min-width:0; }
+.design-c .dc-agent-facts > div > span { font-size:13px; color:var(--s-muted); }
+.design-c .dc-agent-facts strong { font-family:'Consolas',monospace; font-size:25px; font-weight:400; line-height:1.6; }
+.design-c .dc-agent-facts > div > small { font-size:13px; color:var(--s-muted); line-height:1.7; }
+.design-c .dc-agent-facts > div > button { text-align:left; display:inline-flex; align-items:center; align-self:flex-start; gap:5px; font-size:13px; padding:0; color:var(--dc-alert); }
+.design-c .dc-agent-facts .dc-quota-number { color:var(--s-accent); }
+.design-c .dc-quota-number small { font-size:16px; margin-left:4px; }
+.design-c .dc-agent-facts .dc-quota-state { font-family:inherit; font-size:21px; margin-top:4px; }
+.design-c .dc-agent-facts progress { appearance:none; width:100%; height:3px; border:0; background:var(--s-soft); margin:4px 0 8px; }
+.design-c .dc-agent-facts progress::-webkit-progress-bar { background:var(--s-soft); }
+.design-c .dc-agent-facts progress::-webkit-progress-value { background:var(--s-accent); }
+.design-c .dc-agent-facts progress::-moz-progress-bar { background:var(--s-accent); }
+.design-c .dc-config-panel { padding:22px 26px; min-width:0; }
+.design-c .dc-config-title { display:flex; justify-content:space-between; gap:15px; padding-bottom:17px; border-bottom:1px solid var(--s-line); font-size:14px; }
+.design-c .dc-config-title > span:last-child { font-family:'Consolas',monospace; font-size:10px; letter-spacing:1px; color:var(--s-muted); align-self:center; }
+.design-c .dc-config-panel .config-controls { display:block; padding-top:9px; }
+.design-c .dc-config-panel .config-row { display:flex; justify-content:space-between; align-items:center; gap:20px; min-height:54px; border-bottom:1px solid var(--s-line); padding:9px 0; }
+.design-c .dc-config-panel .config-row > span { color:var(--s-text); font-size:14px; }
+.design-c .dc-config-panel .ant-select { width:188px; max-width:65%; }
+.design-c .dc-config-panel .field-help { color:var(--s-muted); font-size:13px; line-height:1.8; margin:12px 0 4px; }
+.design-c .dc-config-panel .muted { font-size:13px; color:var(--s-muted); padding:17px 0; }
+.design-c .dc-config-note { margin-top:18px; color:var(--s-muted); font-size:13px; line-height:1.8; }
+.design-c .dc-install-state { padding:27px 0; }
+.design-c .dc-install-state > strong { font-size:17px; font-weight:500; }
+.design-c .dc-install-state p { color:var(--s-muted); font-size:13px; margin:10px 0 23px; }
+.design-c .dc-footer { padding:21px 0 24px; display:flex; align-items:center; justify-content:space-between; gap:20px; color:var(--s-muted); font-size:11px; }
+.design-c .dc-footer > span:first-child { font-family:'Consolas',monospace; letter-spacing:1px; display:inline-flex; gap:8px; align-items:center; }
+@media (min-width:1800px) { .design-c { padding:0 68px; } .design-c .dc-heading { padding-block:43px; } .design-c h1 { font-size:45px; } .design-c .dc-agent-selector { padding:19px 23px 21px; } .design-c .dc-selector-identity strong { font-size:15px; } .design-c .dc-selector-version,.design-c .dc-selector-quota { font-size:13px; } .design-c .dc-command-zone,.design-c .dc-config-panel { padding:30px; } .design-c .dc-console-command { min-height:156px; } .design-c .dc-console-command code { font-size:16px; } }
+@media (max-width:1150px) { .design-c { padding:0 25px; } .design-c .dc-agent-strip { grid-template-columns:repeat(3,minmax(0,1fr)); } .design-c .dc-agent-selector:nth-child(3) { border-right:0; } .design-c .dc-agent-selector:nth-child(n+4) { border-top:1px solid var(--s-line); } .design-c .dc-agent-selector { padding:12px 16px; } .design-c .dc-selector-top { margin-bottom:9px; } .design-c .dc-selector-version { margin-top:9px; } .design-c .dc-selector-quota { margin-top:4px; } .design-c .dc-policy { grid-template-columns:180px minmax(0,1fr); } .design-c .dc-policy-code { display:none; } .design-c .dc-policy-options > button { padding-inline:15px; } .design-c .dc-command-zone { padding:18px; } .design-c .dc-config-panel { padding:18px 20px; } .design-c .dc-config-panel .ant-select { width:165px; } .design-c .dc-active-actions { gap:17px; } }
+@media (max-width:800px) { .design-c { padding:0 18px; } .design-c .dc-masthead { min-height:65px; } .design-c .dc-brand { gap:10px; } .design-c .dc-brand > span:last-child,.design-c .dc-slash,.design-c .dc-scan > span { display:none; } .design-c .dc-heading { padding:25px 0; } .design-c h1 { font-size:31px; } .design-c .dc-overline { font-size:9px; gap:10px; letter-spacing:1px; } .design-c .dc-environment { display:none; } .design-c .dc-policy { grid-template-columns:1fr; } .design-c .dc-policy-label { border-right:0; border-bottom:1px solid var(--s-line); padding:12px 16px; flex-direction:row; align-items:center; gap:15px; } .design-c .dc-policy-label > span { display:none; } .design-c .dc-policy-label em { position:static; } .design-c .dc-policy-options > button { gap:8px; padding:13px; } .design-c .dc-policy-options strong { font-size:13px; } .design-c .dc-policy-options small { font-size:13px; } .design-c .dc-agent-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } .design-c .dc-agent-selector:nth-child(3) { border-right:1px solid var(--s-line); } .design-c .dc-agent-selector:nth-child(even) { border-right:0; } .design-c .dc-agent-selector:nth-child(n+3) { border-top:1px solid var(--s-line); } .design-c .dc-active-heading { align-items:flex-start; } .design-c h2 { font-size:21px; gap:8px; flex-wrap:wrap; } .design-c h2 > span { font-size:8px; } .design-c .dc-active-actions { flex-direction:column-reverse; align-items:flex-end; gap:13px; } .design-c .dc-primary { padding:9px 12px; font-size:12px; gap:10px; } .design-c .dc-workspace { grid-template-columns:1fr; } .design-c .dc-command-zone { border-right:0; border-bottom:1px solid var(--s-line); } .design-c .dc-section-label { gap:12px; font-size:13px; } .design-c .dc-footer > span:last-child { display:none; } }
+
+
