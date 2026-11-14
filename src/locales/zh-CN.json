@@ -769,8 +769,6 @@
     "filePanelQuickAccess": "快速访问",
     "filePanelLoading": "正在读取目录",
     "filePanelEmpty": "此目录为空",
-    "fileFilterPlaceholder": "搜索当前项目中的文件和文件夹",
-    "fileFilterNoResults": "当前项目中没有匹配项",
     "expandAll": "全部展开",
     "collapseAll": "全部收起",
     "filePanelPlaceholder": "当前已接入真实目录读取与树形浏览。下一阶段可继续补充新建、重命名、删除和右键菜单。",

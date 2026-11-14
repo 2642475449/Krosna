@@ -177,7 +177,7 @@ html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
 /* 语音模型下拉菜单需要容纳模型简介，避免与触发器同宽而截断信息。 */
@@ -213,6 +213,7 @@ html, body, #root {
 .app-shell {
   position: relative;
   isolation: isolate;
+  overflow: clip;
   background: var(--cs-bg-app) !important;
 }
 
@@ -523,6 +524,7 @@ html, body, #root {
 .app-project-tree-scroll {
   min-height: 0;
   outline: none;
+  overflow-anchor: none;
   -ms-overflow-style: none;
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
@@ -714,6 +716,18 @@ html, body, #root {
     0 8px 20px color-mix(in srgb, var(--cs-primary) 8%, transparent);
 }
 
+.app-file-tree-toolbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 280ms ease;
+}
+
+.app-sidebar-panel:hover .app-file-tree-toolbar,
+.app-file-tree-toolbar:has(:focus-visible) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .app-file-toolbar-button {
   display: inline-flex;
   align-items: center;
@@ -742,13 +756,6 @@ html, body, #root {
   color: var(--cs-text-tertiary);
 }
 
-.app-file-tree-highlight {
-  padding: 0 1px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--cs-primary) 22%, transparent);
-  color: var(--cs-text-primary);
-}
-
 .app-file-tree-root {
   display: flex;
   align-items: center;
@@ -764,9 +771,13 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  height: 24px;
   min-height: 24px;
+  overflow: hidden;
   padding-top: 2px;
   padding-bottom: 2px;
+  padding-right: 6px;
   border: 0;
   border-radius: 2px;
   background: transparent;
@@ -779,6 +790,20 @@ html, body, #root {
 
 .app-file-tree-row:hover {
   background: color-mix(in srgb, var(--cs-bg-hover) 58%, transparent);
+}
+
+.app-file-tree-row[data-folder-tone="excluded"] {
+  background: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 9%, transparent);
+  color: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 42%, var(--cs-text-secondary));
+}
+
+.app-file-tree-row[data-folder-tone="excluded"]:hover {
+  background: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 15%, transparent);
+}
+
+.app-file-tree-row[data-folder-tone="excluded"] .app-file-tree-arrow {
+  color: inherit;
+  opacity: 0.78;
 }
 
 .app-file-tree-row[data-selected="true"] {
@@ -807,6 +832,55 @@ html, body, #root {
 
 .app-file-tree-row[data-cut="true"] {
   opacity: 0.52;
+}
+
+.app-file-tree-row[data-git-tone="modified"] .app-file-tree-name,
+.app-file-tree-row[data-git-tone="modified"] .app-file-tree-git-badge {
+  color: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 86%, var(--cs-text-primary));
+}
+
+.app-file-tree-row[data-git-tone="added"] .app-file-tree-name,
+.app-file-tree-row[data-git-tone="added"] .app-file-tree-git-badge {
+  color: color-mix(in srgb, #16a34a 84%, var(--cs-text-primary));
+}
+
+.app-file-tree-row[data-git-tone="deleted"] .app-file-tree-name,
+.app-file-tree-row[data-git-tone="deleted"] .app-file-tree-git-badge,
+.app-file-tree-row[data-git-tone="conflicted"] .app-file-tree-name,
+.app-file-tree-row[data-git-tone="conflicted"] .app-file-tree-git-badge {
+  color: color-mix(in srgb, var(--cs-danger, #dc2626) 88%, var(--cs-text-primary));
+}
+
+.app-file-tree-git-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+
+.app-file-tree-git-dot {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  opacity: 0.85;
+}
+
+.app-file-tree-row[data-git-tone="modified"] .app-file-tree-git-dot {
+  background: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 86%, var(--cs-text-primary));
+}
+
+.app-file-tree-row[data-git-tone="added"] .app-file-tree-git-dot {
+  background: color-mix(in srgb, #16a34a 84%, var(--cs-text-primary));
+}
+
+.app-file-tree-row[data-git-tone="deleted"] .app-file-tree-git-dot,
+.app-file-tree-row[data-git-tone="conflicted"] .app-file-tree-git-dot {
+  background: color-mix(in srgb, var(--cs-danger, #dc2626) 88%, var(--cs-text-primary));
 }
 
 .app-file-tree-row[data-drag-over="true"] {
@@ -871,6 +945,22 @@ html, body, #root {
 .app-file-tree-icon .app-markdown-file-icon {
   width: 18px;
   height: 18px;
+}
+
+.app-folder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.app-folder-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  shape-rendering: geometricPrecision;
 }
 
 .app-sidebar-section-header:hover {

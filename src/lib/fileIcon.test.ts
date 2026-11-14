@@ -105,12 +105,25 @@ describe("fileIcon", () => {
     expect(archiveSvg).not.toBe(getSvg("unknown-file"));
   });
 
-  it("keeps folders visually consistent and changes the expanded glyph", () => {
+  it("highlights generated or dependency folders while keeping regular folders consistent", () => {
     const src = getFileIcon("src", true);
+    const docs = getFileIcon("docs", true);
     const nodeModules = getFileIcon("node_modules", true);
+    const dist = getFileIcon("dist", true);
     const expanded = getFileIcon("src", true, true);
-    expect(src.color).toBe(nodeModules.color);
+    expect(src.color).toBe(docs.color);
+    expect(src.tone).toBeUndefined();
+    expect(nodeModules.color).toBe(dist.color);
+    expect(nodeModules.tone).toBe("excluded");
+    expect(dist.tone).toBe("excluded");
+    expect(nodeModules.color).not.toBe(src.color);
     expect(src.icon).not.toEqual(expanded.icon);
+
+    const nestedDir = getFileIcon("react", true, false, "excluded");
+    const nestedFile = getFileIcon("index.js", false, false, "excluded");
+    expect(nestedDir.color).toBe(nodeModules.color);
+    expect(nestedDir.tone).toBe("excluded");
+    expect(nestedFile.tone).toBe("excluded");
   });
 
   it("returns a default Seti icon for unknown files", () => {

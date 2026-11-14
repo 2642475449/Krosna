@@ -1,7 +1,7 @@
-import { FolderOutlined, RightOutlined } from "@ant-design/icons";
+import { RightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { getStatusPathSegments } from "@/lib/fileStatus";
-import { getFileIconByName } from "@/lib/fileIcon";
+import { getFileIcon } from "@/lib/fileIcon";
 import { revealExplorerPath } from "@/lib/explorer";
 import { useAppStore } from "@/store";
 import { useFileEditorStatusStore } from "@/store/slices/fileEditorStatus";
@@ -11,17 +11,21 @@ export function FileStatusPath({ path, projectPath }: { path: string; projectPat
   const segments = getStatusPathSegments(path, projectPath);
   return <nav className="app-statusbar-file-path" aria-label={t("statusBar.file.navigation")}>
     <ol className="app-statusbar-path-list">
-      {segments.map((segment, index) => <li key={segment.path} className="app-statusbar-path-item">
-        {index > 0 && <RightOutlined className="app-statusbar-path-separator" aria-hidden="true" />}
-        <button type="button" className={`app-statusbar-path-button${segment.kind === "file" ? " app-statusbar-filename" : ""}`}
-          title={segment.path} aria-current={segment.kind === "file" ? "page" : undefined}
-          onClick={() => revealExplorerPath(segment.path, segment.kind)}>
-          {segment.kind === "file"
-            ? <span className="app-statusbar-type-icon" aria-hidden="true">{getFileIconByName(segment.label).icon}</span>
-            : index === 0 && <FolderOutlined className="app-statusbar-file-icon" aria-hidden="true" />}
-          {segment.label}
-        </button>
-      </li>)}
+      {segments.map((segment, index) => {
+        const visual = getFileIcon(segment.label, segment.kind === "directory");
+        return <li key={segment.path} className="app-statusbar-path-item">
+          {index > 0 && <RightOutlined className="app-statusbar-path-separator" aria-hidden="true" />}
+          <button type="button" className={`app-statusbar-path-button${segment.kind === "file" ? " app-statusbar-filename" : ""}`}
+            title={segment.path} aria-current={segment.kind === "file" ? "page" : undefined}
+            onClick={() => revealExplorerPath(segment.path, segment.kind)}>
+            {(segment.kind === "file" || index === 0) && (
+              <span className={segment.kind === "file" ? "app-statusbar-type-icon" : "app-statusbar-file-icon"}
+                style={{ color: visual.color }} aria-hidden="true">{visual.icon}</span>
+            )}
+            {segment.label}
+          </button>
+        </li>;
+      })}
     </ol>
   </nav>;
 }

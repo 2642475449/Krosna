@@ -12,6 +12,7 @@ import {
   FolderOpenFilled,
   FolderOutlined,
   HistoryOutlined,
+  MinusOutlined,
   ReloadOutlined,
   SearchOutlined,
   ScissorOutlined,
@@ -20,7 +21,7 @@ import {
 import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue, useId } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -37,7 +38,6 @@ import {
   moveProjectEntries,
   readClipboardFilePaths,
   renameProjectEntry,
-  searchProjectEntries,
 } from "@/lib/api";
 import {
   EXPLORER_REVEAL_PATH_EVENT,
@@ -45,7 +45,7 @@ import {
   takePendingExplorerRevealPath,
 } from "@/lib/explorer";
 import type { ExplorerRevealPathDetail } from "@/lib/explorer";
-import { getFileIcon } from "@/lib/fileIcon";
+import { getFileIcon, type FolderTone } from "@/lib/fileIcon";
 import { showWorkbenchFeedback } from "@/lib/workbenchFeedback";
 import {
   computeMarqueeRect,
@@ -56,14 +56,27 @@ import {
   type MarqueeRect,
 } from "./treeNavigation";
 import { TreeDisclosure } from "./TreeDisclosure";
+import {
+  buildTreeGitStatusIndex,
+  computeVirtualWindow,
+  getTreeEntryGitStatus,
+  getTreeGitBadge,
+} from "./treeGitStatus";
 import { openGlobalTextSearch } from "@/lib/globalSearch";
 import { dispatchGitFileHistoryOpen } from "@/lib/gitGraphEvents";
 import { useAppStore } from "@/store";
-import type { FileTreeEntry, FileTreeEntryKind, FileTreeListing } from "@/types";
+import { useGitStatusStore } from "@/store/slices/gitStatus";
+import type { FileTreeEntry, FileTreeListing, GitFileStatus } from "@/types";
 import { useTranslation } from "react-i18next";
 
 const EXPANDED_PATHS_STORAGE_KEY = "krosna:explorer-expanded-paths:v1";
 const MAX_PERSISTED_EXPANDED_PROJECTS = 20;
+const TREE_ROW_HEIGHT = 24;
+const EMPTY_GIT_FILE_STATUSES: GitFileStatus[] = [];
+
+type FlatTreeRow =
+  | { kind: "inline-create"; key: string; depth: number; inheritedTone?: FolderTone }
+  | { kind: "node"; key: string; node: ResourceTreeNode; depth: number; inheritedTone?: FolderTone };
 
 function readPersistedExpandedPaths(projectPath: string): Record<string, boolean> {
   if (!projectPath || typeof window === "undefined") return {};
@@ -123,8 +136,6 @@ interface SidebarProjectPanelProps {
   currentProject: ProjectRef | null;
   noProjectText: string;
   panelTitle: string;
-  filterPlaceholderText: string;
-  filterNoResultsText: string;
   refreshText: string;
   loadingText: string;
   emptyFolderText: string;
@@ -143,14 +154,6 @@ interface ResourceTreeNode {
   isExpanded: boolean;
   isLoadingChildren: boolean;
   children: ResourceTreeNode[];
-}
-
-interface SearchTreeNode {
-  name: string;
-  path: string;
-  kind: FileTreeEntryKind;
-  hasChildren: boolean;
-  children: SearchTreeNode[];
 }
 
 interface InlineCreateState {
@@ -253,36 +256,6 @@ function getDefaultCreateDirectory(
   return getParentPath(rootPath, selectedPath);
 }
 
-function collectAncestorPaths(rootPath: string, targetPath: string): string[] {
-  const normalizedRoot = normalizePath(rootPath);
-  const normalizedTarget = normalizePath(targetPath);
-  if (normalizedTarget !== normalizedRoot && !normalizedTarget.startsWith(`${normalizedRoot}/`)) {
-    return [normalizedRoot];
-  }
-
-  const relative = normalizedTarget === normalizedRoot ? "" : normalizedTarget.slice(normalizedRoot.length + 1);
-  const segments = relative ? relative.split("/").filter(Boolean) : [];
-  const paths = [normalizedRoot];
-
-  for (let index = 0; index < segments.length; index += 1) {
-    paths.push(normalizePath(joinPath(rootPath, segments.slice(0, index + 1))));
-  }
-
-  return paths;
-}
-
-function buildSearchRelevantPaths(rootPath: string, entries: FileTreeEntry[]): Set<string> {
-  const paths = new Set<string>([normalizePath(rootPath)]);
-
-  for (const entry of entries) {
-    for (const path of collectAncestorPaths(rootPath, entry.path)) {
-      paths.add(path);
-    }
-  }
-
-  return paths;
-}
-
 function getBaseName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
@@ -314,71 +287,6 @@ function isInvalidEntryName(name: string): boolean {
   );
 }
 
-function buildSearchTree(rootPath: string, entries: FileTreeEntry[]): ResourceTreeNode[] {
-  const nodeMap = new Map<string, SearchTreeNode>();
-  const roots: SearchTreeNode[] = [];
-
-  for (const entry of entries) {
-    const relativePath = buildRelativePath(rootPath, entry.path);
-    const segments = relativePath === "." ? [] : relativePath.split(/[\\/]/).filter(Boolean);
-    let currentChildren = roots;
-
-    for (let index = 0; index < segments.length; index += 1) {
-      const segment = segments[index];
-      const currentPath = joinPath(rootPath, segments.slice(0, index + 1));
-      const isLeaf = index === segments.length - 1;
-      const existing = nodeMap.get(currentPath);
-
-      if (existing) {
-        currentChildren = existing.children;
-        continue;
-      }
-
-      const nextNode: SearchTreeNode = {
-        name: segment,
-        path: currentPath,
-        kind: isLeaf ? entry.kind : "directory",
-        hasChildren: !isLeaf || entry.hasChildren,
-        children: [],
-      };
-
-      nodeMap.set(currentPath, nextNode);
-      currentChildren.push(nextNode);
-      currentChildren = nextNode.children;
-    }
-  }
-
-  const sortNodes = (nodes: SearchTreeNode[]) => {
-    nodes.sort((left, right) => {
-      if (left.kind !== right.kind) {
-        return left.kind === "directory" ? -1 : 1;
-      }
-      return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
-    });
-
-    for (const node of nodes) {
-      sortNodes(node.children);
-    }
-  };
-
-  sortNodes(roots);
-
-  const convertNodes = (nodes: SearchTreeNode[]): ResourceTreeNode[] =>
-    nodes.map((node) => ({
-      entry: {
-        name: node.name,
-        path: node.path,
-        kind: node.kind,
-        hasChildren: node.hasChildren,
-      },
-      isExpanded: node.children.length > 0,
-      isLoadingChildren: false,
-      children: convertNodes(node.children),
-    }));
-
-  return convertNodes(roots);
-}
-
 function collectVisiblePaths(nodes: ResourceTreeNode[]): string[] {
   const paths: string[] = [];
 
@@ -395,37 +303,10 @@ function collectVisiblePaths(nodes: ResourceTreeNode[]): string[] {
   return paths;
 }
 
-function highlightText(text: string, keyword: string): ReactNode {
-  const query = keyword.trim();
-  if (!query) {
-    return text;
-  }
-
-  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const matcher = new RegExp(`(${escapedQuery})`, "ig");
-  const parts = text.split(matcher);
-
-  if (parts.length === 1) {
-    return text;
-  }
-
-  return parts.map((part, index) =>
-    part.toLowerCase() === query.toLowerCase() ? (
-      <mark key={`${part}-${index}`} className="app-file-tree-highlight">
-        {part}
-      </mark>
-    ) : (
-      <span key={`${part}-${index}`}>{part}</span>
-    )
-  );
-}
-
 function SidebarProjectPanel({
   currentProject,
   noProjectText,
   panelTitle,
-  filterPlaceholderText,
-  filterNoResultsText,
   refreshText,
   loadingText,
   emptyFolderText,
@@ -449,10 +330,6 @@ function SidebarProjectPanel({
   const [loadingRoot, setLoadingRoot] = useState(false);
   const [loadingDirectories, setLoadingDirectories] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
-  const [filterValue, setFilterValue] = useState("");
-  const deferredFilterValue = useDeferredValue(filterValue);
-  const [searchResults, setSearchResults] = useState<FileTreeEntry[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [renamingEntry, setRenamingEntry] = useState<FileTreeEntry | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameSubmitting, setRenameSubmitting] = useState(false);
@@ -485,13 +362,31 @@ function SidebarProjectPanel({
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [contextMenuPath, setContextMenuPathState] = useState<string | null>(null);
+  const [contextMenuEntry, setContextMenuEntry] = useState<FileTreeEntry | null>(null);
   const contextMenuPathRef = useRef<string | null>(null);
   const setContextMenuPath = useCallback((path: string | null) => {
     contextMenuPathRef.current = path;
     setContextMenuPathState(path);
+    if (!path) {
+      setContextMenuEntry(null);
+    }
   }, []);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
+  const [treeScrollTop, setTreeScrollTop] = useState(0);
+  const [treeViewportHeight, setTreeViewportHeight] = useState(0);
   const treeId = useId();
+  const gitFileStatuses = useGitStatusStore((state) =>
+    currentProject
+      ? (state.entries[currentProject.path]?.fileStatuses ?? EMPTY_GIT_FILE_STATUSES)
+      : EMPTY_GIT_FILE_STATUSES
+  );
+  const gitStatusIndex = useMemo(
+    () =>
+      currentProject
+        ? buildTreeGitStatusIndex(currentProject.path, gitFileStatuses)
+        : { files: new Map(), directories: new Map() },
+    [currentProject, gitFileStatuses]
+  );
   const setResourceDragState = useAppStore((s) => s.setResourceDragState);
   const activeFileTabPath = useAppStore((s) => {
     if (!s.panesById || !s.tabsById) return null;
@@ -605,8 +500,6 @@ function SidebarProjectPanel({
     setSelectedPaths([currentProject.path]);
     setSelectedPath(currentProject.path);
     setSelectionAnchorPath(currentProject.path);
-    setFilterValue("");
-    setSearchResults([]);
     const persistedList = Object.keys(persistedExpanded)
       .filter((path) => persistedExpanded[path])
       .sort((left, right) => normalizePath(left).split("/").length - normalizePath(right).split("/").length);
@@ -659,42 +552,6 @@ function SidebarProjectPanel({
     });
   }, [selectedPath]);
 
-  useEffect(() => {
-    if (!currentProject) return;
-    const query = deferredFilterValue.trim();
-    if (!query) {
-      setSearchResults([]);
-      setSearchLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setSearchLoading(true);
-
-    void searchProjectEntries(currentProject.path, query)
-      .then((results) => {
-        if (!cancelled) {
-          setSearchResults(results);
-          setError(null);
-        }
-      })
-      .catch((nextError) => {
-        if (!cancelled) {
-          setSearchResults([]);
-          setError(nextError instanceof Error ? nextError.message : String(nextError));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSearchLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentProject, deferredFilterValue]);
-
   const revealPath = useCallback(
     async (targetPath: string, targetIsDirectory = false) => {
       if (!currentProject) return;
@@ -743,27 +600,8 @@ function SidebarProjectPanel({
       } else {
         selectOnlyPath(currentProject.path);
       }
-
-      const query = filterValue.trim();
-      if (!query) {
-        setSearchResults([]);
-        setSearchLoading(false);
-        return;
-      }
-
-      setSearchLoading(true);
-      try {
-        const results = await searchProjectEntries(currentProject.path, query);
-        setSearchResults(results);
-        setError(null);
-      } catch (nextError) {
-        setSearchResults([]);
-        setError(nextError instanceof Error ? nextError.message : String(nextError));
-      } finally {
-        setSearchLoading(false);
-      }
     },
-    [currentProject, filterValue, loadDirectory, selectOnlyPath]
+    [currentProject, loadDirectory, selectOnlyPath]
   );
 
   useEffect(() => {
@@ -792,15 +630,17 @@ function SidebarProjectPanel({
     if (!container) return;
     const containerRect = container.getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
-    if (
-      containerRect.height > 0 &&
-      rowRect.top >= containerRect.top &&
-      rowRect.bottom <= containerRect.bottom
-    ) {
+    if (containerRect.height <= 0) return;
+    if (rowRect.top >= containerRect.top - 1 && rowRect.bottom <= containerRect.bottom + 1) {
       return;
     }
     programmaticScrollAtRef.current = Date.now();
-    row.scrollIntoView({ block: "nearest" });
+    // 仅调整文件树自身的 scrollTop，避免原生 scrollIntoView 向上冒泡滚动外层容器。
+    if (rowRect.top < containerRect.top) {
+      container.scrollTop += rowRect.top - containerRect.top;
+    } else if (rowRect.bottom > containerRect.bottom) {
+      container.scrollTop += rowRect.bottom - containerRect.bottom;
+    }
   }, []);
 
   useEffect(() => {
@@ -815,7 +655,6 @@ function SidebarProjectPanel({
       return;
     }
     if (
-      filterValue.trim().length > 0 ||
       renamingEntry ||
       inlineCreate ||
       isDraggingResourceRef.current ||
@@ -830,24 +669,23 @@ function SidebarProjectPanel({
   }, [
     activeProjectFilePath,
     currentProject,
-    filterValue,
     inlineCreate,
     isExternalDragOver,
     renamingEntry,
   ]);
 
   useEffect(() => {
-    if (!selectedPath) return;
-    const frame = window.requestAnimationFrame(() => {
-      const selectedRow = Array.from(
-        treeContainerRef.current?.querySelectorAll<HTMLElement>(".app-file-tree-row[data-path]") ?? []
-      ).find((row) => normalizePath(row.dataset.path ?? "") === normalizePath(selectedPath));
-      if (selectedRow) {
-        scrollRowIntoViewIfNeeded(selectedRow);
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [scrollRowIntoViewIfNeeded, selectedPath]);
+    const container = treeContainerRef.current;
+    if (!container) return;
+    const syncViewportHeight = () => {
+      setTreeViewportHeight(container.clientHeight);
+    };
+    syncViewportHeight();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncViewportHeight);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [currentProject]);
 
   const handleRefresh = useCallback(() => {
     if (!currentProject) return;
@@ -937,16 +775,12 @@ function SidebarProjectPanel({
   const handleRetry = useCallback(() => {
     if (!currentProject) return;
     setError(null);
-    if (filterValue.trim().length > 0) {
-      void refreshProjectView();
-      return;
-    }
     if (rootEntries.length === 0) {
       void loadDirectory(null);
       return;
     }
     handleRefresh();
-  }, [currentProject, filterValue, handleRefresh, loadDirectory, refreshProjectView, rootEntries.length]);
+  }, [currentProject, handleRefresh, loadDirectory, rootEntries.length]);
 
   const handleToggleDirectory = useCallback(
     async (entry: FileTreeEntry) => {
@@ -984,22 +818,95 @@ function SidebarProjectPanel({
 
   const visibleTree = useMemo(() => buildVisibleTree(rootEntries), [buildVisibleTree, rootEntries]);
 
-  const searchTree = useMemo(
-    () => (currentProject ? buildSearchTree(currentProject.path, searchResults) : []),
-    [currentProject, searchResults]
+  const flatRows = useMemo<FlatTreeRow[]>(() => {
+    const result: FlatTreeRow[] = [];
+    if (inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(projectRootPath)) {
+      result.push({ kind: "inline-create", key: "__inline-create__", depth: 0 });
+    }
+    const visit = (nodes: ResourceTreeNode[], depth: number, inheritedTone?: FolderTone) => {
+      for (const node of nodes) {
+        const { entry, isExpanded, children } = node;
+        const isDirectory = entry.kind === "directory";
+        const visual = getFileIcon(entry.name, isDirectory, isExpanded, inheritedTone);
+        const rowTone = visual.tone ?? inheritedTone;
+        result.push({
+          kind: "node",
+          key: entry.path,
+          node,
+          depth,
+          inheritedTone,
+        });
+        if (isDirectory && isExpanded) {
+          const hasInlineChild =
+            !!inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(entry.path);
+          if (hasInlineChild) {
+            result.push({
+              kind: "inline-create",
+              key: `__inline-create__:${entry.path}`,
+              depth: depth + 1,
+              inheritedTone: rowTone,
+            });
+          }
+          if (children.length > 0) {
+            visit(children, depth + 1, rowTone);
+          }
+        }
+      }
+    };
+    visit(visibleTree, 0);
+    return result;
+  }, [inlineCreate, projectRootPath, visibleTree]);
+
+  const virtualWindow = useMemo(
+    () => computeVirtualWindow(flatRows.length, treeScrollTop, treeViewportHeight, TREE_ROW_HEIGHT),
+    [flatRows.length, treeScrollTop, treeViewportHeight]
   );
 
-  const isSearchMode = filterValue.trim().length > 0;
-  const visibleSelectablePaths = useMemo(
-    () => collectVisiblePaths(isSearchMode ? searchTree : visibleTree),
-    [isSearchMode, searchTree, visibleTree]
+  const visibleFlatRows = useMemo(
+    () => flatRows.slice(virtualWindow.startIndex, virtualWindow.endIndex),
+    [flatRows, virtualWindow.endIndex, virtualWindow.startIndex]
   );
+
+  const visibleSelectablePaths = useMemo(
+    () => collectVisiblePaths(visibleTree),
+    [visibleTree]
+  );
+
   useEffect(() => {
-    if (loadingRoot || searchLoading || error ||
+    if (!selectedPath) return;
+    const frame = window.requestAnimationFrame(() => {
+      const container = treeContainerRef.current;
+      if (!container) return;
+      const selectedRow = Array.from(
+        container.querySelectorAll<HTMLElement>(".app-file-tree-row[data-path]")
+      ).find((row) => normalizePath(row.dataset.path ?? "") === normalizePath(selectedPath));
+      if (selectedRow) {
+        scrollRowIntoViewIfNeeded(selectedRow);
+        return;
+      }
+      const rowIndex = flatRows.findIndex(
+        (item) => item.kind === "node" && normalizePath(item.node.entry.path) === normalizePath(selectedPath)
+      );
+      if (rowIndex >= 0 && container.clientHeight > 0) {
+        const rowTop = rowIndex * TREE_ROW_HEIGHT;
+        const rowBottom = rowTop + TREE_ROW_HEIGHT;
+        if (rowTop < container.scrollTop) {
+          programmaticScrollAtRef.current = Date.now();
+          container.scrollTop = rowTop;
+        } else if (rowBottom > container.scrollTop + container.clientHeight) {
+          programmaticScrollAtRef.current = Date.now();
+          container.scrollTop = rowBottom - container.clientHeight;
+        }
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [flatRows, scrollRowIntoViewIfNeeded, selectedPath]);
+  useEffect(() => {
+    if (loadingRoot || error ||
       (contextMenuPath && contextMenuPath !== "__background__" && !visibleSelectablePaths.includes(contextMenuPath))) {
       setContextMenuPath(null);
     }
-  }, [contextMenuPath, visibleSelectablePaths, loadingRoot, searchLoading, error]);
+  }, [contextMenuPath, visibleSelectablePaths, loadingRoot, error]);
 
   const handleContextMenuOpenChange = useCallback((path: string, open: boolean) => {
     if (!open && contextMenuPathRef.current !== path) return;
@@ -1016,9 +923,8 @@ function SidebarProjectPanel({
     () => [
       ...rootEntries,
       ...Object.values(loadedDirectories).flat(),
-      ...searchResults,
     ],
-    [loadedDirectories, rootEntries, searchResults]
+    [loadedDirectories, rootEntries]
   );
   const externalCopyValidation = useMemo(() => {
     if (!pendingExternalCopy) {
@@ -1070,20 +976,9 @@ function SidebarProjectPanel({
       knownEntries.find((entry) => normalizePath(entry.path) === normalizePath(selectedPath))?.kind ?? "file"
     );
   }, [knownEntries, projectRootPath, selectedPath]);
-  const searchRelevantPaths = useMemo(
-    () => buildSearchRelevantPaths(projectRootPath, searchResults),
-    [projectRootPath, searchResults]
-  );
-  const relevantSelectedPath = useMemo(() => {
-    if (!isSearchMode || !selectedPath) {
-      return selectedPath;
-    }
-
-    return searchRelevantPaths.has(normalizePath(selectedPath)) ? selectedPath : projectRootPath;
-  }, [isSearchMode, projectRootPath, searchRelevantPaths, selectedPath]);
   const selectionTargetDirectory = useMemo(
-    () => getDefaultCreateDirectory(projectRootPath, relevantSelectedPath, selectedEntryKind === "directory"),
-    [relevantSelectedPath, projectRootPath, selectedEntryKind]
+    () => getDefaultCreateDirectory(projectRootPath, selectedPath, selectedEntryKind === "directory"),
+    [selectedPath, projectRootPath, selectedEntryKind]
   );
   const canCopySelection = actionableSelectedEntries.length > 0 && !renameSubmitting;
   const canCutSelection = canCopySelection;
@@ -1461,7 +1356,6 @@ function SidebarProjectPanel({
         renamingEntry ||
         inlineCreate ||
         loadingRoot ||
-        searchLoading ||
         !!error
       ) {
         return;
@@ -1634,7 +1528,7 @@ function SidebarProjectPanel({
       window.addEventListener("pointercancel", handleCancel);
       window.addEventListener("keydown", handleEscape, true);
     },
-    [currentProject, error, inlineCreate, loadingRoot, projectRootPath, renamingEntry, searchLoading, selectedPath, selectedPaths, selectionAnchorPath]
+    [currentProject, error, inlineCreate, loadingRoot, projectRootPath, renamingEntry, selectedPath, selectedPaths, selectionAnchorPath]
   );
 
   const handlePasteEntries = useCallback(
@@ -1843,9 +1737,6 @@ function SidebarProjectPanel({
         setRenamingEntry(null);
         setRenameValue("");
       }
-      if (filterValue.trim().length > 0) {
-        setFilterValue("");
-      }
 
       if (normalizePath(parentPath) !== normalizePath(currentProject.path)) {
         const pathsToExpand = getDirectoryPathsToExpand(currentProject.path, parentPath, true);
@@ -1873,7 +1764,6 @@ function SidebarProjectPanel({
     },
     [
       currentProject,
-      filterValue,
       inlineCreateSubmitting,
       loadDirectory,
       loadedDirectories,
@@ -2025,11 +1915,11 @@ function SidebarProjectPanel({
   );
 
   const renderInlineCreateRow = useCallback(
-    (depth: number): ReactNode => {
+    (depth: number, inheritedTone?: FolderTone): ReactNode => {
       if (!inlineCreate) return null;
       const isDirectory = inlineCreate.kind === "directory";
       const previewName = inlineCreate.value.trim() || (isDirectory ? "folder" : "file");
-      const visual = getFileIcon(previewName, isDirectory, false);
+      const visual = getFileIcon(previewName, isDirectory, false, inheritedTone);
 
       return (
         <div
@@ -2037,6 +1927,7 @@ function SidebarProjectPanel({
           className="app-file-tree-row w-full text-left"
           data-inline-create="true"
           data-kind={inlineCreate.kind}
+          data-folder-tone={visual.tone}
           style={{ paddingLeft: 8 + depth * 16 }}
           onClick={(event) => event.stopPropagation()}
         >
@@ -2097,199 +1988,182 @@ function SidebarProjectPanel({
     ]
   );
 
-  const renderNodes = useCallback(
-    (nodes: ResourceTreeNode[], depth = 0, searchMode = false): ReactNode =>
-      nodes.map((node) => {
-        const { entry, isExpanded, isLoadingChildren, children } = node;
+  const activeContextMenu = useMemo<{ items: MenuProps["items"]; onClick: NonNullable<MenuProps["onClick"]> }>(() => {
+    if (contextMenuPath === "__background__" || !contextMenuEntry) {
+      return {
+        items: backgroundMenuItems,
+        onClick: (info) => {
+          setContextMenuPath(null);
+          if (info.key !== "create-file" && info.key !== "create-folder") {
+            treeContainerRef.current?.focus({ preventScroll: true });
+          }
+          handleBackgroundMenuClick(info);
+        },
+      };
+    }
+
+    const entry = contextMenuEntry;
+    const isDirectory = entry.kind === "directory";
+    const isSelected = normalizedSelectedPaths.has(normalizePath(entry.path));
+    const selectionCount = actionableSelectedEntries.length;
+    const relativePath = currentProject ? buildRelativePath(currentProject.path, entry.path) : entry.path;
+
+    const items: MenuProps["items"] = [
+      { key: "create-file", icon: <FileOutlined />, label: t("sidebar.createFile") },
+      { key: "create-folder", icon: <FolderOutlined />, label: t("sidebar.createFolder") },
+      { type: "divider" },
+      ...(isDirectory
+        ? []
+        : [{ key: "open-in-associated-app", icon: <ExportOutlined />, label: openInAssociatedAppText }]),
+      ...(isDirectory
+        ? [{ key: "find-in-directory", icon: <SearchOutlined />, label: t("globalSearch.findInDirectory") }]
+        : []),
+      { key: "open-in-manager", icon: <FolderOpenFilled />, label: openInManagerText },
+      ...(!isDirectory
+        ? [{ key: "git-file-history", icon: <HistoryOutlined />, label: t("sidebar.gitFileHistory") }]
+        : []),
+      { key: "copy", icon: <CopyOutlined />, label: t("common.copy") },
+      { key: "cut", icon: <ScissorOutlined />, label: t("common.cut") },
+      ...(isDirectory
+        ? [{ key: "paste", icon: <SnippetsOutlined />, label: t("common.paste"), disabled: !canPaste }]
+        : []),
+      {
+        key: "copy-path",
+        icon: <CopyOutlined />,
+        label: t("common.copyPath"),
+        children: [
+          { key: "copy-relative-path", label: copyRelativePathText },
+          { key: "copy-absolute-path", label: copyAbsolutePathText },
+        ],
+      },
+      { type: "divider" },
+      { key: "rename", icon: <EditOutlined />, label: t("common.rename") },
+      { key: "delete", icon: <DeleteOutlined />, label: t("common.delete"), danger: true },
+    ];
+
+    const onClick: NonNullable<MenuProps["onClick"]> = async ({ key, domEvent }) => {
+      setContextMenuPath(null);
+      if (key !== "create-file" && key !== "create-folder" && key !== "rename") {
+        treeContainerRef.current?.focus({ preventScroll: true });
+      }
+      domEvent.preventDefault();
+      domEvent.stopPropagation();
+      if (!(isSelected && selectionCount > 1)) {
+        selectOnlyPath(entry.path);
+      }
+
+      if (key === "create-file") {
+        void handleStartInlineCreate("file", getCreateTargetDirectory(projectRootPath, entry));
+        return;
+      }
+      if (key === "create-folder") {
+        void handleStartInlineCreate("directory", getCreateTargetDirectory(projectRootPath, entry));
+        return;
+      }
+      if (key === "copy") {
+        handleCopyEntries(isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]);
+        return;
+      }
+      if (key === "cut") {
+        handleCutEntries(isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]);
+        return;
+      }
+      if (key === "paste") {
+        void handlePasteFromClipboard(getCreateTargetDirectory(projectRootPath, entry));
+        return;
+      }
+      if (key === "open-in-associated-app") {
+        onOpenInAssociatedApp(entry.path);
+        return;
+      }
+      if (key === "open-in-manager") {
+        onOpenInFileManager(entry.path);
+        return;
+      }
+      if (key === "git-file-history" && !isDirectory && currentProject) {
+        const state = useAppStore.getState();
+        state.setSidebarCollapsed(false);
+        state.setActiveSidebarSection("git");
+        dispatchGitFileHistoryOpen({ projectPath: currentProject.path, filePath: relativePath });
+        return;
+      }
+      if (key === "find-in-directory" && isDirectory) {
+        openGlobalTextSearch(entry.path);
+        return;
+      }
+      if (key === "copy-relative-path") {
+        await navigator.clipboard.writeText(relativePath);
+        showWorkbenchFeedback(copyPathSuccessText);
+        return;
+      }
+      if (key === "copy-absolute-path") {
+        await navigator.clipboard.writeText(entry.path);
+        showWorkbenchFeedback(copyPathSuccessText);
+        return;
+      }
+      if (key === "rename") {
+        handleOpenRename(entry);
+        return;
+      }
+      if (key === "delete") {
+        handleRequestDeleteEntries(
+          isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]
+        );
+      }
+    };
+
+    return { items, onClick };
+  }, [
+    actionableSelectedEntries,
+    backgroundMenuItems,
+    canPaste,
+    contextMenuEntry,
+    contextMenuPath,
+    copyAbsolutePathText,
+    copyPathSuccessText,
+    copyRelativePathText,
+    currentProject,
+    handleBackgroundMenuClick,
+    handleCopyEntries,
+    handleCutEntries,
+    handleOpenRename,
+    handlePasteFromClipboard,
+    handleRequestDeleteEntries,
+    handleStartInlineCreate,
+    normalizedSelectedPaths,
+    onOpenInAssociatedApp,
+    onOpenInFileManager,
+    openInAssociatedAppText,
+    openInManagerText,
+    projectRootPath,
+    selectOnlyPath,
+    setContextMenuPath,
+    t,
+  ]);
+
+  const renderFlatRows = useCallback(
+    () =>
+      visibleFlatRows.map((item) => {
+        if (item.kind === "inline-create") {
+          return renderInlineCreateRow(item.depth, item.inheritedTone);
+        }
+
+        const { node, depth, inheritedTone } = item;
+        const { entry, isExpanded, isLoadingChildren } = node;
         const isDirectory = entry.kind === "directory";
         const isActive = selectedPath === entry.path;
         const isSelected = normalizedSelectedPaths.has(normalizePath(entry.path));
         const selectionCount = actionableSelectedEntries.length;
         const isRenaming =
           !!renamingEntry && normalizePath(renamingEntry.path) === normalizePath(entry.path);
-        const relativePath = currentProject ? buildRelativePath(currentProject.path, entry.path) : entry.path;
-        const displayName = searchMode ? highlightText(entry.name, filterValue) : entry.name;
-        const visual = getFileIcon(entry.name, isDirectory, isExpanded);
-
-        const handleMenuClick: NonNullable<MenuProps["onClick"]> = async ({ key, domEvent }) => {
-          setContextMenuPath(null);
-          treeContainerRef.current?.focus({ preventScroll: true });
-          domEvent.preventDefault();
-          domEvent.stopPropagation();
-          if (!(isSelected && selectionCount > 1)) {
-            selectOnlyPath(entry.path);
-          }
-
-          if (key === "create-file") {
-            void handleStartInlineCreate("file", getCreateTargetDirectory(projectRootPath, entry));
-            return;
-          }
-
-          if (key === "create-folder") {
-            void handleStartInlineCreate("directory", getCreateTargetDirectory(projectRootPath, entry));
-            return;
-          }
-
-          if (key === "copy") {
-            handleCopyEntries(isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]);
-            return;
-          }
-
-          if (key === "cut") {
-            handleCutEntries(isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]);
-            return;
-          }
-
-          if (key === "paste") {
-            void handlePasteFromClipboard(getCreateTargetDirectory(projectRootPath, entry));
-            return;
-          }
-
-          if (key === "open-in-associated-app") {
-            onOpenInAssociatedApp(entry.path);
-            return;
-          }
-
-          if (key === "open-in-manager") {
-            onOpenInFileManager(entry.path);
-            return;
-          }
-
-          if (key === "git-file-history" && !isDirectory && currentProject) {
-            const state = useAppStore.getState();
-            state.setSidebarCollapsed(false);
-            state.setActiveSidebarSection("git");
-            dispatchGitFileHistoryOpen({
-              projectPath: currentProject.path,
-              filePath: relativePath,
-            });
-            return;
-          }
-
-          if (key === "find-in-directory" && isDirectory) {
-            openGlobalTextSearch(entry.path);
-            return;
-          }
-
-          if (key === "copy-relative-path") {
-            await navigator.clipboard.writeText(relativePath);
-            showWorkbenchFeedback(copyPathSuccessText);
-            return;
-          }
-
-          if (key === "copy-absolute-path") {
-            await navigator.clipboard.writeText(entry.path);
-            showWorkbenchFeedback(copyPathSuccessText);
-            return;
-          }
-
-          if (key === "rename") {
-            handleOpenRename(entry);
-            return;
-          }
-
-          if (key === "delete") {
-            handleRequestDeleteEntries(
-              isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]
-            );
-          }
-        };
-
-        const menuItems: MenuProps["items"] = [
-          {
-            key: "create-file",
-            icon: <FileOutlined />,
-            label: t("sidebar.createFile"),
-          },
-          {
-            key: "create-folder",
-            icon: <FolderOutlined />,
-            label: t("sidebar.createFolder"),
-          },
-          { type: "divider" },
-          ...(isDirectory
-            ? []
-            : [
-              {
-                key: "open-in-associated-app",
-                icon: <ExportOutlined />,
-                label: openInAssociatedAppText,
-              },
-            ]),
-          ...(isDirectory
-            ? [
-              {
-                key: "find-in-directory",
-                icon: <SearchOutlined />,
-                label: t("globalSearch.findInDirectory"),
-              },
-            ]
-            : []),
-          {
-            key: "open-in-manager",
-            icon: <FolderOpenFilled />,
-            label: openInManagerText,
-          },
-          ...(!isDirectory
-            ? [
-              {
-                key: "git-file-history",
-                icon: <HistoryOutlined />,
-                label: t("sidebar.gitFileHistory"),
-              },
-            ]
-            : []),
-          {
-            key: "copy",
-            icon: <CopyOutlined />,
-            label: t("common.copy"),
-          },
-          {
-            key: "cut",
-            icon: <ScissorOutlined />,
-            label: t("common.cut"),
-          },
-          ...(isDirectory
-            ? [
-              {
-                key: "paste",
-                icon: <SnippetsOutlined />,
-                label: t("common.paste"),
-                disabled: !canPaste,
-              },
-            ]
-            : []),
-          {
-            key: "copy-path",
-            icon: <CopyOutlined />,
-            label: t("common.copyPath"),
-            children: [
-              {
-                key: "copy-relative-path",
-                label: copyRelativePathText,
-              },
-              {
-                key: "copy-absolute-path",
-                label: copyAbsolutePathText,
-              },
-            ],
-          },
-          { type: "divider" },
-          {
-            key: "rename",
-            icon: <EditOutlined />,
-            label: t("common.rename"),
-          },
-          {
-            key: "delete",
-            icon: <DeleteOutlined />,
-            label: t("common.delete"),
-            danger: true,
-          },
-        ];
+        const visual = getFileIcon(entry.name, isDirectory, isExpanded, inheritedTone);
+        const rowTone = visual.tone ?? inheritedTone;
+        const gitStatus = getTreeEntryGitStatus(gitStatusIndex, entry.path, isDirectory);
+        const gitBadge = gitStatus ? getTreeGitBadge(gitStatus) : null;
 
         return (
-          <div key={entry.path}
+          <div
+            key={item.key}
             id={`${treeId}-${encodeURIComponent(entry.path)}`}
             role="treeitem"
             aria-label={entry.name}
@@ -2303,16 +2177,19 @@ function SidebarProjectPanel({
                 className="app-file-tree-row w-full text-left"
                 data-active={isActive ? "true" : "false"}
                 data-selected={isSelected ? "true" : "false"}
+                data-folder-tone={rowTone}
+                data-git-tone={gitBadge?.tone}
                 data-path={entry.path}
                 data-drag-over={isDirectory && dragOverPath === entry.path ? "true" : "false"}
                 style={{ paddingLeft: 8 + depth * 16 }}
                 onClick={(event) => event.stopPropagation()}
               >
-                {isDirectory ? <TreeDisclosure expanded={isExpanded} loading={isLoadingChildren} /> : <span className="app-file-tree-arrow" aria-hidden="true" />}
-                <span
-                  className="app-file-tree-icon"
-                  style={{ color: visual.color }}
-                >
+                {isDirectory ? (
+                  <TreeDisclosure expanded={isExpanded} loading={isLoadingChildren} />
+                ) : (
+                  <span className="app-file-tree-arrow" aria-hidden="true" />
+                )}
+                <span className="app-file-tree-icon" style={{ color: visual.color }}>
                   {visual.icon}
                 </span>
                 <Input
@@ -2338,123 +2215,101 @@ function SidebarProjectPanel({
                 />
               </div>
             ) : (
-              <Dropdown autoFocus open={contextMenuPath === entry.path}
-                onOpenChange={(open) => handleContextMenuOpenChange(entry.path, open)}
-                menu={{ items: menuItems, onClick: handleMenuClick }} trigger={["contextMenu"]}>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="app-file-tree-row w-full text-left"
-                  data-active={isActive ? "true" : "false"}
-                  data-selected={isSelected ? "true" : "false"}
-                  data-cut={clipboardOperation === "cut" && clipboardPaths.some(
-                    (path) => normalizePath(path) === normalizePath(entry.path)
-                  ) ? "true" : "false"}
-                  data-path={entry.path}
-                  data-drag-over={isDirectory && dragOverPath === entry.path ? "true" : "false"}
-                  style={{ paddingLeft: 8 + depth * 16 }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    treeContainerRef.current?.focus({ preventScroll: true });
-                  }}
-                  onContextMenu={(event) => {
-                    event.stopPropagation();
-                    if (!(isSelected && selectionCount > 1)) {
-                      selectOnlyPath(entry.path);
-                    }
-                  }}
-                  onPointerDown={(event) => handleStartResourceDrag(event, entry)}
-                  onClick={(event) => {
-                    if (suppressNextClickPathRef.current === entry.path) {
-                      suppressNextClickPathRef.current = null;
-                      return;
-                    }
-                    const isMultiSelectGesture = handleSelectEntry(entry, event);
-                    if (isMultiSelectGesture) {
-                      return;
-                    }
-                    if (isDirectory) {
-                      if (searchMode) {
-                        return;
-                      }
-                      void handleToggleDirectory(entry);
-                      return;
-                    }
-                    onOpenFile(entry.path);
-                  }}
-                  onDoubleClick={() => {
-                    if (!isDirectory) {
-                      onOpenFile(entry.path, { preview: false });
-                    }
-                  }}
-                >
-                  {isDirectory ? <TreeDisclosure expanded={isExpanded} loading={isLoadingChildren} /> : <span className="app-file-tree-arrow" aria-hidden="true" />}
-                  <span
-                    className="app-file-tree-icon"
-                    style={{ color: visual.color }}
-                  >
-                    {visual.icon}
-                  </span>
-                  <span className="truncate">{displayName}</span>
-                </button>
-              </Dropdown>
+              <button
+                type="button"
+                tabIndex={-1}
+                className="app-file-tree-row w-full text-left"
+                data-active={isActive ? "true" : "false"}
+                data-selected={isSelected ? "true" : "false"}
+                data-folder-tone={rowTone}
+                data-git-tone={gitBadge?.tone}
+                data-cut={
+                  clipboardOperation === "cut" &&
+                  clipboardPaths.some((path) => normalizePath(path) === normalizePath(entry.path))
+                    ? "true"
+                    : "false"
+                }
+                data-path={entry.path}
+                data-drag-over={isDirectory && dragOverPath === entry.path ? "true" : "false"}
+                style={{ paddingLeft: 8 + depth * 16 }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  treeContainerRef.current?.focus({ preventScroll: true });
+                }}
+                onContextMenu={() => {
+                  if (!(isSelected && selectionCount > 1)) {
+                    selectOnlyPath(entry.path);
+                  }
+                  setContextMenuEntry(entry);
+                  setContextMenuPath(entry.path);
+                }}
+                onPointerDown={(event) => handleStartResourceDrag(event, entry)}
+                onClick={(event) => {
+                  if (suppressNextClickPathRef.current === entry.path) {
+                    suppressNextClickPathRef.current = null;
+                    return;
+                  }
+                  const isMultiSelectGesture = handleSelectEntry(entry, event);
+                  if (isMultiSelectGesture) {
+                    return;
+                  }
+                  if (isDirectory) {
+                    void handleToggleDirectory(entry);
+                    return;
+                  }
+                  onOpenFile(entry.path);
+                }}
+                onDoubleClick={() => {
+                  if (!isDirectory) {
+                    onOpenFile(entry.path, { preview: false });
+                  }
+                }}
+              >
+                {isDirectory ? (
+                  <TreeDisclosure expanded={isExpanded} loading={isLoadingChildren} />
+                ) : (
+                  <span className="app-file-tree-arrow" aria-hidden="true" />
+                )}
+                <span className="app-file-tree-icon" style={{ color: visual.color }}>
+                  {visual.icon}
+                </span>
+                <span className="app-file-tree-name truncate min-w-0 flex-1">{entry.name}</span>
+                {gitBadge ? (
+                  isDirectory ? (
+                    <span className="app-file-tree-git-dot" aria-hidden="true" />
+                  ) : (
+                    <span className="app-file-tree-git-badge" aria-hidden="true">
+                      {gitBadge.label}
+                    </span>
+                  )
+                ) : null}
+              </button>
             )}
-
-            {isDirectory &&
-              isExpanded &&
-              (children.length > 0 ||
-                (!searchMode &&
-                  !!inlineCreate &&
-                  normalizePath(inlineCreate.parentPath) === normalizePath(entry.path))) && (
-                <div role="group">
-                  {!searchMode &&
-                  inlineCreate &&
-                  normalizePath(inlineCreate.parentPath) === normalizePath(entry.path)
-                    ? renderInlineCreateRow(depth + 1)
-                    : null}
-                  {renderNodes(children, depth + 1, searchMode)}
-                </div>
-              )}
           </div>
         );
       }),
     [
-      copyAbsolutePathText,
-      openInAssociatedAppText,
-      copyPathSuccessText,
-      copyRelativePathText,
-      currentProject,
-      filterValue,
+      actionableSelectedEntries.length,
+      clipboardOperation,
+      clipboardPaths,
+      dragOverPath,
+      gitStatusIndex,
       handleCancelRename,
-      actionableSelectedEntries,
-      handleCopyEntries,
-      handleCutEntries,
-      handlePasteFromClipboard,
-      handleRequestDeleteEntries,
-      handleStartInlineCreate,
       handleConfirmRename,
       handleSelectEntry,
       handleStartResourceDrag,
-      handleOpenRename,
       handleToggleDirectory,
-      inlineCreate,
-      renderInlineCreateRow,
-      canPaste,
-      treeId,
-      contextMenuPath,
-      handleContextMenuOpenChange,
       normalizedSelectedPaths,
-      onOpenInAssociatedApp,
-      onOpenInFileManager,
-      openInManagerText,
       onOpenFile,
-      clipboardOperation,
-      clipboardPaths,
-      projectRootPath,
+      renameSubmitting,
+      renameValue,
+      renamingEntry,
+      renderInlineCreateRow,
       selectedPath,
       selectOnlyPath,
-      dragOverPath,
-      t,
+      setContextMenuPath,
+      treeId,
+      visibleFlatRows,
     ]
   );
 
@@ -2464,7 +2319,7 @@ function SidebarProjectPanel({
       // Portaled context menus belong to this React subtree, but own their keys.
       if (!event.currentTarget.contains(target) ||
         target.closest("input, textarea, [contenteditable='true']") || event.nativeEvent.isComposing ||
-        loadingRoot || searchLoading || error || contextMenuPath !== null) return;
+        loadingRoot || error || contextMenuPath !== null) return;
       const hasPrimaryModifier = event.ctrlKey || event.metaKey;
       const lowerKey = event.key.toLowerCase();
 
@@ -2473,7 +2328,7 @@ function SidebarProjectPanel({
         event.preventDefault();
         event.stopPropagation();
         if ((event.key === "Enter" || event.key === " ") && (event.repeat || event.shiftKey)) return;
-        const action = getTreeNavigation(isSearchMode ? searchTree : visibleTree, selectedPath, event.key, isSearchMode);
+        const action = getTreeNavigation(visibleTree, selectedPath, event.key);
         if (!action) return;
         if (action.type === "select") {
           if (event.shiftKey) {
@@ -2564,8 +2419,6 @@ function SidebarProjectPanel({
       selectOnlyPath,
       selectedPath,
       selectedPaths.length,
-      isSearchMode,
-      searchTree,
       visibleTree,
       selectionAnchorPath,
       visibleSelectablePaths,
@@ -2577,7 +2430,6 @@ function SidebarProjectPanel({
       renameSubmitting,
       onOpenFile,
       loadingRoot,
-      searchLoading,
       error,
       contextMenuPath,
     ]
@@ -2590,7 +2442,7 @@ function SidebarProjectPanel({
   return (
     <div className="app-sidebar-panel flex h-full min-h-0 flex-col">
       <div
-        className="flex items-center justify-between gap-2 px-2 pb-2 pt-1"
+        className="app-file-tree-header flex items-center justify-between gap-2 px-2 pb-2 pt-1"
         style={{ borderBottom: "1px solid var(--cs-border-sidebar)" }}
       >
         <Tooltip title={currentProject.path} mouseEnterDelay={0.4}>
@@ -2601,7 +2453,7 @@ function SidebarProjectPanel({
             {currentProject.name || panelTitle}
           </div>
         </Tooltip>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="app-file-tree-toolbar flex shrink-0 items-center gap-1">
           <Tooltip title={t("sidebar.locateActiveFile")} mouseEnterDelay={0.4}>
             <button
               type="button"
@@ -2637,49 +2489,51 @@ function SidebarProjectPanel({
               <ReloadOutlined />
             </button>
           </Tooltip>
+          <Tooltip title={t("titleBar.collapseSidebar")} mouseEnterDelay={0.4}>
+            <button
+              type="button"
+              className="app-file-toolbar-button"
+              onClick={() => useAppStore.getState().setSidebarCollapsed(true)}
+              aria-label={t("titleBar.collapseSidebar")}
+            >
+              <MinusOutlined />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
       <div className="flex flex-1 min-h-0 flex-col px-1 py-2">
-        <div className="px-2 pb-2">
-          <Input
-            size="small"
-            allowClear
-            value={filterValue}
-            onChange={(event) => setFilterValue(event.target.value)}
-            placeholder={filterPlaceholderText}
-            prefix={<SearchOutlined className="text-[11px]" />}
-          />
-        </div>
-
-        <Dropdown autoFocus open={contextMenuPath === "__background__"}
-          onOpenChange={(open) => handleContextMenuOpenChange("__background__", open)}
-          menu={{ items: backgroundMenuItems, onClick: (info) => {
-            setContextMenuPath(null);
-            if (info.key !== "create-file" && info.key !== "create-folder") {
-              treeContainerRef.current?.focus({ preventScroll: true });
+        <Dropdown
+          autoFocus
+          open={contextMenuPath !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              handleContextMenuOpenChange(contextMenuPathRef.current ?? "__background__", false);
             }
-            handleBackgroundMenuClick(info);
-          } }} trigger={["contextMenu"]}>
+          }}
+          menu={activeContextMenu}
+          trigger={["contextMenu"]}
+        >
           <div
             ref={treeContainerRef}
-            className="app-project-tree-scroll relative mt-1 flex-1 min-h-0 overflow-y-auto"
+            className="app-project-tree-scroll relative mt-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
             style={{ paddingBottom: 40 }}
             data-explorer-shortcuts="true"
             role="tree"
             aria-label={panelTitle}
             aria-multiselectable="true"
-            aria-activedescendant={!loadingRoot && !searchLoading && !error && selectedPath && visibleSelectablePaths.includes(selectedPath)
+            aria-activedescendant={!loadingRoot && !error && selectedPath && visibleSelectablePaths.includes(selectedPath)
               ? `${treeId}-${encodeURIComponent(selectedPath)}` : undefined}
             data-drag-over={isExternalDragOver && !dragOverPath ? "true" : "false"}
             tabIndex={0}
-            onScroll={() => {
+            onScroll={(event) => {
+              setTreeScrollTop(event.currentTarget.scrollTop);
               if (Date.now() - programmaticScrollAtRef.current > 150) {
                 lastManualScrollAtRef.current = Date.now();
               }
             }}
             onFocus={(event) => {
-              if (!loadingRoot && !searchLoading && !error && event.target === event.currentTarget && !visibleSelectablePaths.includes(selectedPath ?? "")) {
+              if (!loadingRoot && !error && event.target === event.currentTarget && !visibleSelectablePaths.includes(selectedPath ?? "")) {
                 selectOnlyPath(visibleSelectablePaths[0] ?? null);
               }
             }}
@@ -2687,7 +2541,7 @@ function SidebarProjectPanel({
             onMouseDown={(event) => {
               const target = event.target as HTMLElement | null;
               if (target && event.currentTarget.contains(target) && !target.closest(".app-file-tree-row")) {
-                treeContainerRef.current?.focus();
+                treeContainerRef.current?.focus({ preventScroll: true });
                 selectOnlyPath(projectRootPath);
               }
             }}
@@ -2697,6 +2551,8 @@ function SidebarProjectPanel({
                 return;
               }
               selectOnlyPath(projectRootPath);
+              setContextMenuEntry(null);
+              setContextMenuPath("__background__");
             }}
             onKeyDown={handleTreeKeyDown}
           >
@@ -2717,26 +2573,15 @@ function SidebarProjectPanel({
                 <Spin size="small" />
                 <span>{loadingText}</span>
               </div>
-            ) : searchLoading ? (
-              <div className="flex items-center gap-2 px-2 py-3 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-                <Spin size="small" />
-                <span>{loadingText}</span>
-              </div>
-            ) : isSearchMode ? (
-              searchTree.length > 0 ? (
-                <div>{renderNodes(searchTree, 0, true)}</div>
-              ) : (
-                <div className="px-2 py-3 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-                  {filterNoResultsText}
-                </div>
-              )
-            ) : visibleTree.length > 0 ||
-              (!!inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(projectRootPath)) ? (
-              <div>
-                {inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(projectRootPath)
-                  ? renderInlineCreateRow(0)
-                  : null}
-                {renderNodes(visibleTree)}
+            ) : flatRows.length > 0 ? (
+              <div
+                className="min-w-0"
+                style={{
+                  paddingTop: virtualWindow.paddingTop,
+                  paddingBottom: virtualWindow.paddingBottom,
+                }}
+              >
+                {renderFlatRows()}
               </div>
             ) : (
               <div className="px-2 py-3 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>

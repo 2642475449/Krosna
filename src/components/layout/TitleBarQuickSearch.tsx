@@ -1,13 +1,13 @@
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { createDoubleShiftMatcher, getAppShortcut } from "@/lib/appShortcuts";
 import { matchesShortcut, formatShortcutDisplay } from "@/lib/shortcut";
-import { FolderOutlined, SearchOutlined } from "@ant-design/icons";
+import { SearchOutlined } from "@ant-design/icons";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Spin } from "antd";
 import type { InputRef } from "antd";
 import { searchProjectEntries } from "@/lib/api";
 import { revealExplorerPath } from "@/lib/explorer";
-import { getFileIconByName } from "@/lib/fileIcon";
+import { getFileIcon } from "@/lib/fileIcon";
 import { shouldIgnoreShortcut } from "@/hooks/useKeyboardShortcuts";
 import { useAppStore } from "@/store";
 import { useTranslation } from "react-i18next";
@@ -386,6 +386,7 @@ function TitleBarQuickSearch() {
               >
                 {visibleItems.map((item, index) => {
                   const active = index === activeIndex;
+                  const visual = getFileIcon(item.name, item.kind === "directory");
                   return (
                     <button
                       key={item.key}
@@ -398,27 +399,12 @@ function TitleBarQuickSearch() {
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => handleOpenItem(item)}
                     >
-                      {(() => {
-                        if (item.kind === "directory") {
-                          return (
-                            <div
-                              className="flex h-5 w-5 shrink-0 items-center justify-center text-[14px]"
-                              style={{ color: "var(--cs-text-secondary)" }}
-                            >
-                              <FolderOutlined />
-                            </div>
-                          );
-                        }
-                        const fileVisual = getFileIconByName(item.name);
-                        return (
-                          <div
-                            className="flex h-5 w-5 shrink-0 items-center justify-center"
-                            style={{ color: fileVisual.color }}
-                          >
-                            {fileVisual.icon}
-                          </div>
-                        );
-                      })()}
+                      <div
+                        className="flex h-5 w-5 shrink-0 items-center justify-center"
+                        style={{ color: visual.color }}
+                      >
+                        {visual.icon}
+                      </div>
                       <div className="flex min-w-0 flex-1 items-baseline gap-2">
                         <span
                           className="min-w-0 shrink truncate text-[13px] font-medium"

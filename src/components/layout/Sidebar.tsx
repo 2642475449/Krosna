@@ -475,15 +475,13 @@ function Sidebar({ collapsed, section }: SidebarProps) {
 
           <div
             key={section}
-            className={`app-sidebar-section-content ${section === "project" ? "flex-1 min-h-0 overflow-hidden p-3" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}`}
+            className={`app-sidebar-section-content ${section === "project" ? "flex-1 min-h-0 overflow-clip p-3" : "flex-1 min-h-0 overflow-y-auto app-project-tree-scroll p-2.5"}`}
           >
             {section === "project" ? (
               <SidebarProjectPanel
                 currentProject={currentProject}
                 noProjectText={t("sidebar.noProject")}
                 panelTitle={t("common.file")}
-                filterPlaceholderText={t("sidebar.fileFilterPlaceholder")}
-                filterNoResultsText={t("sidebar.fileFilterNoResults")}
                 openInManagerText={t("common.openInFileManager")}
                 openInAssociatedAppText={t("common.openInAssociatedApp")}
                 copyRelativePathText={t("sidebar.copyRelativePath")}

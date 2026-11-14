@@ -769,8 +769,6 @@
     "filePanelQuickAccess": "Quick Access",
     "filePanelLoading": "Loading directory",
     "filePanelEmpty": "This folder is empty",
-    "fileFilterPlaceholder": "Search files and folders across the current project",
-    "fileFilterNoResults": "No matches in the current project",
     "expandAll": "Expand All",
     "collapseAll": "Collapse All",
     "filePanelPlaceholder": "The panel now uses real directory reads and tree browsing. The next phase can add create, rename, delete, and context menu actions.",

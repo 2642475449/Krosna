@@ -357,19 +357,24 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
       </div>
     ) : null;
 
-  const toolbar = (
+  const showDocumentIdentity = !tabId;
+  const showMarkdownMode = markdownFile && (!error || !!status);
+  const toolbarActions = renderActions?.(() => handleSave({ silent: true }));
+  const toolbar = showDocumentIdentity || showMarkdownMode || toolbarActions ? (
     <div
         data-file-document-toolbar
-        className="px-4 py-2 flex shrink-0 items-center gap-3"
+        className="px-4 py-2 flex shrink-0 items-center justify-end gap-3"
         style={{ borderBottom: "1px solid var(--cs-border-sidebar)" }}
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {markdownFile ? <FileMarkdownOutlined /> : <FileOutlined />}
-          {breadcrumbNode}
-          {readOnly && <Tag>{t("fileTabs.readOnly")}</Tag>}
-          {largeFile && <Tag>{t("fileTabs.largeFile")}</Tag>}
-        </div>
-        {markdownFile && (!error || status) ? (
+        {showDocumentIdentity ? (
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {markdownFile ? <FileMarkdownOutlined /> : <FileOutlined />}
+            {breadcrumbNode}
+            {readOnly && <Tag>{t("fileTabs.readOnly")}</Tag>}
+            {largeFile && <Tag>{t("fileTabs.largeFile")}</Tag>}
+          </div>
+        ) : null}
+        {showMarkdownMode ? (
           <Segmented<MarkdownViewMode>
             size="small"
             value={markdownViewMode}
@@ -386,9 +391,9 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
             ]}
           />
         ) : null}
-        {renderActions?.(() => handleSave({ silent: true }))}
+        {toolbarActions}
       </div>
-  );
+  ) : null;
 
   if (loading) {
     return (

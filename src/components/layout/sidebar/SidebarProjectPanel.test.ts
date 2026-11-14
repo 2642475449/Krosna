@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { FileTreeEntry } from "@/types";
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(), search: vi.fn(), open: vi.fn(), drag: vi.fn(), rename: vi.fn(),
+  list: vi.fn(), open: vi.fn(), drag: vi.fn(), rename: vi.fn(),
   createFile: vi.fn(), createDirectory: vi.fn(), deleteEntry: vi.fn(),
   readClipboard: vi.fn(), copy: vi.fn(),
   workspace: { activePaneId: "main", panesById: undefined as unknown, tabsById: undefined as unknown },
@@ -20,7 +20,7 @@ vi.mock("@/store", () => ({
     }),
 }));
 vi.mock("@/lib/api", () => ({
-  listProjectDirectory: mocks.list, searchProjectEntries: mocks.search,
+  listProjectDirectory: mocks.list,
   renameProjectEntry: mocks.rename, copyExternalEntry: vi.fn(), copyProjectEntries: mocks.copy,
   createProjectDirectory: mocks.createDirectory, createProjectFile: mocks.createFile, deleteProjectEntry: mocks.deleteEntry,
   moveProjectEntries: vi.fn(), readClipboardFilePaths: mocks.readClipboard,
@@ -70,7 +70,7 @@ async function mount() {
   await act(async () => {
     root.render(React.createElement(SidebarProjectPanel, {
       currentProject: project, noProjectText: "no project", panelTitle: "Project",
-      filterPlaceholderText: "Search", filterNoResultsText: "No results", refreshText: "Refresh",
+      refreshText: "Refresh",
       loadingText: "Loading", emptyFolderText: "Empty", openInManagerText: "Open",
       openInAssociatedAppText: "Open app", copyRelativePathText: "Relative", copyAbsolutePathText: "Absolute",
       copyPathSuccessText: "Copied", onOpenInFileManager: vi.fn(), onOpenInAssociatedApp: vi.fn(), onOpenFile: mocks.open,
@@ -84,7 +84,6 @@ beforeEach(() => {
   window.localStorage.clear();
   mocks.workspace = { activePaneId: "main", panesById: undefined, tabsById: undefined };
   mocks.list.mockImplementation(async (_root, path) => listing(path ?? project.path, path ? [child] : [folder, file]));
-  mocks.search.mockResolvedValue([]);
   mocks.createFile.mockImplementation(async (_root, parent, name) => `${parent}/${name}`);
   mocks.createDirectory.mockImplementation(async (_root, parent, name) => `${parent}/${name}`);
   mocks.deleteEntry.mockResolvedValue(undefined);
@@ -335,6 +334,7 @@ it("renders project name in header, toolbar actions, and bottom padding hotzone"
   expect(host.querySelector('button[aria-label="sidebar.locateActiveFile"]')).not.toBeNull();
   expect(host.querySelector('button[aria-label="sidebar.collapseAll"]')).not.toBeNull();
   expect(host.querySelector('button[aria-label="Refresh"]')).not.toBeNull();
+  expect(host.querySelector('button[aria-label="titleBar.collapseSidebar"]')).not.toBeNull();
   expect(tree().style.paddingBottom).toBe("40px");
 });
 
@@ -353,7 +353,7 @@ it("discards stale directory response after switching projects", async () => {
   await act(async () => {
     root.render(React.createElement(SidebarProjectPanel, {
       currentProject: projectB, noProjectText: "no project", panelTitle: "Project",
-      filterPlaceholderText: "Search", filterNoResultsText: "No results", refreshText: "Refresh",
+      refreshText: "Refresh",
       loadingText: "Loading", emptyFolderText: "Empty", openInManagerText: "Open",
       openInAssociatedAppText: "Open app", copyRelativePathText: "Relative", copyAbsolutePathText: "Absolute",
       copyPathSuccessText: "Copied", onOpenInFileManager: vi.fn(), onOpenInAssociatedApp: vi.fn(), onOpenFile: mocks.open,
@@ -432,7 +432,7 @@ it("previews file and toggles folder on Space, and retries failed directory load
   expect(mocks.open).toHaveBeenCalledExactlyOnceWith(file.path, { preview: true });
 });
 
-it("auto-reveals active file tab and respects filter guard", async () => {
+it("auto-reveals active file tab and follows file tab switches", async () => {
   mocks.workspace = {
     activePaneId: "main",
     panesById: { main: { id: "main", tabIds: ["file:1"], activeTabId: "file:1", history: [] } },
@@ -442,12 +442,6 @@ it("auto-reveals active file tab and respects filter guard", async () => {
   expect(activePath()).toBe(child.path);
   expect(host.querySelectorAll('[role="treeitem"]')).toHaveLength(3);
 
-  const filterInput = host.querySelector<HTMLInputElement>('input[placeholder="Search"]')!;
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    setter.call(filterInput, "pkg");
-    filterInput.dispatchEvent(new Event("input", { bubbles: true }));
-  });
   mocks.workspace = {
     activePaneId: "main",
     panesById: { main: { id: "main", tabIds: ["file:2"], activeTabId: "file:2", history: [] } },
@@ -456,13 +450,13 @@ it("auto-reveals active file tab and respects filter guard", async () => {
   await act(async () => {
     root.render(React.createElement(SidebarProjectPanel, {
       currentProject: project, noProjectText: "no project", panelTitle: "Project",
-      filterPlaceholderText: "Search", filterNoResultsText: "No results", refreshText: "Refresh",
+      refreshText: "Refresh",
       loadingText: "Loading", emptyFolderText: "Empty", openInManagerText: "Open",
       openInAssociatedAppText: "Open app", copyRelativePathText: "Relative", copyAbsolutePathText: "Absolute",
       copyPathSuccessText: "Copied", onOpenInFileManager: vi.fn(), onOpenInAssociatedApp: vi.fn(), onOpenFile: mocks.open,
     }));
   });
-  expect(activePath()).not.toBe(file.path);
+  expect(activePath()).toBe(file.path);
 });
 
 it("computes marquee rectangles, intersections, and additive selection merges", () => {
@@ -536,7 +530,7 @@ it("persists expandedPaths per project across project switches and prunes missin
   await act(async () => {
     root.render(React.createElement(SidebarProjectPanel, {
       currentProject: otherProject, noProjectText: "no project", panelTitle: "Project",
-      filterPlaceholderText: "Search", filterNoResultsText: "No results", refreshText: "Refresh",
+      refreshText: "Refresh",
       loadingText: "Loading", emptyFolderText: "Empty", openInManagerText: "Open",
       openInAssociatedAppText: "Open app", copyRelativePathText: "Relative", copyAbsolutePathText: "Absolute",
       copyPathSuccessText: "Copied", onOpenInFileManager: vi.fn(), onOpenInAssociatedApp: vi.fn(), onOpenFile: mocks.open,
@@ -547,7 +541,7 @@ it("persists expandedPaths per project across project switches and prunes missin
   await act(async () => {
     root.render(React.createElement(SidebarProjectPanel, {
       currentProject: project, noProjectText: "no project", panelTitle: "Project",
-      filterPlaceholderText: "Search", filterNoResultsText: "No results", refreshText: "Refresh",
+      refreshText: "Refresh",
       loadingText: "Loading", emptyFolderText: "Empty", openInManagerText: "Open",
       openInAssociatedAppText: "Open app", copyRelativePathText: "Relative", copyAbsolutePathText: "Absolute",
       copyPathSuccessText: "Copied", onOpenInFileManager: vi.fn(), onOpenInAssociatedApp: vi.fn(), onOpenFile: mocks.open,

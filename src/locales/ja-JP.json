@@ -769,8 +769,6 @@
     "filePanelQuickAccess": "クイックアクセス",
     "filePanelLoading": "ディレクトリを読み込み中",
     "filePanelEmpty": "このフォルダーは空です",
-    "fileFilterPlaceholder": "現在のプロジェクト内のファイルとフォルダーを検索",
-    "fileFilterNoResults": "現在のプロジェクトに一致する項目はありません",
     "expandAll": "すべて展開",
     "collapseAll": "すべて折りたたむ",
     "filePanelPlaceholder": "このパネルは実際のディレクトリ読み取りとツリー表示に対応しています。次の段階で作成、名前変更、削除、コンテキストメニューを追加できます。",
