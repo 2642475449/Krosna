@@ -30,6 +30,28 @@ describe("session feedback shared across navigation surfaces", () => {
   it("can present a new approval request before the running status catches up", () => {
     expect(getSessionFeedback(session({ status: "running", statusRevision: 1 }), item({ kind: "permission", sourceRevision: 2 }))?.state).toBe("permission");
   });
+  it("removes a stale failure dot after a newer successful status", () => {
+    const recovered = session({ statusRevision: 2, statusUpdatedAt: 2000 });
+    const failure = item({ kind: "failure" });
+    expect(getSessionFeedback(recovered, failure)).toBeNull();
+    expect(getSessionFeedback(recovered, { ...failure, sourceRevision: 0 })).toBeNull();
+  });
+  it("keeps the error dot during retry until success is confirmed", () => {
+    for (const status of ["starting", "running", "waiting", "error"] as const) {
+      expect(getSessionFeedback(
+        session({ status, statusRevision: 2, statusUpdatedAt: 2000 }),
+        item({ kind: "failure" }),
+      )?.state).toBe("error");
+    }
+  });
+  it("keeps a failure dot when completion is older or has the same revision", () => {
+    for (const statusRevision of [1, 2]) {
+      expect(getSessionFeedback(
+        session({ statusRevision, statusUpdatedAt: 2000 }),
+        item({ kind: "failure", sourceRevision: 2 }),
+      )?.state).toBe("error");
+    }
+  });
   it("does not invent agent state for ordinary terminals", () => {
     expect(getSessionFeedback(session({ agentId: "powershell", status: "running" }))).toBeNull();
   });

@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   error: vi.fn(),
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...await importOriginal<typeof import("react-i18next")>(),
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("antd", () => ({ Select: () => null, message: { error: mocks.error } }));
 vi.mock("@/store/slices/background", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/store/slices/background")>(),

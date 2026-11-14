@@ -279,7 +279,8 @@
   40%, 80% { transform: translateX(3px); }
 }
 
-/* Ant Design 的开合仍使用自身生命周期；减少动态效果时保留完成事件。 */
+/* Ant Design 浮层开合由 ConfigProvider 的 token.motion 跟随 prefers-reduced-motion 控制；
+   不能用 0.01ms 强行覆盖 .ant-popover 等浮层动画，否则 @rc-component/trigger 的对齐与动画状态会竞态并停留在 -1000vw。 */
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar-frame,
   .app-sidebar-surface,
@@ -340,18 +341,5 @@
   .app-launcher-pills button:active,
   .app-pressable:active:not(:disabled) {
     transform: none;
-  }
-
-  .ant-modal-root *,
-  .ant-popover,
-  .ant-dropdown,
-  .ant-drawer *,
-  .ant-select-dropdown,
-  .ant-picker-dropdown,
-  .ant-tooltip,
-  .ant-popconfirm {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
   }
 }

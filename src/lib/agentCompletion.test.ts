@@ -4,6 +4,7 @@ import { createAppStore } from "@/store";
 import { createDefaultWorkspace } from "@/store/utils/workspace";
 import { getAgentCompletionUpdates } from "./agentCompletion";
 import { collectTaskMonitorTabs } from "./taskMonitor";
+import { getSessionFeedback } from "./sessionFeedback";
 
 const session: Session = {
   id: "codex-session", name: "Codex", path: "E:/project", createdAt: 100,
@@ -51,10 +52,41 @@ describe("agent completion status recovery", () => {
     expect(getAgentCompletionUpdates({ ...session, lastEventAt: 301 }, completion)).toBeNull();
   });
 
-  it("does not revive closed, archived, disconnected, or failed sessions", () => {
+  it.each(["codex", "antigravity"] as const)("recovers a live %s error from a real Hook completion without a running update", agentId => {
+    const failedSession = { ...session, agentId, status: "error" as const };
+    const store = createAppStore();
+    store.setState({
+      currentProject: { path: session.path, name: "project" },
+      projectSessions: { [session.path]: [failedSession] },
+      projectWorkspaces: { [session.path]: createDefaultWorkspace() },
+      sessions: [failedSession],
+    });
+    store.getState().pushSessionEvent({
+      ...completion, id: "error-7", source: `${agentId}_hook`, revision: 7,
+      createdAt: 200, eventType: "process_error", severity: "error",
+    });
+    expect(getSessionFeedback(store.getState().sessions[0],
+      store.getState().projectAttentionItems[session.path][0])?.state).toBe("error");
+
+    const success = { ...completion, source: `${agentId}_hook` };
+    expect(store.getState().pushSessionEvent(success)).toBe("accepted");
+    const updates = getAgentCompletionUpdates(store.getState().sessions[0], success);
+    expect(updates).toMatchObject({ status: "completed", statusRevision: 8 });
+    store.getState().updateSession(session.id, updates!);
+    store.getState().markSessionRead(session.id);
+
+    expect(store.getState().sessions[0].status).toBe("completed");
+    expect(getSessionFeedback(store.getState().sessions[0],
+      store.getState().projectAttentionItems[session.path][0])).toBeNull();
+    expect(collectTaskMonitorTabs(store.getState().sessions, {
+      main: { id: "main", tabIds: [session.id] },
+    }, {})[0].status).toBe("completed");
+  });
+
+  it("does not revive closed, archived, or disconnected sessions", () => {
     for (const extra of [
       { active: false }, { archived: true }, { status: "stopped" as const },
-      { status: "error" as const },
+      { active: false, status: "error" as const },
     ]) {
       expect(getAgentCompletionUpdates({ ...session, ...extra }, completion)).toBeNull();
     }
@@ -63,7 +95,7 @@ describe("agent completion status recovery", () => {
 
   it("requires a matching provider, session, and versioned completion event", () => {
     for (const extra of [
-      { source: "claude" }, { source: "runtime" }, { sessionId: "other" },
+      { source: "claude" }, { source: "claude_hook" }, { source: "runtime" }, { sessionId: "other" },
       { eventType: "terminal_command_complete" }, { revision: null },
       { revision: undefined }, { revision: NaN }, { revision: Infinity },
       { createdAt: NaN },

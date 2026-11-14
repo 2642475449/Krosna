@@ -6,7 +6,7 @@ type CompletionEvent = Pick<
   "sessionId" | "source" | "eventType" | "revision" | "createdAt"
 >;
 
-/** 完成通知与 agent-status 可能分开送达，用同一版本的完成事实补齐运行状态。 */
+/** 完成通知与 agent-status 可能分开送达；新的完成事实也能恢复仍存活的错误会话。 */
 export function getAgentCompletionUpdates(
   session: Session | undefined,
   event: CompletionEvent,
@@ -14,10 +14,11 @@ export function getAgentCompletionUpdates(
   if (
     !session ||
     session.id !== event.sessionId ||
-    session.agentId !== event.source ||
+    !session.agentId ||
+    (session.agentId !== event.source && `${session.agentId}_hook` !== event.source) ||
     !session.active ||
     session.archived ||
-    !["starting", "running", "waiting"].includes(session.status ?? "") ||
+    !["starting", "running", "waiting", "error"].includes(session.status ?? "") ||
     event.eventType !== "assistant_complete" ||
     typeof event.revision !== "number" ||
     !Number.isSafeInteger(event.revision) ||

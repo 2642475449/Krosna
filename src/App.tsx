@@ -288,6 +288,12 @@ function App() {
     return startVoiceOverlayThemeSync((nextTheme) => useAppStore.setState(nextTheme));
   }, [isVoiceOverlayWindow]);
 
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -298,6 +304,15 @@ function App() {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [setSystemPrefersDark]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setPrefersReducedMotion(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     if (isVoiceOverlayWindow) {
@@ -533,6 +548,7 @@ function App() {
           colorPrimary: primaryColor,
           colorTextLightSolid: ANTD_TEXT_LIGHT_SOLID,
           borderRadius: 6,
+          motion: !prefersReducedMotion,
           motionDurationFast: "0.12s",
           motionDurationMid: "0.16s",
           motionDurationSlow: "0.2s",

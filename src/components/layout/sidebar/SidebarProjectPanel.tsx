@@ -2,6 +2,7 @@ import { Button, Checkbox, Dropdown, Empty, Input, Modal, Spin, Tooltip, message
 import { WorkbenchEmptyArtwork } from "@/components/ui/WorkbenchGlyph";
 import type { InputRef, MenuProps } from "antd";
 import {
+  AimOutlined,
   CompressOutlined,
   CopyOutlined,
   DeleteOutlined,
@@ -17,6 +18,7 @@ import {
   SnippetsOutlined,
 } from "@ant-design/icons";
 import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue, useId } from "react";
 import type {
@@ -45,13 +47,72 @@ import {
 import type { ExplorerRevealPathDetail } from "@/lib/explorer";
 import { getFileIcon } from "@/lib/fileIcon";
 import { showWorkbenchFeedback } from "@/lib/workbenchFeedback";
-import { getTreeNavigation } from "./treeNavigation";
+import {
+  computeMarqueeRect,
+  getRenameSelectionRange,
+  getTreeNavigation,
+  mergeMarqueeSelection,
+  rectsIntersect,
+  type MarqueeRect,
+} from "./treeNavigation";
 import { TreeDisclosure } from "./TreeDisclosure";
 import { openGlobalTextSearch } from "@/lib/globalSearch";
 import { dispatchGitFileHistoryOpen } from "@/lib/gitGraphEvents";
 import { useAppStore } from "@/store";
 import type { FileTreeEntry, FileTreeEntryKind, FileTreeListing } from "@/types";
 import { useTranslation } from "react-i18next";
+
+const EXPANDED_PATHS_STORAGE_KEY = "krosna:explorer-expanded-paths:v1";
+const MAX_PERSISTED_EXPANDED_PROJECTS = 20;
+
+function readPersistedExpandedPaths(projectPath: string): Record<string, boolean> {
+  if (!projectPath || typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(EXPANDED_PATHS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string[]>;
+    const key = projectPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const list = parsed?.[key];
+    if (!Array.isArray(list)) return {};
+    const result: Record<string, boolean> = {};
+    for (const item of list) {
+      if (typeof item === "string" && item.trim()) {
+        result[item] = true;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedExpandedPaths(projectPath: string, expanded: Record<string, boolean>): void {
+  if (!projectPath || typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(EXPANDED_PATHS_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+    const key = projectPath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const nextStore: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(parsed ?? {})) {
+      if (k !== key && Array.isArray(v)) {
+        nextStore[k] = v;
+      }
+    }
+    const activePaths = Object.keys(expanded).filter((p) => expanded[p]);
+    if (activePaths.length > 0) {
+      nextStore[key] = activePaths;
+    }
+    const keys = Object.keys(nextStore);
+    if (keys.length > MAX_PERSISTED_EXPANDED_PROJECTS) {
+      for (const oldKey of keys.slice(0, keys.length - MAX_PERSISTED_EXPANDED_PROJECTS)) {
+        delete nextStore[oldKey];
+      }
+    }
+    window.localStorage.setItem(EXPANDED_PATHS_STORAGE_KEY, JSON.stringify(nextStore));
+  } catch {
+    // 忽略存储配额或隐私模式异常
+  }
+}
 
 interface ProjectRef {
   name: string;
@@ -92,9 +153,10 @@ interface SearchTreeNode {
   children: SearchTreeNode[];
 }
 
-interface PendingCreatedResource {
-  path: string;
-  kind: FileTreeEntryKind;
+interface InlineCreateState {
+  kind: "file" | "directory";
+  parentPath: string;
+  value: string;
 }
 
 interface PendingExternalCopy {
@@ -244,16 +306,12 @@ function isExplicitExternalCopyRename(copy: PendingExternalCopy): boolean {
 
 function isInvalidEntryName(name: string): boolean {
   const trimmedName = name.trim();
-  return !trimmedName || trimmedName === "." || trimmedName === ".." || /[\\/]/.test(trimmedName);
-}
-
-function buildDefaultResourceName(type: "file" | "directory", attempt: number): string {
-  const baseName = type === "file" ? "untitled" : "new-folder";
-  if (attempt === 0) {
-    return baseName;
-  }
-
-  return `${baseName}-${attempt}`;
+  return (
+    !trimmedName ||
+    trimmedName === "." ||
+    trimmedName === ".." ||
+    /[\\/:*?"<>|]/.test(trimmedName)
+  );
 }
 
 function buildSearchTree(rootPath: string, entries: FileTreeEntry[]): ResourceTreeNode[] {
@@ -400,17 +458,30 @@ function SidebarProjectPanel({
   const [renameSubmitting, setRenameSubmitting] = useState(false);
   const [deletingEntries, setDeletingEntries] = useState<FileTreeEntry[]>([]);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
-  const [createSubmitting, setCreateSubmitting] = useState(false);
   const [pasteSubmitting, setPasteSubmitting] = useState(false);
   const [clipboardReadSubmitting, setClipboardReadSubmitting] = useState(false);
   const [clipboardPaths, setClipboardPaths] = useState<string[]>([]);
   const [clipboardOperation, setClipboardOperation] = useState<ResourceClipboardOperation>("copy");
-  const [pendingCreatedResource, setPendingCreatedResource] = useState<PendingCreatedResource | null>(null);
+  const [inlineCreate, setInlineCreate] = useState<InlineCreateState | null>(null);
+  const [inlineCreateSubmitting, setInlineCreateSubmitting] = useState(false);
   const [pendingExternalCopy, setPendingExternalCopy] = useState<PendingExternalCopy | null>(null);
   const [externalCopySubmitting, setExternalCopySubmitting] = useState(false);
   const renameInputRef = useRef<InputRef | null>(null);
   const renameCommitInFlightRef = useRef(false);
+  const inlineCreateInputRef = useRef<InputRef | null>(null);
+  const inlineCreateCommitInFlightRef = useRef(false);
   const suppressNextClickPathRef = useRef<string | null>(null);
+  const activeProjectPathRef = useRef(projectRootPath);
+  activeProjectPathRef.current = projectRootPath;
+  const projectGenerationRef = useRef(0);
+  const requestGenerationRef = useRef(0);
+  const directoryGenerationRef = useRef<Map<string, number>>(new Map());
+  const isDraggingResourceRef = useRef(false);
+  const isMarqueeSelectingRef = useRef(false);
+  const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+  const lastManualScrollAtRef = useRef(0);
+  const programmaticScrollAtRef = useRef(0);
+  const lastAutoRevealedPathRef = useRef<string | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [contextMenuPath, setContextMenuPathState] = useState<string | null>(null);
@@ -422,6 +493,21 @@ function SidebarProjectPanel({
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const treeId = useId();
   const setResourceDragState = useAppStore((s) => s.setResourceDragState);
+  const activeFileTabPath = useAppStore((s) => {
+    if (!s.panesById || !s.tabsById) return null;
+    const paneId = s.activePaneId ?? "main";
+    const pane = s.panesById[paneId] ?? s.panesById["main"];
+    const tabId = pane?.activeTabId;
+    if (!tabId) return null;
+    const tab = s.tabsById[tabId];
+    return tab?.kind === "file" ? tab.resourceId : null;
+  });
+  const activeProjectFilePath = useMemo(() => {
+    if (!currentProject || !activeFileTabPath) return null;
+    if (!isPathInsideRoot(currentProject.path, activeFileTabPath)) return null;
+    if (normalizePath(activeFileTabPath) === normalizePath(currentProject.path)) return null;
+    return activeFileTabPath;
+  }, [activeFileTabPath, currentProject]);
 
   const normalizedSelectedPaths = useMemo(
     () => new Set(selectedPaths.map((path) => normalizePath(path))),
@@ -437,7 +523,17 @@ function SidebarProjectPanel({
   const loadDirectory = useCallback(
     async (directoryPath?: string | null): Promise<FileTreeListing | null> => {
       if (!currentProject) return null;
-      const requestPath = directoryPath ?? currentProject.path;
+      const requestProjectPath = currentProject.path;
+      const requestPath = directoryPath ?? requestProjectPath;
+      const normalizedRequestPath = normalizePath(requestPath);
+      const projectGeneration = projectGenerationRef.current;
+      const requestGeneration = ++requestGenerationRef.current;
+      directoryGenerationRef.current.set(normalizedRequestPath, requestGeneration);
+
+      const isStaleRequest = () =>
+        projectGeneration !== projectGenerationRef.current ||
+        normalizePath(activeProjectPathRef.current) !== normalizePath(requestProjectPath) ||
+        directoryGenerationRef.current.get(normalizedRequestPath) !== requestGeneration;
 
       if (directoryPath) {
         setLoadingDirectories((prev) => ({ ...prev, [requestPath]: true }));
@@ -446,7 +542,10 @@ function SidebarProjectPanel({
       }
 
       try {
-        const listing = await listProjectDirectory(currentProject.path, directoryPath ?? null);
+        const listing = await listProjectDirectory(requestProjectPath, directoryPath ?? null);
+        if (isStaleRequest()) {
+          return null;
+        }
         setError(null);
 
         if (directoryPath) {
@@ -466,13 +565,21 @@ function SidebarProjectPanel({
         }
         return listing;
       } catch (nextError) {
+        if (isStaleRequest()) {
+          return null;
+        }
         setError(nextError instanceof Error ? nextError.message : String(nextError));
         return null;
       } finally {
-        if (directoryPath) {
-          setLoadingDirectories((prev) => ({ ...prev, [requestPath]: false }));
-        } else {
-          setLoadingRoot(false);
+        const sameProject =
+          projectGeneration === projectGenerationRef.current &&
+          normalizePath(activeProjectPathRef.current) === normalizePath(requestProjectPath);
+        if (sameProject && directoryGenerationRef.current.get(normalizedRequestPath) === requestGeneration) {
+          if (directoryPath) {
+            setLoadingDirectories((prev) => ({ ...prev, [requestPath]: false }));
+          } else {
+            setLoadingRoot(false);
+          }
         }
       }
     },
@@ -480,9 +587,19 @@ function SidebarProjectPanel({
   );
 
   useEffect(() => {
+    projectGenerationRef.current += 1;
+    directoryGenerationRef.current.clear();
+    lastAutoRevealedPathRef.current = null;
     setContextMenuPath(null);
+    setInlineCreate(null);
+    setRenamingEntry(null);
+    setRenameValue("");
+    setError(null);
+    setLoadingRoot(false);
+    setLoadingDirectories({});
     if (!currentProject) return;
-    setExpandedPaths({});
+    const persistedExpanded = readPersistedExpandedPaths(currentProject.path);
+    setExpandedPaths(persistedExpanded);
     setLoadedDirectories({});
     setRootEntries([]);
     setSelectedPaths([currentProject.path]);
@@ -490,8 +607,39 @@ function SidebarProjectPanel({
     setSelectionAnchorPath(currentProject.path);
     setFilterValue("");
     setSearchResults([]);
-    void loadDirectory(null);
-  }, [currentProject, loadDirectory]);
+    const persistedList = Object.keys(persistedExpanded)
+      .filter((path) => persistedExpanded[path])
+      .sort((left, right) => normalizePath(left).split("/").length - normalizePath(right).split("/").length);
+    void (async () => {
+      const rootListing = await loadDirectory(null);
+      if (!rootListing || persistedList.length === 0) return;
+      const availableDirs = new Set(
+        rootListing.entries
+          .filter((entry) => entry.kind === "directory")
+          .map((entry) => entry.path)
+      );
+      const validExpanded: Record<string, boolean> = {};
+      for (const dirPath of persistedList) {
+        if (!availableDirs.has(dirPath)) continue;
+        const listing = await loadDirectory(dirPath);
+        if (!listing) continue;
+        validExpanded[dirPath] = true;
+        for (const entry of listing.entries) {
+          if (entry.kind === "directory") {
+            availableDirs.add(entry.path);
+          }
+        }
+      }
+      if (Object.keys(validExpanded).length !== persistedList.length) {
+        setExpandedPaths(validExpanded);
+      }
+    })();
+  }, [currentProject, loadDirectory, setContextMenuPath]);
+
+  useEffect(() => {
+    if (!currentProject) return;
+    writePersistedExpandedPaths(currentProject.path, expandedPaths);
+  }, [currentProject, expandedPaths]);
 
   useEffect(() => {
     if (!selectedPath) {
@@ -636,16 +784,70 @@ function SidebarProjectPanel({
     };
   }, [revealPath]);
 
+  const revealPathRef = useRef(revealPath);
+  revealPathRef.current = revealPath;
+
+  const scrollRowIntoViewIfNeeded = useCallback((row: HTMLElement) => {
+    const container = treeContainerRef.current;
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    if (
+      containerRect.height > 0 &&
+      rowRect.top >= containerRect.top &&
+      rowRect.bottom <= containerRect.bottom
+    ) {
+      return;
+    }
+    programmaticScrollAtRef.current = Date.now();
+    row.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  useEffect(() => {
+    if (!currentProject || !activeProjectFilePath) {
+      lastAutoRevealedPathRef.current = null;
+      return;
+    }
+    if (
+      lastAutoRevealedPathRef.current &&
+      normalizePath(lastAutoRevealedPathRef.current) === normalizePath(activeProjectFilePath)
+    ) {
+      return;
+    }
+    if (
+      filterValue.trim().length > 0 ||
+      renamingEntry ||
+      inlineCreate ||
+      isDraggingResourceRef.current ||
+      isMarqueeSelectingRef.current ||
+      isExternalDragOver ||
+      Date.now() - lastManualScrollAtRef.current < 1500
+    ) {
+      return;
+    }
+    lastAutoRevealedPathRef.current = activeProjectFilePath;
+    void revealPathRef.current(activeProjectFilePath, false);
+  }, [
+    activeProjectFilePath,
+    currentProject,
+    filterValue,
+    inlineCreate,
+    isExternalDragOver,
+    renamingEntry,
+  ]);
+
   useEffect(() => {
     if (!selectedPath) return;
     const frame = window.requestAnimationFrame(() => {
       const selectedRow = Array.from(
         treeContainerRef.current?.querySelectorAll<HTMLElement>(".app-file-tree-row[data-path]") ?? []
       ).find((row) => normalizePath(row.dataset.path ?? "") === normalizePath(selectedPath));
-      selectedRow?.scrollIntoView({ block: "nearest" });
+      if (selectedRow) {
+        scrollRowIntoViewIfNeeded(selectedRow);
+      }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [selectedPath]);
+  }, [scrollRowIntoViewIfNeeded, selectedPath]);
 
   const handleRefresh = useCallback(() => {
     if (!currentProject) return;
@@ -681,9 +883,70 @@ function SidebarProjectPanel({
     })();
   }, [currentProject, expandedPaths, loadedDirectories, loadDirectory]);
 
+  const refreshExpandedTreeRef = useRef(handleRefresh);
+  refreshExpandedTreeRef.current = handleRefresh;
+  const isBusyEditingRef = useRef(false);
+  isBusyEditingRef.current = !!inlineCreate || !!renamingEntry || isMarqueeSelectingRef.current;
+
+  useEffect(() => {
+    if (!currentProject) return;
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    let debounceTimer: number | null = null;
+
+    const setup = async () => {
+      try {
+        const remove = await listen<{ projectPath: string; kind: string }>("git:file-change", (event) => {
+          if (normalizePath(event.payload.projectPath) !== normalizePath(currentProject.path)) {
+            return;
+          }
+          if (debounceTimer !== null) {
+            window.clearTimeout(debounceTimer);
+          }
+          debounceTimer = window.setTimeout(() => {
+            debounceTimer = null;
+            if (!isBusyEditingRef.current) {
+              refreshExpandedTreeRef.current();
+            }
+          }, 500);
+        });
+        if (cancelled) {
+          remove();
+          return;
+        }
+        unlisten = remove;
+      } catch {
+        // 非 Tauri 测试环境无事件总线时静默跳过
+      }
+    };
+    void setup();
+
+    return () => {
+      cancelled = true;
+      if (debounceTimer !== null) {
+        window.clearTimeout(debounceTimer);
+      }
+      unlisten?.();
+    };
+  }, [currentProject]);
+
   const handleCollapseAll = useCallback(() => {
     setExpandedPaths({});
   }, []);
+
+  const handleRetry = useCallback(() => {
+    if (!currentProject) return;
+    setError(null);
+    if (filterValue.trim().length > 0) {
+      void refreshProjectView();
+      return;
+    }
+    if (rootEntries.length === 0) {
+      void loadDirectory(null);
+      return;
+    }
+    handleRefresh();
+  }, [currentProject, filterValue, handleRefresh, loadDirectory, refreshProjectView, rootEntries.length]);
 
   const handleToggleDirectory = useCallback(
     async (entry: FileTreeEntry) => {
@@ -1020,15 +1283,22 @@ function SidebarProjectPanel({
     }
 
     const timer = window.setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
+      const inputEl = renameInputRef.current?.input;
+      if (inputEl) {
+        inputEl.focus();
+        const { start, end } = getRenameSelectionRange(renamingEntry.name, renamingEntry.kind);
+        inputEl.setSelectionRange(start, end);
+      } else {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }
     }, 0);
 
     return () => window.clearTimeout(timer);
   }, [renamingEntry]);
 
   const handleOpenRename = useCallback((entry: FileTreeEntry) => {
-    setPendingCreatedResource(null);
+    setInlineCreate(null);
     selectOnlyPath(entry.path);
     setRenamingEntry(entry);
     setRenameValue(entry.name);
@@ -1037,9 +1307,9 @@ function SidebarProjectPanel({
   const handleCancelRename = useCallback(() => {
     if (renameSubmitting) return;
     renameCommitInFlightRef.current = false;
-    setPendingCreatedResource(null);
     setRenamingEntry(null);
     setRenameValue("");
+    treeContainerRef.current?.focus({ preventScroll: true });
   }, [renameSubmitting]);
 
   const handleConfirmRename = useCallback(async () => {
@@ -1048,17 +1318,10 @@ function SidebarProjectPanel({
     renameCommitInFlightRef.current = true;
     setRenameSubmitting(true);
     try {
-      const shouldOpenCreatedFile =
-        pendingCreatedResource?.kind === "file" &&
-        normalizePath(pendingCreatedResource.path) === normalizePath(renamingEntry.path);
       const nextPath = await renameProjectEntry(currentProject.path, renamingEntry.path, renameValue);
-      setPendingCreatedResource(null);
       setRenamingEntry(null);
       setRenameValue("");
       await refreshProjectView(nextPath, renamingEntry.kind === "directory");
-      if (shouldOpenCreatedFile) {
-        onOpenFile(nextPath);
-      }
     } catch (nextError) {
       message.error(
         nextError instanceof Error ? nextError.message : t("sidebar.resourceRenameFailed")
@@ -1067,7 +1330,7 @@ function SidebarProjectPanel({
       renameCommitInFlightRef.current = false;
       setRenameSubmitting(false);
     }
-  }, [currentProject, onOpenFile, pendingCreatedResource, refreshProjectView, renameValue, renamingEntry, t]);
+  }, [currentProject, refreshProjectView, renameValue, renamingEntry, t]);
 
   const handleRequestDeleteEntries = useCallback((entries: FileTreeEntry[]) => {
     if (entries.length === 0) return;
@@ -1101,7 +1364,7 @@ function SidebarProjectPanel({
 
   const handleStartResourceDrag = useCallback(
     (event: ReactPointerEvent<HTMLElement>, entry: FileTreeEntry) => {
-      if (event.button !== 0 || !currentProject || renamingEntry) return;
+      if (event.button !== 0 || event.altKey || !currentProject || renamingEntry) return;
 
       const dragEntries =
         selectedEntries.some((selected) => normalizePath(selected.path) === normalizePath(entry.path))
@@ -1135,6 +1398,7 @@ function SidebarProjectPanel({
         window.removeEventListener("pointermove", handleMove);
         window.removeEventListener("pointerup", handleUp);
         window.removeEventListener("pointercancel", handleCancel);
+        isDraggingResourceRef.current = false;
         if (dragging) {
           document.body.style.userSelect = previousUserSelect;
         }
@@ -1143,6 +1407,7 @@ function SidebarProjectPanel({
       const beginDragging = () => {
         if (dragging) return;
         dragging = true;
+        isDraggingResourceRef.current = true;
         previousUserSelect = document.body.style.userSelect;
         document.body.style.userSelect = "none";
         suppressNextClickPathRef.current = entry.path;
@@ -1186,6 +1451,190 @@ function SidebarProjectPanel({
       window.addEventListener("pointercancel", handleCancel);
     },
     [currentProject, renamingEntry, selectedEntries, setResourceDragState]
+  );
+
+  const handleTreeMarqueePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (
+        event.button !== 0 ||
+        !currentProject ||
+        renamingEntry ||
+        inlineCreate ||
+        loadingRoot ||
+        searchLoading ||
+        !!error
+      ) {
+        return;
+      }
+      const container = treeContainerRef.current;
+      const target = event.target as HTMLElement | null;
+      if (!container || !target || !container.contains(target)) {
+        return;
+      }
+      if (target.closest("input, textarea, a, [data-inline-create=\"true\"], button:not(.app-file-tree-row)")) {
+        return;
+      }
+      const startedOnRow = !!target.closest(".app-file-tree-row");
+      if (startedOnRow && !event.altKey) {
+        return;
+      }
+
+      const startRect = container.getBoundingClientRect();
+      const downClientX = event.clientX;
+      const downClientY = event.clientY;
+      const startContentX = Math.max(0, Math.min(downClientX - startRect.left + container.scrollLeft, container.scrollWidth));
+      const startContentY = Math.max(0, Math.min(downClientY - startRect.top + container.scrollTop, container.scrollHeight));
+      const additive = event.ctrlKey || event.metaKey || event.shiftKey;
+      const basePaths = additive
+        ? selectedPaths.filter((path) => normalizePath(path) !== normalizePath(projectRootPath))
+        : [];
+      const previousSelectedPath = selectedPath;
+      const previousSelectedPaths = selectedPaths;
+      const previousAnchorPath = selectionAnchorPath;
+
+      let marqueeActive = false;
+      let lastClientX = downClientX;
+      let lastClientY = downClientY;
+      let autoScrollRaf = 0;
+      let previousUserSelect = "";
+
+      const updateSelectionFromClient = (clientX: number, clientY: number) => {
+        const currentContainer = treeContainerRef.current;
+        if (!currentContainer) return;
+        const rect = currentContainer.getBoundingClientRect();
+        const maxWidth = Math.max(currentContainer.scrollWidth, rect.width);
+        const maxHeight = Math.max(currentContainer.scrollHeight, rect.height);
+        const contentX = Math.max(0, Math.min(clientX - rect.left + currentContainer.scrollLeft, maxWidth));
+        const contentY = Math.max(0, Math.min(clientY - rect.top + currentContainer.scrollTop, maxHeight));
+        const box = computeMarqueeRect(startContentX, startContentY, contentX, contentY);
+        setMarqueeRect(box);
+
+        const viewBox = {
+          left: rect.left + box.left - currentContainer.scrollLeft,
+          top: rect.top + box.top - currentContainer.scrollTop,
+          right: rect.left + box.left + box.width - currentContainer.scrollLeft,
+          bottom: rect.top + box.top + box.height - currentContainer.scrollTop,
+        };
+        const rows = currentContainer.querySelectorAll<HTMLElement>(".app-file-tree-row[data-path]");
+        const intersected: string[] = [];
+        rows.forEach((row) => {
+          const path = row.getAttribute("data-path");
+          if (!path) return;
+          const rowRect = row.getBoundingClientRect();
+          if (rectsIntersect(viewBox, rowRect)) {
+            intersected.push(path);
+          }
+        });
+
+        const nextPaths = mergeMarqueeSelection(basePaths, intersected, additive);
+        setSelectedPaths(nextPaths);
+        const focusTarget = nextPaths[nextPaths.length - 1] ?? projectRootPath;
+        setSelectedPath(focusTarget);
+        setSelectionAnchorPath(focusTarget);
+      };
+
+      const stepAutoScroll = () => {
+        autoScrollRaf = 0;
+        const currentContainer = treeContainerRef.current;
+        if (!marqueeActive || !currentContainer) return;
+        const rect = currentContainer.getBoundingClientRect();
+        const edgeThreshold = 24;
+        let deltaY = 0;
+        if (lastClientY < rect.top + edgeThreshold) {
+          deltaY = -Math.min(14, Math.max(4, Math.ceil((rect.top + edgeThreshold - lastClientY) / 3)));
+        } else if (lastClientY > rect.bottom - edgeThreshold) {
+          deltaY = Math.min(14, Math.max(4, Math.ceil((lastClientY - (rect.bottom - edgeThreshold)) / 3)));
+        }
+        if (deltaY !== 0) {
+          const prevScrollTop = currentContainer.scrollTop;
+          currentContainer.scrollTop = Math.max(0, prevScrollTop + deltaY);
+          if (currentContainer.scrollTop !== prevScrollTop) {
+            lastManualScrollAtRef.current = Date.now();
+            updateSelectionFromClient(lastClientX, lastClientY);
+          }
+          autoScrollRaf = window.requestAnimationFrame(stepAutoScroll);
+        }
+      };
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        window.removeEventListener("pointercancel", handleCancel);
+        window.removeEventListener("keydown", handleEscape, true);
+        if (autoScrollRaf) {
+          window.cancelAnimationFrame(autoScrollRaf);
+          autoScrollRaf = 0;
+        }
+        if (marqueeActive) {
+          document.body.style.userSelect = previousUserSelect;
+        }
+        isMarqueeSelectingRef.current = false;
+        setMarqueeRect(null);
+      };
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        lastClientX = moveEvent.clientX;
+        lastClientY = moveEvent.clientY;
+        if (!marqueeActive) {
+          if (Math.hypot(lastClientX - downClientX, lastClientY - downClientY) < 4) {
+            return;
+          }
+          marqueeActive = true;
+          isMarqueeSelectingRef.current = true;
+          previousUserSelect = document.body.style.userSelect;
+          document.body.style.userSelect = "none";
+          container.focus({ preventScroll: true });
+        }
+        moveEvent.preventDefault();
+        updateSelectionFromClient(lastClientX, lastClientY);
+        if (!autoScrollRaf) {
+          const rect = container.getBoundingClientRect();
+          if (lastClientY < rect.top + 24 || lastClientY > rect.bottom - 24) {
+            autoScrollRaf = window.requestAnimationFrame(stepAutoScroll);
+          }
+        }
+      };
+
+      const suppressOneClickIfNeeded = () => {
+        if (!marqueeActive) return;
+        const suppressClick = (clickEvent: MouseEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+        };
+        window.addEventListener("click", suppressClick, { capture: true, once: true });
+        window.setTimeout(() => {
+          window.removeEventListener("click", suppressClick, true);
+        }, 0);
+      };
+
+      const handleUp = () => {
+        const wasActive = marqueeActive;
+        cleanup();
+        if (wasActive) {
+          suppressOneClickIfNeeded();
+        }
+      };
+
+      const handleCancel = () => {
+        cleanup();
+      };
+
+      const handleEscape = (keyEvent: KeyboardEvent) => {
+        if (keyEvent.key !== "Escape") return;
+        keyEvent.preventDefault();
+        keyEvent.stopPropagation();
+        cleanup();
+        setSelectedPaths(previousSelectedPaths);
+        setSelectedPath(previousSelectedPath);
+        setSelectionAnchorPath(previousAnchorPath);
+      };
+
+      window.addEventListener("pointermove", handleMove, { passive: false });
+      window.addEventListener("pointerup", handleUp);
+      window.addEventListener("pointercancel", handleCancel);
+      window.addEventListener("keydown", handleEscape, true);
+    },
+    [currentProject, error, inlineCreate, loadingRoot, projectRootPath, renamingEntry, searchLoading, selectedPath, selectedPaths, selectionAnchorPath]
   );
 
   const handlePasteEntries = useCallback(
@@ -1374,61 +1823,114 @@ function SidebarProjectPanel({
     t,
   ]);
 
-  const handleCreateResource = useCallback(
-    async (type: "file" | "directory", parentPath: string) => {
-      if (!currentProject || createSubmitting) return;
+  useEffect(() => {
+    if (!inlineCreate) {
+      inlineCreateCommitInFlightRef.current = false;
+      return;
+    }
 
-      setCreateSubmitting(true);
-      try {
-        let nextPath = "";
-        let createdName = "";
+    const timer = window.setTimeout(() => {
+      inlineCreateInputRef.current?.focus();
+    }, 0);
 
-        for (let attempt = 0; attempt < 100; attempt += 1) {
-          const candidateName = buildDefaultResourceName(type, attempt);
+    return () => window.clearTimeout(timer);
+  }, [inlineCreate]);
 
-          try {
-            nextPath =
-              type === "file"
-                ? await createProjectFile(currentProject.path, parentPath, candidateName)
-                : await createProjectDirectory(currentProject.path, parentPath, candidateName);
-            createdName = candidateName;
-            break;
-          } catch (nextError) {
-            const messageText = nextError instanceof Error ? nextError.message : String(nextError);
-            if (!messageText.includes("同名文件或文件夹已存在")) {
-              throw nextError;
-            }
+  const handleStartInlineCreate = useCallback(
+    async (kind: "file" | "directory", parentPath: string) => {
+      if (!currentProject || inlineCreateSubmitting || renameSubmitting) return;
+      if (renamingEntry) {
+        setRenamingEntry(null);
+        setRenameValue("");
+      }
+      if (filterValue.trim().length > 0) {
+        setFilterValue("");
+      }
+
+      if (normalizePath(parentPath) !== normalizePath(currentProject.path)) {
+        const pathsToExpand = getDirectoryPathsToExpand(currentProject.path, parentPath, true);
+        for (const path of pathsToExpand) {
+          if (!loadedDirectories[path]) {
+            await loadDirectory(path);
           }
         }
-
-        if (!nextPath) {
-          throw new Error(type === "file" ? t("sidebar.resourceFileCreateFailed") : t("sidebar.resourceFolderCreateFailed"));
-        }
-
-        await refreshProjectView(nextPath, type === "directory");
-        const nextEntry: FileTreeEntry = {
-          name: getBaseName(nextPath) || createdName,
-          path: nextPath,
-          kind: type === "file" ? "file" : "directory",
-          hasChildren: false,
-        };
-        setPendingCreatedResource({ path: nextPath, kind: nextEntry.kind });
-        setRenamingEntry(nextEntry);
-        setRenameValue(nextEntry.name);
-      } catch (nextError) {
-        message.error(
-          nextError instanceof Error
-            ? nextError.message
-            : type === "file"
-            ? t("sidebar.resourceFileCreateFailed")
-            : t("sidebar.resourceFolderCreateFailed")
-        );
-      } finally {
-        setCreateSubmitting(false);
+        setExpandedPaths((prev) => {
+          const next = { ...prev };
+          for (const path of pathsToExpand) {
+            next[path] = true;
+          }
+          return next;
+        });
+      } else {
+        await Promise.resolve();
       }
+
+      setInlineCreate({
+        kind,
+        parentPath,
+        value: "",
+      });
     },
-    [createSubmitting, currentProject, refreshProjectView, t]
+    [
+      currentProject,
+      filterValue,
+      inlineCreateSubmitting,
+      loadDirectory,
+      loadedDirectories,
+      renameSubmitting,
+      renamingEntry,
+    ]
   );
+
+  const handleCancelInlineCreate = useCallback(() => {
+    if (inlineCreateSubmitting) return;
+    inlineCreateCommitInFlightRef.current = false;
+    setInlineCreate(null);
+    treeContainerRef.current?.focus({ preventScroll: true });
+  }, [inlineCreateSubmitting]);
+
+  const handleConfirmInlineCreate = useCallback(async () => {
+    if (!currentProject || !inlineCreate || inlineCreateCommitInFlightRef.current) return;
+
+    const trimmedName = inlineCreate.value.trim();
+    if (!trimmedName) {
+      handleCancelInlineCreate();
+      return;
+    }
+
+    if (isInvalidEntryName(trimmedName)) {
+      message.warning(t("sidebar.invalidEntryName"));
+      window.setTimeout(() => inlineCreateInputRef.current?.focus(), 0);
+      return;
+    }
+
+    inlineCreateCommitInFlightRef.current = true;
+    setInlineCreateSubmitting(true);
+    try {
+      const nextPath =
+        inlineCreate.kind === "file"
+          ? await createProjectFile(currentProject.path, inlineCreate.parentPath, trimmedName)
+          : await createProjectDirectory(currentProject.path, inlineCreate.parentPath, trimmedName);
+      const createdKind = inlineCreate.kind;
+      setInlineCreate(null);
+      await refreshProjectView(nextPath, createdKind === "directory");
+      if (createdKind === "file") {
+        onOpenFile(nextPath);
+      }
+    } catch (nextError) {
+      message.error(
+        nextError instanceof Error
+          ? nextError.message
+          : inlineCreate.kind === "file"
+          ? t("sidebar.resourceFileCreateFailed")
+          : t("sidebar.resourceFolderCreateFailed")
+      );
+      window.setTimeout(() => inlineCreateInputRef.current?.focus(), 0);
+    } finally {
+      inlineCreateCommitInFlightRef.current = false;
+      setInlineCreateSubmitting(false);
+    }
+  }, [currentProject, handleCancelInlineCreate, inlineCreate, onOpenFile, refreshProjectView, t]);
 
   const handleConfirmDelete = useCallback(async () => {
     if (!currentProject || deletingEntries.length === 0) return;
@@ -1463,12 +1965,12 @@ function SidebarProjectPanel({
       selectOnlyPath(projectRootPath);
 
       if (key === "create-file") {
-        void handleCreateResource("file", projectRootPath);
+        void handleStartInlineCreate("file", projectRootPath);
         return;
       }
 
       if (key === "create-folder") {
-        void handleCreateResource("directory", projectRootPath);
+        void handleStartInlineCreate("directory", projectRootPath);
         return;
       }
 
@@ -1491,7 +1993,7 @@ function SidebarProjectPanel({
         openGlobalTextSearch(projectRootPath);
       }
     },
-    [projectRootPath, handleCreateResource, handlePasteFromClipboard, handleRefresh, onOpenInFileManager, selectOnlyPath]
+    [projectRootPath, handleStartInlineCreate, handlePasteFromClipboard, handleRefresh, onOpenInFileManager, selectOnlyPath]
   );
 
   const backgroundMenuItems = useMemo<MenuProps["items"]>(
@@ -1514,22 +2016,85 @@ function SidebarProjectPanel({
       },
       { type: "divider" },
       {
-        key: "find-in-directory",
-        icon: <SearchOutlined />,
-        label: t("globalSearch.findInDirectory"),
-      },
-      {
-        key: "refresh",
-        icon: <ReloadOutlined />,
-        label: refreshText,
-      },
-      {
         key: "open-current-directory",
         icon: <FolderOpenFilled />,
         label: t("sidebar.openCurrentDirectoryInManager"),
       },
     ],
-    [canPaste, refreshText, t]
+    [canPaste, t]
+  );
+
+  const renderInlineCreateRow = useCallback(
+    (depth: number): ReactNode => {
+      if (!inlineCreate) return null;
+      const isDirectory = inlineCreate.kind === "directory";
+      const previewName = inlineCreate.value.trim() || (isDirectory ? "folder" : "file");
+      const visual = getFileIcon(previewName, isDirectory, false);
+
+      return (
+        <div
+          key="__inline-create__"
+          className="app-file-tree-row w-full text-left"
+          data-inline-create="true"
+          data-kind={inlineCreate.kind}
+          style={{ paddingLeft: 8 + depth * 16 }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {isDirectory ? (
+            <TreeDisclosure expanded={false} loading={false} />
+          ) : (
+            <span className="app-file-tree-arrow" aria-hidden="true" />
+          )}
+          <span className="app-file-tree-icon" style={{ color: visual.color }}>
+            {visual.icon}
+          </span>
+          <Input
+            ref={inlineCreateInputRef}
+            size="small"
+            value={inlineCreate.value}
+            placeholder={
+              isDirectory ? t("sidebar.newFolderPlaceholder") : t("sidebar.newFilePlaceholder")
+            }
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setInlineCreate((prev) => (prev ? { ...prev, value: nextValue } : prev));
+            }}
+            onPressEnter={() => void handleConfirmInlineCreate()}
+            onBlur={(event) => {
+              const related = event.relatedTarget as HTMLElement | null;
+              if (
+                !inlineCreate.value.trim() &&
+                related &&
+                (related === treeContainerRef.current ||
+                  !!related.closest('.app-file-tree-row, [role="menu"], [role="menuitem"]'))
+              ) {
+                window.requestAnimationFrame(() => {
+                  inlineCreateInputRef.current?.focus();
+                });
+                return;
+              }
+              void handleConfirmInlineCreate();
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Escape") {
+                event.preventDefault();
+                handleCancelInlineCreate();
+              }
+            }}
+            disabled={inlineCreateSubmitting}
+            className="min-w-0"
+          />
+        </div>
+      );
+    },
+    [
+      handleCancelInlineCreate,
+      handleConfirmInlineCreate,
+      inlineCreate,
+      inlineCreateSubmitting,
+      t,
+    ]
   );
 
   const renderNodes = useCallback(
@@ -1556,12 +2121,12 @@ function SidebarProjectPanel({
           }
 
           if (key === "create-file") {
-            void handleCreateResource("file", getCreateTargetDirectory(projectRootPath, entry));
+            void handleStartInlineCreate("file", getCreateTargetDirectory(projectRootPath, entry));
             return;
           }
 
           if (key === "create-folder") {
-            void handleCreateResource("directory", getCreateTargetDirectory(projectRootPath, entry));
+            void handleStartInlineCreate("directory", getCreateTargetDirectory(projectRootPath, entry));
             return;
           }
 
@@ -1624,7 +2189,9 @@ function SidebarProjectPanel({
           }
 
           if (key === "delete") {
-            handleRequestDeleteEntries([entry]);
+            handleRequestDeleteEntries(
+              isSelected && selectionCount > 1 ? actionableSelectedEntries : [entry]
+            );
           }
         };
 
@@ -1833,9 +2400,21 @@ function SidebarProjectPanel({
               </Dropdown>
             )}
 
-            {isDirectory && isExpanded && children.length > 0 && (
-              <div role="group">{renderNodes(children, depth + 1, searchMode)}</div>
-            )}
+            {isDirectory &&
+              isExpanded &&
+              (children.length > 0 ||
+                (!searchMode &&
+                  !!inlineCreate &&
+                  normalizePath(inlineCreate.parentPath) === normalizePath(entry.path))) && (
+                <div role="group">
+                  {!searchMode &&
+                  inlineCreate &&
+                  normalizePath(inlineCreate.parentPath) === normalizePath(entry.path)
+                    ? renderInlineCreateRow(depth + 1)
+                    : null}
+                  {renderNodes(children, depth + 1, searchMode)}
+                </div>
+              )}
           </div>
         );
       }),
@@ -1852,12 +2431,14 @@ function SidebarProjectPanel({
       handleCutEntries,
       handlePasteFromClipboard,
       handleRequestDeleteEntries,
-      handleCreateResource,
+      handleStartInlineCreate,
       handleConfirmRename,
       handleSelectEntry,
       handleStartResourceDrag,
       handleOpenRename,
       handleToggleDirectory,
+      inlineCreate,
+      renderInlineCreateRow,
       canPaste,
       treeId,
       contextMenuPath,
@@ -1888,10 +2469,10 @@ function SidebarProjectPanel({
       const lowerKey = event.key.toLowerCase();
 
       if (!hasPrimaryModifier && !event.altKey &&
-        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter"].includes(event.key)) {
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "].includes(event.key)) {
         event.preventDefault();
         event.stopPropagation();
-        if (event.key === "Enter" && (event.repeat || event.shiftKey)) return;
+        if ((event.key === "Enter" || event.key === " ") && (event.repeat || event.shiftKey)) return;
         const action = getTreeNavigation(isSearchMode ? searchTree : visibleTree, selectedPath, event.key, isSearchMode);
         if (!action) return;
         if (action.type === "select") {
@@ -1908,10 +2489,26 @@ function SidebarProjectPanel({
           }
         } else if (action.type === "open") {
           onOpenFile(action.path, { preview: false });
+        } else if (action.type === "preview") {
+          onOpenFile(action.path, { preview: true });
         } else {
           const entry = knownEntries.find((item) => item.path === action.path);
           if (entry) void handleToggleDirectory(entry);
         }
+        return;
+      }
+
+      if (!hasPrimaryModifier && !event.shiftKey && !event.altKey && event.key === "F2") {
+        if (renameSubmitting || inlineCreate || !selectedPath || normalizePath(selectedPath) === normalizePath(projectRootPath)) {
+          return;
+        }
+        const entry = knownEntries.find(
+          (item) => normalizePath(item.path) === normalizePath(selectedPath)
+        );
+        if (!entry) return;
+        event.preventDefault();
+        event.stopPropagation();
+        handleOpenRename(entry);
         return;
       }
 
@@ -1974,6 +2571,10 @@ function SidebarProjectPanel({
       visibleSelectablePaths,
       knownEntries,
       handleToggleDirectory,
+      handleOpenRename,
+      inlineCreate,
+      projectRootPath,
+      renameSubmitting,
       onOpenFile,
       loadingRoot,
       searchLoading,
@@ -1989,21 +2590,31 @@ function SidebarProjectPanel({
   return (
     <div className="app-sidebar-panel flex h-full min-h-0 flex-col">
       <div
-        className="flex items-center justify-between px-2 pb-2 pt-1"
+        className="flex items-center justify-between gap-2 px-2 pb-2 pt-1"
         style={{ borderBottom: "1px solid var(--cs-border-sidebar)" }}
       >
-        <div className="text-sm font-semibold" style={{ color: "var(--cs-text-primary)" }}>
-          {panelTitle}
-        </div>
-        <div className="flex items-center gap-1">
-          <Tooltip title={refreshText} mouseEnterDelay={0.4}>
+        <Tooltip title={currentProject.path} mouseEnterDelay={0.4}>
+          <div
+            className="min-w-0 truncate text-sm font-semibold"
+            style={{ color: "var(--cs-text-primary)" }}
+          >
+            {currentProject.name || panelTitle}
+          </div>
+        </Tooltip>
+        <div className="flex shrink-0 items-center gap-1">
+          <Tooltip title={t("sidebar.locateActiveFile")} mouseEnterDelay={0.4}>
             <button
               type="button"
               className="app-file-toolbar-button"
-              onClick={handleRefresh}
-              aria-label={refreshText}
+              disabled={!activeProjectFilePath}
+              onClick={() => {
+                if (activeProjectFilePath) {
+                  void revealPath(activeProjectFilePath, false);
+                }
+              }}
+              aria-label={t("sidebar.locateActiveFile")}
             >
-              <ReloadOutlined />
+              <AimOutlined />
             </button>
           </Tooltip>
           <Tooltip title={t("sidebar.collapseAll")} mouseEnterDelay={0.4}>
@@ -2014,6 +2625,16 @@ function SidebarProjectPanel({
               aria-label={t("sidebar.collapseAll")}
             >
               <CompressOutlined />
+            </button>
+          </Tooltip>
+          <Tooltip title={refreshText} mouseEnterDelay={0.4}>
+            <button
+              type="button"
+              className="app-file-toolbar-button"
+              onClick={handleRefresh}
+              aria-label={refreshText}
+            >
+              <ReloadOutlined />
             </button>
           </Tooltip>
         </div>
@@ -2035,12 +2656,15 @@ function SidebarProjectPanel({
           onOpenChange={(open) => handleContextMenuOpenChange("__background__", open)}
           menu={{ items: backgroundMenuItems, onClick: (info) => {
             setContextMenuPath(null);
-            treeContainerRef.current?.focus({ preventScroll: true });
+            if (info.key !== "create-file" && info.key !== "create-folder") {
+              treeContainerRef.current?.focus({ preventScroll: true });
+            }
             handleBackgroundMenuClick(info);
           } }} trigger={["contextMenu"]}>
           <div
             ref={treeContainerRef}
-            className="app-project-tree-scroll mt-1 flex-1 min-h-0 overflow-y-auto"
+            className="app-project-tree-scroll relative mt-1 flex-1 min-h-0 overflow-y-auto"
+            style={{ paddingBottom: 40 }}
             data-explorer-shortcuts="true"
             role="tree"
             aria-label={panelTitle}
@@ -2049,11 +2673,17 @@ function SidebarProjectPanel({
               ? `${treeId}-${encodeURIComponent(selectedPath)}` : undefined}
             data-drag-over={isExternalDragOver && !dragOverPath ? "true" : "false"}
             tabIndex={0}
+            onScroll={() => {
+              if (Date.now() - programmaticScrollAtRef.current > 150) {
+                lastManualScrollAtRef.current = Date.now();
+              }
+            }}
             onFocus={(event) => {
               if (!loadingRoot && !searchLoading && !error && event.target === event.currentTarget && !visibleSelectablePaths.includes(selectedPath ?? "")) {
                 selectOnlyPath(visibleSelectablePaths[0] ?? null);
               }
             }}
+            onPointerDown={handleTreeMarqueePointerDown}
             onMouseDown={(event) => {
               const target = event.target as HTMLElement | null;
               if (target && event.currentTarget.contains(target) && !target.closest(".app-file-tree-row")) {
@@ -2071,8 +2701,16 @@ function SidebarProjectPanel({
             onKeyDown={handleTreeKeyDown}
           >
             {error ? (
-              <div className="px-2 py-3 text-[11px]" style={{ color: "#ff7875" }}>
-                {error}
+              <div className="flex items-center justify-between gap-2 px-2 py-3 text-[11px]" style={{ color: "#ff7875" }}>
+                <span className="min-w-0 break-words">{error}</span>
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={handleRetry}
+                  className="shrink-0 px-1 text-[11px]"
+                >
+                  {t("common.retry")}
+                </Button>
               </div>
             ) : loadingRoot ? (
               <div className="flex items-center gap-2 px-2 py-3 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
@@ -2092,13 +2730,37 @@ function SidebarProjectPanel({
                   {filterNoResultsText}
                 </div>
               )
-            ) : visibleTree.length > 0 ? (
-              <div>{renderNodes(visibleTree)}</div>
+            ) : visibleTree.length > 0 ||
+              (!!inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(projectRootPath)) ? (
+              <div>
+                {inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(projectRootPath)
+                  ? renderInlineCreateRow(0)
+                  : null}
+                {renderNodes(visibleTree)}
+              </div>
             ) : (
               <div className="px-2 py-3 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
                 {emptyFolderText}
               </div>
             )}
+            {marqueeRect ? (
+              <div
+                data-testid="explorer-marquee-box"
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: marqueeRect.left,
+                  top: marqueeRect.top,
+                  width: marqueeRect.width,
+                  height: marqueeRect.height,
+                  border: "1px solid color-mix(in srgb, var(--cs-primary) 72%, transparent)",
+                  background: "color-mix(in srgb, var(--cs-primary) 14%, transparent)",
+                  borderRadius: 2,
+                  pointerEvents: "none",
+                  zIndex: 5,
+                }}
+              />
+            ) : null}
           </div>
         </Dropdown>
       </div>

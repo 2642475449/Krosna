@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AppstoreAddOutlined,
-  ExportOutlined,
   FolderOpenOutlined,
   ReloadOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Drawer, Empty, Modal, Segmented, Tag, Tooltip, message } from "antd";
+import { Alert, Button, Empty, Modal, Segmented, Tag, message } from "antd";
 import { useTranslation } from "react-i18next";
 import {
   getClaudeMdDetail,
@@ -48,54 +46,6 @@ const COMPATIBLE_AGENTS: AiAgentId[] = [
   "pi",
 ];
 
-const TEMPLATE_SNIPPETS = [
-  {
-    key: "base",
-    titleKey: "settings.claudeMd.templates.base",
-    content: `# 项目协作指令
-
-本项目由本地多智能体环境协同开发，在执行代码修改时必须遵守以下约定：
-
-## 1. 角色与职责
-- 遵循单一职责，保持模块边界清晰。
-- 在对文件进行修改前，先阅读并理解已有的代码架构与上下文。
-
-## 2. 常用开发命令
-- 构建项目: \`pnpm build\`
-- 运行测试: \`pnpm test\`
-- 代码格式化: \`pnpm format\`
-`,
-  },
-  {
-    key: "frontend",
-    titleKey: "settings.claudeMd.templates.frontend",
-    content: `## 前端工程约定
-- **技术栈**: React 19 + TypeScript 5.8+ (严格模式) + Tailwind CSS。
-- **组件规范**: 组件文件使用 PascalCase 命名，优先使用 Tailwind CSS 实用类，禁止 inline style。
-- **状态流转**: 全局状态读写走 Zustand store，严禁在组件内部维护与外部平行的业务状态。
-- **国际化**: 所有用户可见文案必须定义在 \`src/locales/\`，严禁硬编码中英文字符串。
-`,
-  },
-  {
-    key: "tauri",
-    titleKey: "settings.claudeMd.templates.tauri",
-    content: `## Tauri / Rust 后端约定
-- **Rust Edition**: Rust 2021。
-- **IPC 调用规范**: 前端所有对 Rust 的调用必须经过 \`src/lib/api/\` 集中封装，禁止在 UI 组件内部直接 \`invoke()\`。
-- **错误处理**: 后端使用 \`Result<T, String>\` 或 \`thiserror\` 处理所有潜在故障，严禁直接 \`unwrap()\`。
-`,
-  },
-  {
-    key: "testing",
-    titleKey: "settings.claudeMd.templates.testing",
-    content: `## 测试与质量门禁
-- **测试框架**: Vitest (Node 环境，非 jsdom)。
-- **门禁要求**: 新增工具函数或 store slice 必须配套单测文件 \`*.test.ts\`。
-- **提交校验**: 每次修改提交前必须执行 \`pnpm test\` 与 \`pnpm build\` 验证无类型与构建报错。
-`,
-  },
-];
-
 function projectFile(projectPath: string | null, filePath: string) {
   if (!projectPath) return filePath;
   const normalizedRoot = projectPath.replace(/[\\/]+$/, "");
@@ -112,7 +62,6 @@ export function ClaudeMdPage() {
   const { t } = useTranslation();
   const currentProject = useAppStore((s) => s.currentProject);
   const projectPath = currentProject?.path ?? null;
-  const openFileTab = useAppStore((s) => s.openFileTab);
 
   // 顶级规范标准：多智能体通用规范 (AGENTS.md) vs Claude Code 专属规范 (CLAUDE.md)
   const [standard, setStandard] = useState<InstructionStandard>("agents");
@@ -140,8 +89,6 @@ export function ClaudeMdPage() {
   const setGenericDraft = useAgentInstructionsStore((state) => state.setDraft);
 
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
-  const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
-  const [pendingSnippet, setPendingSnippet] = useState<string | null>(null);
 
   // 动态构建 AGENTS.md 规范下的所有真实可选层级目标
   const agentsTargets = useMemo<TargetDescriptor[]>(() => [
@@ -393,37 +340,6 @@ export function ClaudeMdPage() {
     }
   }
 
-  // 在工作区全屏标签页中打开
-  function handleOpenInWorkspaceTab() {
-    if (!projectPath || !activeFilePath) return;
-    openFileTab(activeFilePath, { preview: false });
-    message.success(t("fileTabs.openedInTab", { name: fileName(activeFilePath) }));
-  }
-
-  // 从模板填入
-  function applySnippet(content: string) {
-    if (activeDraft.trim()) {
-      setPendingSnippet(content);
-    } else {
-      handleDraftChange(content.trim() + "\n");
-      setTemplateDrawerOpen(false);
-      message.success(t("settings.claudeMd.templateApplied"));
-    }
-  }
-
-  function handleConfirmApply(mode: "append" | "replace") {
-    if (!pendingSnippet) return;
-    if (mode === "append") {
-      const next = `${activeDraft.trimEnd()}\n\n${pendingSnippet.trim()}\n`;
-      handleDraftChange(next);
-    } else {
-      handleDraftChange(pendingSnippet.trim() + "\n");
-    }
-    setPendingSnippet(null);
-    setTemplateDrawerOpen(false);
-    message.success(t("settings.claudeMd.templateApplied"));
-  }
-
   return (
     <>
       <SettingsPageHeader
@@ -599,28 +515,6 @@ export function ClaudeMdPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* 从模板填入按钮 */}
-              <Button
-                size="small"
-                icon={<AppstoreAddOutlined />}
-                onClick={() => setTemplateDrawerOpen(true)}
-              >
-                {t("settings.claudeMd.applyTemplate")}
-              </Button>
-
-              {/* 在主工作区标签页打开 */}
-              {projectPath && activeExists && (
-                <Tooltip title={t("settings.claudeMd.openInWorkspace")}>
-                  <Button
-                    size="small"
-                    icon={<ExportOutlined />}
-                    onClick={handleOpenInWorkspaceTab}
-                  >
-                    {t("settings.claudeMd.openInWorkspace")}
-                  </Button>
-                </Tooltip>
-              )}
-
               {/* 编辑与 Markdown 预览切换 */}
               <Segmented<"edit" | "preview">
                 size="small"
@@ -670,74 +564,6 @@ export function ClaudeMdPage() {
           </div>
         </div>
       )}
-
-      {/* 模板与片段插入抽屉 */}
-      <Drawer
-        title={t("settings.claudeMd.templatesTitle")}
-        placement="right"
-        size={480}
-        open={templateDrawerOpen}
-        onClose={() => setTemplateDrawerOpen(false)}
-      >
-        <p className="text-xs text-[var(--cs-text-secondary)] mb-4 leading-relaxed">
-          {t("settings.claudeMd.templatesDesc")}
-        </p>
-
-        <div className="space-y-4">
-          {TEMPLATE_SNIPPETS.map((snippet) => (
-            <div
-              key={snippet.key}
-              className="rounded-lg border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-3"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-sm text-[var(--cs-text-primary)]">
-                  {t(snippet.titleKey)}
-                </span>
-                <Button
-                  size="small"
-                  type="primary"
-                  onClick={() => applySnippet(snippet.content)}
-                >
-                  {t("settings.claudeMd.applySnippet")}
-                </Button>
-              </div>
-              <pre className="max-h-36 overflow-auto rounded-sm bg-[var(--cs-bg-hover)] p-2 text-xs font-mono text-[var(--cs-text-secondary)] whitespace-pre-wrap">
-                {snippet.content.trim()}
-              </pre>
-            </div>
-          ))}
-        </div>
-      </Drawer>
-
-      {/* 确认覆盖或追加模板弹窗 */}
-      <Modal
-        open={pendingSnippet !== null}
-        title={t("settings.claudeMd.confirmApplyTemplateTitle")}
-        onCancel={() => setPendingSnippet(null)}
-        footer={[
-          <Button key="cancel" onClick={() => setPendingSnippet(null)}>
-            {t("common.cancel")}
-          </Button>,
-          <Button
-            key="replace"
-            danger
-            onClick={() => handleConfirmApply("replace")}
-          >
-            {t("settings.claudeMd.replaceTemplate")}
-          </Button>,
-          <Button
-            key="append"
-            type="primary"
-            onClick={() => handleConfirmApply("append")}
-          >
-            {t("settings.claudeMd.appendTemplate")}
-          </Button>,
-        ]}
-      >
-        <p className="m-0 text-sm leading-relaxed text-[var(--cs-text-secondary)]">
-          {t("settings.claudeMd.confirmApplyTemplateDesc")}
-        </p>
-      </Modal>
     </>
   );
 }

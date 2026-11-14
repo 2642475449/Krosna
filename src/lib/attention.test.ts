@@ -106,6 +106,55 @@ describe("projectAttentionItems", () => {
     });
   });
 
+  it.each(["process_error", "hook_error"])("resolves %s after a newer successful status even if the running event was missed", (eventType) => {
+    const [item] = projectAttentionItems(
+      [event({ eventType, revision: 7, createdAt: 700 })],
+      [session({ status: "completed", statusRevision: 8, statusUpdatedAt: 800 })]
+    );
+
+    expect(item).toMatchObject({
+      kind: "failure",
+      disposition: "resolved",
+      resolvedAt: 800,
+      resolutionReason: "session-recovered",
+    });
+  });
+
+  it.each(["process_error", "hook_error"])("retains %s during retry until success is confirmed", (eventType) => {
+    const source = event({ eventType, revision: 7, createdAt: 700 });
+    for (const status of ["starting", "running", "waiting", "error"] as const) {
+      expect(projectAttentionItems([source], [session({
+        status, statusRevision: 8, statusUpdatedAt: 800,
+      })])[0].disposition).toBe("open");
+    }
+  });
+
+  it("does not let an older or same-revision completion clear a newer failure", () => {
+    const source = event({ eventType: "process_error", revision: 8, createdAt: 800 });
+    for (const statusRevision of [7, 8]) {
+      expect(projectAttentionItems([source], [session({
+        status: "completed", statusRevision, statusUpdatedAt: 900,
+      })])[0].disposition).toBe("open");
+    }
+  });
+
+  it("uses timestamps to recover a legacy failure without a revision", () => {
+    const source = event({ eventType: "process_error", revision: null, createdAt: 700 });
+    expect(projectAttentionItems([source], [session({
+      status: "completed", statusRevision: 8, statusUpdatedAt: 800,
+    })])[0].disposition).toBe("resolved");
+    expect(projectAttentionItems([source], [session({
+      status: "completed", statusRevision: 8, statusUpdatedAt: 700,
+    })])[0].disposition).toBe("open");
+  });
+
+  it.each(["permission_request", "waiting_input", "assistant_complete"])("keeps %s until its own lifecycle resolves it", (eventType) => {
+    expect(projectAttentionItems(
+      [event({ eventType, revision: 7, createdAt: 700 })],
+      [session({ status: "completed", statusRevision: 8, statusUpdatedAt: 800 })]
+    )[0].disposition).toBe("open");
+  });
+
   it("resolves only a completion observed in the foreground", () => {
     const items = projectAttentionItems(
       [

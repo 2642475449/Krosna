@@ -85,7 +85,13 @@ function compareEventRecency(left: AttentionSourceEvent, right: AttentionSourceE
 }
 
 function statusSupersedesEvent(session: Session, event: AttentionSourceEvent): boolean {
-  if (session.status !== "running") return false;
+  // A completion status can arrive without the preceding running update or
+  // its paired attention event. It still proves an older failure recovered.
+  // Starting a retry alone does not prove that the failure has recovered.
+  const supersedingStatus = ATTENTION_EVENT_SEMANTICS[event.eventType]?.kind === "failure"
+    ? session.status === "completed"
+    : session.status === "running";
+  if (!supersedingStatus) return false;
 
   const statusRevision = session.statusRevision ?? 0;
   const sourceRevision = eventRevision(event);
@@ -131,7 +137,7 @@ function projectEvent(event: AttentionSourceEvent, session: Session): AttentionI
   } else if (statusSupersedesEvent(session, event)) {
     disposition = "resolved";
     resolvedAt = session.statusUpdatedAt;
-    resolutionReason = "new-run-started";
+    resolutionReason = session.status === "completed" ? "session-recovered" : "new-run-started";
   } else if (semantics.kind === "completion" && event.observedAtDelivery) {
     disposition = "resolved";
     resolvedAt = event.createdAt;

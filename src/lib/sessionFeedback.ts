@@ -15,7 +15,8 @@ export interface SessionFeedback {
 export function getSessionFeedback(session: Session, item?: AttentionItem, now = Date.now()): SessionFeedback | null {
   if (!isAiAgentId(session.agentId ?? "claude")) return null;
   const running = isSessionTurnRunning(session);
-  const superseded = running && item && (
+  const supersedingStatus = item?.kind === "failure" ? session.status === "completed" : running;
+  const superseded = supersedingStatus && item && (
     session.statusRevision && item.sourceRevision
       ? session.statusRevision > item.sourceRevision
       : (session.statusUpdatedAt ?? 0) > item.createdAt

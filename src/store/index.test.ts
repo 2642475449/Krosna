@@ -1732,3 +1732,85 @@ it("updates agent defaults atomically and round trips effort through SQLite snap
     applyPersistentSettingsToStore(previous);
   }
 });
+
+describe("file tab previews", () => {
+  const setupProjectStore = (projectPath = "D:/workspace/demo") => {
+    const store = createAppStore();
+    store.setState({
+      currentProject: { path: projectPath, name: "demo" },
+      projectWorkspaces: { [projectPath]: createDefaultWorkspace() },
+    });
+    return { store, projectPath };
+  };
+
+  it("promotes a preview tab on non-preview open and never downgrades a pinned tab on preview open", () => {
+    const { store, projectPath } = setupProjectStore();
+    const firstId = store.getState().openFileTab(`${projectPath}/src/a.ts`, { preview: true })!;
+    expect(store.getState().tabsById[firstId].preview).toBe(true);
+
+    store.getState().openFileTab(`${projectPath}/src/a.ts`, { preview: false });
+    expect(store.getState().tabsById[firstId].preview).toBe(false);
+
+    const secondId = store.getState().openFileTab(`${projectPath}/src/b.ts`, { preview: true })!;
+    expect(store.getState().tabsById[secondId].preview).toBe(true);
+
+    // Single-clicking an already pinned tab must keep it pinned and preserve the other preview tab
+    store.getState().openFileTab(`${projectPath}/src/a.ts`, { preview: true });
+    expect(store.getState().tabsById[firstId].preview).toBe(false);
+    expect(store.getState().tabsById[secondId].preview).toBe(true);
+    expect(store.getState().openTabs).toEqual([firstId, secondId]);
+  });
+
+  it("cleans up pane.history when replacing a preview tab", () => {
+    const { store, projectPath } = setupProjectStore();
+    const firstId = store.getState().openFileTab(`${projectPath}/src/one.ts`, { preview: true })!;
+    const secondId = store.getState().openFileTab(`${projectPath}/src/two.ts`, { preview: true })!;
+    const pane = store.getState().panesById[store.getState().activePaneId!];
+
+    expect(pane.tabIds).toEqual([secondId]);
+    expect(pane.history).toEqual([secondId]);
+    expect(pane.history).not.toContain(firstId);
+    expect(store.getState().tabsById[firstId]).toBeUndefined();
+  });
+
+  it("preserves a preview tab in tabsById while another split pane still references it", () => {
+    const { store, projectPath } = setupProjectStore();
+    const sharedId = store.getState().openFileTab(`${projectPath}/src/shared.ts`, { preview: true })!;
+    const originalPaneId = store.getState().activePaneId!;
+    store.getState().splitTab(sharedId, "right", originalPaneId, "copy");
+    const splitPaneId = store.getState().activePaneId!;
+    expect(splitPaneId).not.toBe(originalPaneId);
+
+    const nextId = store.getState().openFileTab(`${projectPath}/src/next.ts`, { preview: true })!;
+    const state = store.getState();
+
+    expect(state.tabsById[sharedId]).toBeDefined();
+    expect(state.panesById[originalPaneId].tabIds).toContain(sharedId);
+    expect(state.panesById[splitPaneId].tabIds).toEqual([nextId]);
+    expect(state.panesById[splitPaneId].history).toEqual([nextId]);
+
+    store.getState().closeTab(sharedId, originalPaneId);
+    expect(store.getState().tabsById[sharedId]).toBeUndefined();
+  });
+
+  it("auto-pins a preview tab when it becomes dirty and keeps it pinned after saving", () => {
+    const { store, projectPath } = setupProjectStore();
+    const previewId = store.getState().openFileTab(`${projectPath}/src/draft.ts`, { preview: true })!;
+    expect(store.getState().tabsById[previewId].preview).toBe(true);
+
+    store.getState().setTabDirty(previewId, true);
+    expect(store.getState().tabsById[previewId]).toMatchObject({
+      dirty: true,
+      preview: false,
+    });
+
+    store.getState().setTabDirty(previewId, false);
+    expect(store.getState().tabsById[previewId]).toMatchObject({
+      dirty: false,
+      preview: false,
+    });
+
+    const nextPreviewId = store.getState().openFileTab(`${projectPath}/src/other.ts`, { preview: true })!;
+    expect(store.getState().openTabs).toEqual([previewId, nextPreviewId]);
+  });
+});

@@ -1021,27 +1021,33 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           const pane = getActivePane(nextWorkspace);
           const now = Date.now();
 
+          const existingTab = nextWorkspace.tabsById[tabId];
+          const nextPreview = existingTab ? existingTab.preview && preview : preview;
+
           // In preview mode, remove existing preview tab from pane before adding the new one
-          if (preview) {
+          if (nextPreview) {
             const existingPreviewId = pane.tabIds.find((id) => {
               const tab = nextWorkspace.tabsById[id];
               return tab?.preview && tab.kind === "file" && id !== tabId;
             });
             if (existingPreviewId) {
               pane.tabIds = pane.tabIds.filter((id) => id !== existingPreviewId);
-              delete nextWorkspace.tabsById[existingPreviewId];
+              if (!Object.values(nextWorkspace.panesById).some((item) => item.tabIds.includes(existingPreviewId))) {
+                delete nextWorkspace.tabsById[existingPreviewId];
+              }
+              pane.history = pane.history.filter((id) => id !== existingPreviewId);
               if (pane.activeTabId === existingPreviewId) {
                 pane.activeTabId = null;
               }
             }
           }
 
-          nextWorkspace.tabsById[tabId] = nextWorkspace.tabsById[tabId] ?? createFileTab(normalizedPath, now);
+          nextWorkspace.tabsById[tabId] = existingTab ?? createFileTab(normalizedPath, now);
           nextWorkspace.tabsById[tabId] = {
             ...nextWorkspace.tabsById[tabId],
             title: getFileName(normalizedPath),
             lastActivatedAt: now,
-            preview: preview,
+            preview: nextPreview,
           };
           if (!pane.tabIds.includes(tabId)) {
             pane.tabIds.push(tabId);
@@ -1242,7 +1248,11 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       setTabDirty: (tabId, dirty) =>
         set((state) => {
           const tab = state.tabsById[tabId];
-          if (!tab || tab.dirty === dirty || !state.currentProject) {
+          if (!tab || !state.currentProject) {
+            return state;
+          }
+          const nextPreview = dirty ? false : tab.preview;
+          if (tab.dirty === dirty && tab.preview === nextPreview) {
             return state;
           }
           const path = state.currentProject.path;
@@ -1251,6 +1261,7 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           nextWorkspace.tabsById[tabId] = {
             ...nextWorkspace.tabsById[tabId],
             dirty,
+            preview: nextPreview,
           };
           return syncProjectState(state, path, state.sessions, nextWorkspace);
         }),
