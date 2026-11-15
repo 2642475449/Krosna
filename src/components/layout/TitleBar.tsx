@@ -143,7 +143,7 @@ function TitleBar() {
         <div className="shrink-0">
           <TitleBarQuickSearch />
         </div>
-        <div data-tauri-drag-region className="flex-1 h-full min-w-0" />
+        <div data-tauri-drag-region data-pet-surface="titlebar-blank" className="flex-1 h-full min-w-0" />
       </div>
 
       {/* Right: window controls */}

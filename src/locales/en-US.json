@@ -404,6 +404,13 @@
     "splitterHint": "Drag horizontally to resize; double-click to reset"
   },
   "statusBar": {
+    "pixelPet": {
+      "show": "Show pixel pet",
+      "hide": "Hide pixel pet",
+      "pause": "Rest pet",
+      "resume": "Resume walking",
+      "trackHint": "Click to jump, double-click to switch bar, right-click to rest"
+    },
     "file": {
       "navigation": "File path navigation",
       "copyPath": "Copy file path",
@@ -1239,6 +1246,7 @@
     "currentWindowRunningAndDirtyWarning": "Opening in this window ends {{sessionCount}} session(s) and discards {{fileCount}} unsaved change(s)."
   },
   "tabBar": {
+    "allTabs": "All tabs",
     "restartSession": "Restart",
     "restartSessionTitle": "Restart “{{name}}”?",
     "restartAgentDescription": "This will interrupt the current task, restart the agent in this tab, and resume the original conversation. Files already written will be kept.",
@@ -1533,6 +1541,7 @@
       "terminal": "Terminal",
       "voiceRecognition": "Voice Recognition",
       "shortcuts": "Shortcuts",
+      "pixelPet": "Pixel Pet",
       "skills": "Skills",
       "hooks": "Hooks",
       "mcpServers": "MCP Servers",
@@ -1772,6 +1781,42 @@
       "sec10": "10 sec",
       "sec30": "30 sec",
       "min1": "1 min"
+    },
+    "pixelPet": {
+      "title": "Pixel Pet",
+      "description": "Purely pixel-art, fully configurable coding companion with customizable sprite grids and behavior.",
+      "previewHint": "Click preview to test jump",
+      "resetDefault": "Reset Default",
+      "resetDone": "Reset to default pixel pet configuration",
+      "appearanceSection": "Appearance & Display",
+      "enabled": "Show Pixel Pet",
+      "enabledDesc": "Walks along the status bar line and titlebar blank space.",
+      "preset": "Built-in Pixel Presets",
+      "presetDesc": "Every preset is driven by the same pixel-grid and behavior JSON schema.",
+      "presets": {
+        "hero": "Red Cap Hero",
+        "cat": "Pixel Ginger Cat",
+        "bot": "Bender",
+        "whale": "Pixel Cute Whale"
+      },
+      "pixelSize": "Pixel Scale",
+      "pixelSizeDesc": "Integer pixel scaling to keep edges strictly pixelated.",
+      "behaviorSection": "Behavior & Physics",
+      "walkSpeed": "Walk Speed",
+      "runSpeed": "Run Speed",
+      "jumpVelocity": "Jump Velocity",
+      "sleepAfterIdle": "Sleep After Idle",
+      "allowPlatformHop": "Hop Across Surfaces",
+      "allowPlatformHopDesc": "Allow hopping between the status bar line and titlebar blank area.",
+      "reactToCodingMood": "React to AI Sessions",
+      "reactToCodingMoodDesc": "Runs while AI is working, celebrates on completion, and alerts on errors.",
+      "jsonSection": "JSON Config & AI Generator",
+      "jsonSectionDesc": "Edit pixel grids (frames), palette, and behavior directly, or copy the AI prompt to generate new pixel pets.",
+      "applyJson": "Apply JSON Config",
+      "copyAiPrompt": "Copy AI Prompt",
+      "loadDefaultJson": "Load Default JSON",
+      "jsonApplied": "Pixel pet configuration applied",
+      "aiPromptCopied": "AI generation prompt copied to clipboard"
     },
     "shortcuts": {
       "toggleBottomRunner": "Toggle Bottom Script Runner",

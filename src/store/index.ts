@@ -14,6 +14,7 @@ import type {
   ProjectWorkspace,
   AppState,
 } from "./types";
+import { DEFAULT_PIXEL_PET_CONFIG, PIXEL_PET_PRESETS } from "@/lib/pixelPetConfig";
 export type * from "./types";
 import {
   createDefaultWorkspace,
@@ -748,6 +749,8 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       staleSessionDays: 7,
       sidebarGitChangesCollapsed: false,
       sidebarGitGraphCollapsed: true,
+      pixelPetVisible: true,
+      pixelPetConfig: DEFAULT_PIXEL_PET_CONFIG,
       gitChangeCount: 0,
       gitAheadCount: 0,
       gitBehindCount: 0,
@@ -1459,6 +1462,15 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       toggleGitChangesCollapsed: () =>
         set((state) => ({ sidebarGitChangesCollapsed: !state.sidebarGitChangesCollapsed })),
 
+      togglePixelPetVisible: () =>
+        set((state) => ({ pixelPetVisible: !state.pixelPetVisible })),
+
+      setPixelPetVisible: (visible) => set({ pixelPetVisible: visible }),
+
+      setPixelPetConfig: (config) => set({ pixelPetConfig: config }),
+
+      resetPixelPetConfig: () => set({ pixelPetConfig: DEFAULT_PIXEL_PET_CONFIG }),
+
       toggleGitGraphCollapsed: () =>
         set((state) => ({ sidebarGitGraphCollapsed: !state.sidebarGitGraphCollapsed })),
 
@@ -2013,6 +2025,8 @@ function createPersistOptions(storage?: StateStorage) {
         staleSessionDays: state.staleSessionDays,
         sidebarGitChangesCollapsed: state.sidebarGitChangesCollapsed,
         sidebarGitGraphCollapsed: state.sidebarGitGraphCollapsed,
+        pixelPetVisible: state.pixelPetVisible,
+        pixelPetConfig: state.pixelPetConfig,
         voicePolishEnabled: state.voicePolishEnabled,
         asrLanguage: state.asrLanguage,
         voicePolishProvider: state.voicePolishProvider,
@@ -2064,6 +2078,21 @@ function createPersistOptions(storage?: StateStorage) {
         state.attentionDiagnostics = { hooks: {} };
         state.unreadTotal = 0;
         state.activeSidebarSection = "sessions";
+        if (
+          !state.pixelPetConfig
+          || (state.pixelPetConfig.id === "whale" && state.pixelPetConfig.submergeRows == null)
+          || state.pixelPetConfig.id === "hero"
+        ) {
+          state.pixelPetConfig = DEFAULT_PIXEL_PET_CONFIG;
+        } else if (
+          state.pixelPetConfig.id === "bot"
+          && state.pixelPetConfig.pixelSize !== 1
+        ) {
+          const updatedBender = PIXEL_PET_PRESETS.find((p) => p.id === "bot");
+          if (updatedBender) {
+            state.pixelPetConfig = updatedBender;
+          }
+        }
       }
     },
   };

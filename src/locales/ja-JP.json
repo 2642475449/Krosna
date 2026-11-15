@@ -404,6 +404,13 @@
     "splitterHint": "左右にドラッグして幅を変更、ダブルクリックでリセット"
   },
   "statusBar": {
+    "pixelPet": {
+      "show": "ピクセルペットを表示",
+      "hide": "ピクセルペットを非表示",
+      "pause": "ペットを休ませる",
+      "resume": "お散歩を再開",
+      "trackHint": "クリックでジャンプ、ダブルクリックで上下バー移動、右クリックで休憩"
+    },
     "file": {
       "navigation": "ファイルパスのナビゲーション",
       "copyPath": "ファイルパスをコピー",
@@ -1239,6 +1246,7 @@
     "currentWindowRunningAndDirtyWarning": "このウィンドウで開くと、セッション {{sessionCount}} 件が終了し、変更 {{fileCount}} 件が破棄されます。"
   },
   "tabBar": {
+    "allTabs": "すべてのタブ",
     "restartSession": "再起動",
     "restartSessionTitle": "「{{name}}」を再起動しますか？",
     "restartAgentDescription": "現在のタスクを中断し、このタブでエージェントを再起動して元の会話を再開します。書き込み済みのファイルは保持されます。",
@@ -1533,6 +1541,7 @@
       "terminal": "ターミナル",
       "voiceRecognition": "音声認識",
       "shortcuts": "ショートカット",
+      "pixelPet": "ピクセルペット",
       "skills": "Skills",
       "hooks": "Hooks",
       "mcpServers": "MCP サーバー",
@@ -1772,6 +1781,42 @@
       "sec10": "10秒",
       "sec30": "30秒",
       "min1": "1分"
+    },
+    "pixelPet": {
+      "title": "ピクセルペット",
+      "description": "ドット絵表現と動作ロジックを JSON で自由にカスタマイズできる相棒です。",
+      "previewHint": "プレビューをクリックしてジャンプ",
+      "resetDefault": "デフォルトに戻す",
+      "resetDone": "ピクセルペット設定をリセットしました",
+      "appearanceSection": "見た目と表示",
+      "enabled": "ピクセルペットを表示",
+      "enabledDesc": "ステータスバーの境界線やタイトルバーの空白スペースを歩きます。",
+      "preset": "プリセットキャラクター",
+      "presetDesc": "すべてのプリセットは同じドット絵配列と行動 JSON スキーマで動作します。",
+      "presets": {
+        "hero": "赤帽子の勇者",
+        "cat": "ドット茶トラ猫",
+        "bot": "ベンダー",
+        "whale": "ドットクジラちゃん"
+      },
+      "pixelSize": "ピクセル倍率",
+      "pixelSizeDesc": "整数倍スケーリングでドット絵の輪郭をくっきり保ちます。",
+      "behaviorSection": "動作ロジック設定",
+      "walkSpeed": "歩行速度",
+      "runSpeed": "走行速度",
+      "jumpVelocity": "ジャンプ力",
+      "sleepAfterIdle": "居眠りまでの待機時間",
+      "allowPlatformHop": "上下バー間の自動移動",
+      "allowPlatformHopDesc": "ステータスバーとタイトルバーの空白領域を自動で行き来します。",
+      "reactToCodingMood": "AI セッションと連動",
+      "reactToCodingMoodDesc": "AI 実行中は走り、完了時はジャンプ、エラー時はアラートを出します。",
+      "jsonSection": "JSON 設定 & AI 生成プロンプト",
+      "jsonSectionDesc": "ドット絵グリッド（frames）・パレット・動作ロジックを直接編集するか、AI 用プロンプトをコピーできます。",
+      "applyJson": "JSON 設定を適用",
+      "copyAiPrompt": "AI 用プロンプトをコピー",
+      "loadDefaultJson": "デフォルト JSON を読込",
+      "jsonApplied": "ピクセルペット設定を更新しました",
+      "aiPromptCopied": "AI 生成プロンプトをクリップボードにコピーしました"
     },
     "shortcuts": {
       "toggleBottomRunner": "下部スクリプトランナーの表示切替",

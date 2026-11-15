@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button, Tooltip, Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
@@ -15,6 +15,7 @@ import {
   ClockCircleOutlined,
   ShopOutlined,
   ReloadOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
@@ -141,6 +142,10 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   // 这里只保存浮层目标，进程状态始终读取 store，避免确认期间使用过期会话。
   const [pendingRestartId, setPendingRestartId] = useState<string | null>(null);
   const [openTabMenuId, setOpenTabMenuId] = useState<string | null>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
+  const tabBarRef = useRef<HTMLDivElement | null>(null);
+  const overflowControlRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const tabListRef = useRef<HTMLDivElement | null>(null);
   const pressStateRef = useRef<PressState | null>(null);
@@ -202,23 +207,53 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     void resumeSession(sessionId, { restart: true });
   }
 
+  const revealTab = useCallback((tabId: string | null) => {
+    const list = tabListRef.current;
+    const tab = tabId ? tabRefs.current[tabId] : null;
+    if (!list || !tab) return;
+    const viewport = list.getBoundingClientRect();
+    const bounds = tab.getBoundingClientRect();
+    if (bounds.left < viewport.left) list.scrollLeft += bounds.left - viewport.left;
+    else if (bounds.right > viewport.right) list.scrollLeft += bounds.right - viewport.right;
+  }, []);
+
+  useLayoutEffect(() => {
+    const list = tabListRef.current;
+    const bar = tabBarRef.current;
+    if (!list || !bar) return;
+    const update = () => {
+      const tabs = list.querySelectorAll<HTMLElement>("[data-tab-id]");
+      const minimumWidth = Array.from(tabs).reduce((width, tab) =>
+        width + (Number.parseFloat(getComputedStyle(tab).minWidth) || tab.offsetWidth), 0);
+      // 计算不含下拉按钮的可用宽度，避免按钮本身导致临界宽度反复显隐。
+      const availableWidth = list.clientWidth + (overflowControlRef.current?.offsetWidth ?? 0);
+      setHasOverflow(minimumWidth > availableWidth + 1);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [tabIds, tabsById, sessionById, hasOverflow]);
+
+  useEffect(() => {
+    if (!hasOverflow) setOverflowMenuOpen(false);
+  }, [hasOverflow]);
+
+  useEffect(() => {
+    setOverflowMenuOpen(false);
+  }, [currentProject?.path, paneId]);
+
   useEffect(() => {
     const list = tabListRef.current;
     if (!list) return;
     // 仅滚动标签区域，避免把新建按钮或外层分栏一起滚走。
-    const revealActiveTab = () => {
-      const tab = activeTabId ? tabRefs.current[activeTabId] : null;
-      if (!tab) return;
-      const viewport = list.getBoundingClientRect();
-      const bounds = tab.getBoundingClientRect();
-      if (bounds.left < viewport.left) list.scrollLeft += bounds.left - viewport.left;
-      else if (bounds.right > viewport.right) list.scrollLeft += bounds.right - viewport.right;
-    };
+    const revealActiveTab = () => revealTab(activeTabId);
     revealActiveTab();
     const observer = new ResizeObserver(revealActiveTab);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [activeTabId, tabIds]);
+  }, [activeTabId, tabIds, revealTab]);
 
   const loadAvailableAgents = useCallback(async (
     options?: { forceRefresh?: boolean; showLoading?: boolean },
@@ -635,8 +670,34 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     }
   }
 
+  const overflowItems: MenuProps["items"] = openTabs.flatMap((tabId) => {
+    const tab = tabsById[tabId];
+    const session = sessionById.get(tabId);
+    const isSettings = tabId === SETTINGS_ID || tab?.kind === "settings";
+    const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
+    const isSkillMarket = tab?.kind === "skill-market";
+    const isFile = tab?.kind === "file" || tab?.kind === "diff";
+    if (!isSettings && !isScheduledTasks && !isSkillMarket && !isFile && !session) return [];
+    const title = isSettings ? t("common.settings")
+      : isScheduledTasks ? t("scheduledTasks.title")
+      : isSkillMarket ? t("settings.skillMarket.title") : tab?.title ?? session?.name ?? "";
+    const fileVisual = isFile ? getFileIconByName(tab?.title ?? "") : null;
+    return [{
+      key: tabId,
+      icon: isSettings ? <SettingOutlined /> : isScheduledTasks ? <ClockCircleOutlined />
+        : isSkillMarket ? <ShopOutlined /> : fileVisual
+          ? <span style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
+          : <AgentIcon agentId={session?.agentId ?? "claude"} size={15} />,
+      label: <span className="app-tabbar-overflow-label">
+        <span className="app-tabbar-overflow-title">{title}{tab?.dirty ? " *" : ""}</span>
+        {session && <AgentSessionStatus session={session} />}
+      </span>,
+    }];
+  });
+
   return (
     <div
+      ref={tabBarRef}
       data-tabbar-pane={paneId}
       className="app-shell-chrome app-glass-tabbar app-tabbar flex items-end shrink-0"
       style={{
@@ -870,6 +931,43 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               <PlusOutlined style={{ fontSize: 12, fontWeight: 600 }} />
             </button>
           </Tooltip>
+          </Dropdown>
+        </div>
+      )}
+      {hasOverflow && (
+        <div ref={overflowControlRef} className="app-tabbar-overflow-control">
+          <Dropdown
+            trigger={["click"]}
+            placement="bottomRight"
+            open={overflowMenuOpen}
+            onOpenChange={(open) => {
+              setOverflowMenuOpen(open);
+              if (open) setOpenTabMenuId(null);
+            }}
+            menu={{
+              items: overflowItems,
+              selectable: true,
+              selectedKeys: activeTabId ? [activeTabId] : [],
+              className: "app-tabbar-overflow-menu",
+              onClick: ({ key }) => {
+                setOverflowMenuOpen(false);
+                if (!useAppStore.getState().panesById[paneId]?.tabIds.includes(key)) return;
+                setActiveSession(key, paneId);
+                revealTab(key);
+              },
+            }}
+          >
+            <Tooltip title={t("tabBar.allTabs")} mouseEnterDelay={0.4}>
+              <button
+                type="button"
+                aria-label={t("tabBar.allTabs")}
+                aria-haspopup="menu"
+                aria-expanded={overflowMenuOpen}
+                className="app-tabbar-mode-button app-tabbar-overflow-button"
+              >
+                <DownOutlined />
+              </button>
+            </Tooltip>
           </Dropdown>
         </div>
       )}

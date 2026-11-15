@@ -4,6 +4,7 @@ import type {
   TerminalQuickCommand, QuickCommandUsage, WindowMode, WindowProjectContext,
 } from "@/types";
 import type { AttentionItem } from "@/lib/attention";
+import type { PixelPetConfig } from "@/lib/pixelPetConfig";
 import type {
   AgentHookDiagnostic, AttentionDiagnostics, AttentionEventDiagnostic,
   NotificationDeliveryDiagnostic,
@@ -356,6 +357,8 @@ export interface AppState
   staleSessionDays: number;
   sidebarGitChangesCollapsed: boolean;
   sidebarGitGraphCollapsed: boolean;
+  pixelPetVisible: boolean;
+  pixelPetConfig: PixelPetConfig;
   gitChangeCount: number;
   gitAheadCount: number;
   gitBehindCount: number;
@@ -456,6 +459,10 @@ export interface AppState
   setStaleSessionDays: (days: number) => void;
   setPinnedCollapsed: (collapsed: boolean) => void;
   toggleGitChangesCollapsed: () => void;
+  togglePixelPetVisible: () => void;
+  setPixelPetVisible: (visible: boolean) => void;
+  setPixelPetConfig: (config: PixelPetConfig) => void;
+  resetPixelPetConfig: () => void;
   toggleGitGraphCollapsed: () => void;
   setGitChangeCount: (count: number) => void;
   setGitSyncCounts: (ahead: number, behind: number) => void;

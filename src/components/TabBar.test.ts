@@ -22,10 +22,27 @@ import TabBar from "./TabBar";
 
 let root: Root;
 let host: HTMLDivElement;
+let availableWidth: number;
+let resizeCallbacks: Array<() => void>;
 const tab = { id: "file", kind: "file", title: "index.ts", resourceId: "D:/project/index.ts", dirty: true };
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
+  availableWidth = 1000;
+  resizeCallbacks = [];
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: () => void) { resizeCallbacks.push(callback); }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("app-tabbar-tabs")
+      ? availableWidth - (this.parentElement?.querySelector(".app-tabbar-overflow-control") ? 32 : 0) : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.dataset.tabId ? 96 : this.classList.contains("app-tabbar-overflow-control") ? 32 : 0;
+  });
   mocks.confirm.mockResolvedValue(true);
   mocks.runtime.mockResolvedValue(undefined);
   mocks.state = {
@@ -40,7 +57,60 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+function overflowFixture() {
+  const tabs = ["first", "middle", "last"].map(id => ({
+    id, kind: "file", title: `完整文件标题-${id}.ts`, resourceId: `D:/project/${id}.ts`, dirty: id === "first",
+  }));
+  mocks.state.tabsById = Object.fromEntries(tabs.map(tab => [tab.id, tab]));
+  mocks.state.panesById = { main: { tabIds: tabs.map(tab => tab.id) }, other: { tabIds: ["unrelated"] } };
+  availableWidth = 240;
+  return tabs.map(tab => tab.id);
+}
+
+it("lists full titles for overflowed tabs and activates the selected tab in its own pane", async () => {
+  const tabIds = overflowFixture();
+  await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds, activeTabId: "last" })));
+  const button = host.querySelector<HTMLButtonElement>('[aria-label="tabBar.allTabs"]')!;
+  expect(button).not.toBeNull();
+  await act(async () => button.click());
+  const entries = Array.from(document.body.querySelectorAll<HTMLElement>(".app-tabbar-overflow-menu .ant-dropdown-menu-item"));
+  expect(entries.map(entry => entry.textContent)).toEqual([
+    "完整文件标题-first.ts *", "完整文件标题-middle.ts", "完整文件标题-last.ts",
+  ]);
+  expect(entries[2].classList.contains("ant-dropdown-menu-item-selected")).toBe(true);
+  await act(async () => entries[0].click());
+  expect(mocks.activate).toHaveBeenCalledExactlyOnceWith("first", "main");
+  expect(button.getAttribute("aria-expanded")).toBe("false");
+  expect(mocks.close).not.toHaveBeenCalled();
+});
+
+it("removes overflow controls when tabs fit without the control and restores them on narrowing", async () => {
+  const tabIds = overflowFixture();
+  await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds, activeTabId: "last" })));
+  expect(host.querySelector('[aria-label="tabBar.allTabs"]')).not.toBeNull();
+  // 300px fits three 96px tabs once the 32px control is removed.
+  availableWidth = 300;
+  await act(async () => [...resizeCallbacks].forEach(callback => callback()));
+  expect(host.querySelector('[aria-label="tabBar.allTabs"]')).toBeNull();
+  availableWidth = 240;
+  await act(async () => [...resizeCallbacks].forEach(callback => callback()));
+  expect(host.querySelector('[aria-label="tabBar.allTabs"]')).not.toBeNull();
+  await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds: ["first"], activeTabId: "first" })));
+  expect(host.querySelector('[aria-label="tabBar.allTabs"]')).toBeNull();
+});
+
+it("ignores a menu selection after its tab has left the pane", async () => {
+  const tabIds = overflowFixture();
+  await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds, activeTabId: "last" })));
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="tabBar.allTabs"]')!.click());
+  const first = document.body.querySelector<HTMLElement>(".app-tabbar-overflow-menu .ant-dropdown-menu-item")!;
+  mocks.state.panesById = { main: { tabIds: ["middle", "last"] } };
+  await act(async () => first.click());
+  expect(mocks.activate).not.toHaveBeenCalled();
 });
 async function middleClick(selector = ".tab-item") {
   await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds: ["file"], activeTabId: null })));

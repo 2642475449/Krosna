@@ -1,7 +1,7 @@
 import { formatQuotaResetTime } from "@/lib/quotaDateTime";
 import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
-import { message, Popover } from "antd";
+import { message, Popover, Tooltip } from "antd";
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -42,6 +42,8 @@ function StatusBar() {
   const focusedTab = useAppStore((state) => state.focusedTabId ? state.tabsById[state.focusedTabId] : undefined);
   const fileTab = focusedTab?.kind === "file" ? focusedTab : null;
   const gitCloneTasks = useAppStore((state) => state.gitCloneTasks);
+  const pixelPetVisible = useAppStore((state) => state.pixelPetVisible);
+  const togglePixelPetVisible = useAppStore((state) => state.togglePixelPetVisible);
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
   const [agentVersion, setAgentVersion] = useState<string | null>(null);
@@ -491,6 +493,7 @@ function StatusBar() {
 
   return (
     <div
+      data-pet-surface="statusbar"
       className={`app-shell-chrome app-statusbar h-[28px] pr-3 flex shrink-0 items-center justify-between gap-3 text-[12px]${fileTab ? " pl-3 app-statusbar-file" : " pl-[6px]"}`}
       style={{
         background: "transparent",
@@ -598,6 +601,31 @@ function StatusBar() {
         >
           {versionLabel}
         </span>}
+        <span className="app-statusbar-divider" aria-hidden="true" />
+        <Tooltip title={pixelPetVisible ? t("statusBar.pixelPet.hide") : t("statusBar.pixelPet.show")}>
+          <button
+            type="button"
+            onClick={togglePixelPetVisible}
+            aria-label={pixelPetVisible ? t("statusBar.pixelPet.hide") : t("statusBar.pixelPet.show")}
+            aria-pressed={pixelPetVisible}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded border-0 bg-transparent transition-opacity hover:opacity-100"
+            style={{
+              opacity: pixelPetVisible ? 0.95 : 0.48,
+              color: pixelPetVisible ? "var(--cs-primary)" : "var(--cs-text-tertiary)",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <rect x="4" y="1" width="1" height="1" fill="#bae6fd" />
+              <rect x="6" y="1" width="1" height="1" fill="#bae6fd" />
+              <rect x="5" y="2" width="1" height="1" fill="#bae6fd" />
+              <rect x="3" y="4" width="6" height="4" fill="#38bdf8" />
+              <rect x="2" y="5" width="8" height="3" fill="#38bdf8" />
+              <rect x="1" y="5" width="1" height="2" fill="#0ea5e9" />
+              <rect x="8" y="5" width="1" height="1" fill="#0f172a" />
+              <rect x="4" y="8" width="5" height="2" fill="#ffffff" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

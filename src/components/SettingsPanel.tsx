@@ -1,5 +1,6 @@
 import { getHookCommandName, getHookSource, groupHooksBySource, isKrosnaHook } from "@/lib/hookPresentation";
 import { SkillsSettingsPage } from "./settings/SkillsSettingsPage";
+import { PixelPetSettingsPage } from "./settings/PixelPetSettingsPage";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { BackgroundSettings } from "./settings/BackgroundSettings";
 import { WorkspaceRestoreSettings } from "./settings/WorkspaceRestoreSettings";
@@ -29,6 +30,7 @@ import {
 
   SafetyCertificateOutlined,
   DatabaseOutlined,
+  SmileOutlined,
 } from "@ant-design/icons";
 import { Pagination, Segmented, Tag, Select, Spin, Empty, Button, message, Switch, Input, Drawer, Modal, Tooltip, Popover } from "antd";
 
@@ -125,7 +127,7 @@ import {
 
 
 
-type SettingsPage = "general" | "network" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
+type SettingsPage = "general" | "network" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "pixelPet" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
 
 interface SettingsMenuItem {
   key: SettingsPage;
@@ -150,6 +152,7 @@ const menuGroups: SettingsMenuGroup[] = [
       { key: "terminal", icon: <FontSizeOutlined />, labelKey: "settings.menu.terminal" },
       { key: "voiceRecognition", icon: <SoundOutlined />, labelKey: "settings.menu.voiceRecognition" },
       { key: "shortcuts", icon: <ThunderboltOutlined />, labelKey: "settings.menu.shortcuts" },
+      { key: "pixelPet", icon: <SmileOutlined />, labelKey: "settings.menu.pixelPet" },
     ],
   },
   {
@@ -3195,6 +3198,7 @@ const pageComponents: Record<SettingsPage, React.FC> = {
   terminal: TerminalPage,
   voiceRecognition: VoiceRecognitionPage,
   shortcuts: ShortcutsPage,
+  pixelPet: PixelPetSettingsPage,
   skills: SkillsSettingsPage,
   hooks: HooksPage,
   mcpServers: McpServersPage,

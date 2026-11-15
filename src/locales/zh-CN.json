@@ -404,6 +404,13 @@
     "splitterHint": "左右拖动调整宽度；双击重置"
   },
   "statusBar": {
+    "pixelPet": {
+      "show": "显示像素宠物",
+      "hide": "隐藏像素宠物",
+      "pause": "让小人休息",
+      "resume": "继续散步",
+      "trackHint": "单击跳跃，双击切换底部/顶部栏，右键休息"
+    },
     "file": {
       "navigation": "文件路径导航",
       "copyPath": "复制文件路径",
@@ -1239,6 +1246,7 @@
     "currentWindowRunningAndDirtyWarning": "在当前窗口打开会结束 {{sessionCount}} 个会话并丢弃 {{fileCount}} 项修改。"
   },
   "tabBar": {
+    "allTabs": "全部标签",
     "restartSession": "重新启动",
     "restartSessionTitle": "重新启动“{{name}}”？",
     "restartAgentDescription": "将中断当前任务，并在此标签中重新启动智能体、恢复原对话。已写入的文件会保留。",
@@ -1533,6 +1541,7 @@
       "terminal": "终端",
       "voiceRecognition": "语音识别",
       "shortcuts": "快捷键",
+      "pixelPet": "像素宠物",
       "skills": "技能",
       "hooks": "钩子",
       "mcpServers": "MCP 服务器",
@@ -1772,6 +1781,42 @@
       "sec10": "10 秒",
       "sec30": "30 秒",
       "min1": "1 分钟"
+    },
+    "pixelPet": {
+      "title": "像素宠物",
+      "description": "纯像素化可配置桌面伴侣，支持造型矩阵与动作逻辑自定义。",
+      "previewHint": "点击预览区测试跳跃",
+      "resetDefault": "重置默认",
+      "resetDone": "已恢复默认像素宠物配置",
+      "appearanceSection": "造型与显示",
+      "enabled": "显示像素宠物",
+      "enabledDesc": "开启后将在底部状态栏线与顶部栏空白区之间巡逻走动。",
+      "preset": "内置像素预设",
+      "presetDesc": "所有预设均由同一套像素矩阵与行为配置驱动，可随时自定义修改。",
+      "presets": {
+        "hero": "红帽小勇者",
+        "cat": "像素小橘猫",
+        "bot": "班德",
+        "whale": "像素小鲸鱼"
+      },
+      "pixelSize": "像素倍率",
+      "pixelSizeDesc": "整数倍像素缩放，始终保持锐利像素边缘。",
+      "behaviorSection": "动作逻辑配置",
+      "walkSpeed": "散步速度",
+      "runSpeed": "小跑速度",
+      "jumpVelocity": "跳跃力度",
+      "sleepAfterIdle": "发呆多久后打盹",
+      "allowPlatformHop": "跨区域穿梭",
+      "allowPlatformHopDesc": "允许小人在底部状态栏分割线与顶部栏空白区之间自动跳换。",
+      "reactToCodingMood": "联动 AI 会话状态",
+      "reactToCodingMoodDesc": "AI 运行中时加速奔跑，完成时跳跃欢呼，出错时弹出提示。",
+      "jsonSection": "JSON 配置与 AI 生成",
+      "jsonSectionDesc": "可直接编辑像素矩阵（frames）、调色盘（palette）和动作逻辑（behavior），或复制提示词让 AI 生成全新角色。",
+      "applyJson": "应用 JSON 配置",
+      "copyAiPrompt": "复制 AI 生成提示词",
+      "loadDefaultJson": "载入默认模板",
+      "jsonApplied": "像素宠物配置已更新",
+      "aiPromptCopied": "已复制 AI 生成提示词到剪贴板"
     },
     "shortcuts": {
       "toggleBottomRunner": "切换底部脚本运行器",

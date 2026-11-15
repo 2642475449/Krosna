@@ -8,6 +8,7 @@ import { Layout, message, Spin } from "antd";
 import dayjs from "dayjs";
 import TitleBar from "./TitleBar";
 import StatusBar from "./StatusBar";
+import PixelPetTrack from "./PixelPetTrack";
 import PrimarySidebarRail from "./PrimarySidebarRail";
 import Sidebar from "./Sidebar";
 import AuxiliaryDock from "./AuxiliaryDock";
@@ -1894,6 +1895,7 @@ function AppLayout() {
           {windowMode === "project" && currentProject ? <BottomRunnerPanel /> : null}
         </Content>
       </Layout>
+      <PixelPetTrack />
       <StatusBar />
 
       <NewSessionDialog

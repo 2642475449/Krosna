@@ -957,12 +957,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       },
     );
 
+    const initialTheme = getTerminalTheme(useAppStore.getState().activeTheme());
     const term = new XTerm({
       ...(initialRunnerSnapshot ? { cols: initialRunnerSnapshot.cols, rows: initialRunnerSnapshot.rows } : {}),
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize,
-      theme: termTheme.theme,
-      minimumContrastRatio: termTheme.minimumContrastRatio,
+      theme: initialTheme.theme,
+      minimumContrastRatio: initialTheme.minimumContrastRatio,
       cursorBlink: forceStableCursor ? false : cursorBlink,
       scrollback: terminalScrollback,
       // 普通拖选始终选择文字；应用鼠标交互可通过 Alt 使用。
@@ -1902,7 +1903,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   }, [
     sessionId,
     runtimeId,
-    runnerOptions ? null : termTheme,
     fontSize,
     cursorBlink,
     terminalScrollback,
@@ -1921,9 +1921,12 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   ]);
 
   useEffect(() => {
-    if (!runnerOptions || !terminalRef.current) return;
-    terminalRef.current.options.theme = termTheme.theme;
-    terminalRef.current.options.minimumContrastRatio = termTheme.minimumContrastRatio;
+    const term = terminalRef.current;
+    if (!term) return;
+    // 主题只更新配色；重建会丢失当前屏幕、滚动历史和输入状态。
+    term.options.theme = termTheme.theme;
+    term.options.minimumContrastRatio = termTheme.minimumContrastRatio;
+    term.refresh(0, term.rows - 1);
   }, [termTheme]);
 
   useEffect(() => {
