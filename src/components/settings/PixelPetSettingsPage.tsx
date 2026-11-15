@@ -16,11 +16,13 @@ import {
 } from "@/lib/pixelPetConfig";
 import {
   createInitialPetSimulation,
+  spawnPetEncounter,
   stepPetSimulation,
   triggerPetJump,
   type PetSimulationState,
 } from "@/lib/pixelPet";
 import {
+  drawPetEncounter,
   drawPixelBubble,
   drawPixelPetFrame,
   getPetRenderedDimensions,
@@ -122,6 +124,9 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         ctx.fillRect(12, groundLineY, widthRef.current - 24, 1);
 
         const sim = simRef.current;
+        if (sim.encounter) {
+          drawPetEncounter(ctx, sim.encounter, groundLineY, sim.animElapsedMs);
+        }
         const submergePx =
           (activeConfig.submergeRows ?? 0) * Math.max(1, Math.round(activeConfig.pixelSize || 2));
         const top = groundLineY - spriteHeight + submergePx - sim.y;
@@ -177,6 +182,20 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
       >
         {t("settings.pixelPet.previewHint")}
       </span>
+      <Button
+        size="small"
+        type="default"
+        className="absolute bottom-2 right-2.5 h-6 px-2 text-[11px]"
+        onClick={(e) => {
+          e.stopPropagation();
+          simRef.current = spawnPetEncounter(
+            simRef.current,
+            widthRef.current,
+          );
+        }}
+      >
+        {t("settings.pixelPet.triggerEncounterTest")}
+      </Button>
     </div>
   );
 }
@@ -407,6 +426,16 @@ export function PixelPetSettingsPage() {
           <Switch
             checked={pixelPetConfig.behavior.reactToCodingMood}
             onChange={(checked) => updateBehavior("reactToCodingMood", checked)}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label={t("settings.pixelPet.enableRandomEvents")}
+          description={t("settings.pixelPet.enableRandomEventsDesc")}
+        >
+          <Switch
+            checked={pixelPetConfig.behavior.enableRandomEvents}
+            onChange={(checked) => updateBehavior("enableRandomEvents", checked)}
           />
         </SettingRow>
       </SettingsSection>

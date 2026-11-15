@@ -24,6 +24,17 @@ export interface PetBubble {
   remainingMs: number;
 }
 
+export type PetEncounterKind = "slime" | "ghost" | "star";
+
+export interface PetEncounterEntity {
+  kind: PetEncounterKind;
+  x: number;
+  y: number;
+  phase: "active" | "defeated";
+  remainingMs: number;
+  facing: 1 | -1;
+}
+
 export interface PetSimulationState {
   x: number;
   y: number;
@@ -40,6 +51,8 @@ export interface PetSimulationState {
   paused: boolean;
   bubble: PetBubble | null;
   lastMood: PetCodingMood;
+  encounter: PetEncounterEntity | null;
+  nextEncounterCooldownMs: number;
 }
 
 export interface PetStepOptions {
@@ -58,9 +71,13 @@ const GRAVITY_PX_PER_SEC2 = 720;
 const SLEEP_AFTER_IDLE_MS = 10_000;
 const MIN_PLATFORM_STAY_MS = 15_000;
 const MAX_PLATFORM_STAY_MS = 28_000;
+const MIN_ENCOUNTER_COOLDOWN_MS = 24_000;
+const MAX_ENCOUNTER_COOLDOWN_MS = 44_000;
+const ENCOUNTER_ENTITY_SIZE = 18;
 
 const CHEER_BUBBLES = ["!", "+1", "★", "GO!", ":)"];
 const WORK_BUBBLES = ["</>", "...", "RUN", "⚡"];
+const ENCOUNTER_VICTORY_BUBBLES = ["WIN!", "NICE!", "FIXED!", "★"];
 
 function resolveActivePlatform(
   platformId: string,
@@ -149,6 +166,49 @@ export function createInitialPetSimulation(
     paused: false,
     bubble: null,
     lastMood: "idle",
+    encounter: null,
+    nextEncounterCooldownMs: 26_000,
+  };
+}
+
+/**
+ * Spawn a random pixel easter-egg encounter (slime, ghost, or falling star) on the current platform.
+ */
+export function spawnPetEncounter(
+  state: PetSimulationState,
+  boundsWidth: number,
+  platforms?: readonly PetPlatform[],
+  random: () => number = Math.random,
+  kindOverride?: PetEncounterKind,
+): PetSimulationState {
+  const platform = resolveActivePlatform(state.platformId, boundsWidth, platforms);
+  const span = Math.max(40, platform.maxX - platform.minX - ENCOUNTER_ENTITY_SIZE);
+  const petCenter = state.x + PET_SPRITE_LOGICAL_SIZE / 2;
+  const platformMid = platform.minX + span / 2;
+
+  // Place the encounter on the opposite side of the platform so the pet walks/runs over to it.
+  const spawnLeft = petCenter > platformMid;
+  const offsetRatio = 0.1 + random() * 0.25;
+  const spawnX = spawnLeft
+    ? Math.round(platform.minX + span * offsetRatio)
+    : Math.round(platform.minX + span * (1 - offsetRatio));
+
+  const kinds: PetEncounterKind[] = ["slime", "ghost", "star"];
+  const kind = kindOverride ?? kinds[Math.floor(random() * kinds.length)] ?? "slime";
+
+  return {
+    ...state,
+    paused: false,
+    targetX: null,
+    encounter: {
+      kind,
+      x: Math.max(platform.minX, Math.min(platform.maxX - ENCOUNTER_ENTITY_SIZE, spawnX)),
+      y: kind === "star" ? 28 : 0,
+      phase: "active",
+      remainingMs: 12_000,
+      facing: spawnX < state.x ? 1 : -1,
+    },
+    bubble: kind === "star" ? { text: "★?", remainingMs: 1200 } : { text: "!", remainingMs: 1200 },
   };
 }
 
@@ -269,6 +329,7 @@ export function stepPetSimulation(
   const sleepAfterIdleMs = behavior?.sleepAfterIdleMs ?? SLEEP_AFTER_IDLE_MS;
   const allowPlatformHop = behavior?.allowPlatformHop ?? true;
   const reactToCodingMood = behavior?.reactToCodingMood ?? true;
+  const enableRandomEvents = behavior?.enableRandomEvents ?? true;
   const effectiveMood: PetCodingMood = reactToCodingMood ? mood : "idle";
   const workBubbles = behavior?.workBubbles && behavior.workBubbles.length > 0
     ? behavior.workBubbles
@@ -288,12 +349,21 @@ export function stepPetSimulation(
     x: Math.max(minX, Math.min(maxX, prev.x)),
     animElapsedMs: prev.animElapsedMs + clampedDtMs,
     platformStayMs: prev.platformStayMs - clampedDtMs,
+    nextEncounterCooldownMs: Math.max(0, prev.nextEncounterCooldownMs - clampedDtMs),
     bubble: prev.bubble
       ? prev.bubble.remainingMs > clampedDtMs
         ? { ...prev.bubble, remainingMs: prev.bubble.remainingMs - clampedDtMs }
         : null
       : null,
   };
+
+  if (!enableRandomEvents) {
+    next.encounter = null;
+  } else if (!next.paused && !next.encounter && next.nextEncounterCooldownMs <= 0 && platform.maxX - platform.minX >= spriteWidth * 3) {
+    next = spawnPetEncounter(next, boundsWidth, options?.platforms, random);
+    next.nextEncounterCooldownMs =
+      MIN_ENCOUNTER_COOLDOWN_MS + Math.floor(random() * (MAX_ENCOUNTER_COOLDOWN_MS - MIN_ENCOUNTER_COOLDOWN_MS));
+  }
 
   // React to coding mood transitions.
   if (effectiveMood !== prev.lastMood) {
@@ -357,6 +427,58 @@ export function stepPetSimulation(
     next.action = speed === runSpeed ? "run" : "walk";
     next.x = Math.max(minX, Math.min(maxX, next.x + dir * speed * dtSec));
     return next;
+  }
+
+  // Handle active easter-egg encounter (monster / falling star).
+  if (next.encounter) {
+    const enc = { ...next.encounter };
+    enc.remainingMs -= clampedDtMs;
+
+    if (enc.phase === "defeated") {
+      if (enc.remainingMs <= 0) {
+        next.encounter = null;
+      } else {
+        next.encounter = enc;
+      }
+    } else if (enc.remainingMs <= 0) {
+      next.encounter = null;
+    } else {
+      if (enc.kind === "star" && enc.y > 0) {
+        enc.y = Math.max(0, enc.y - 18 * dtSec);
+      } else if (enc.kind === "slime") {
+        // Gentle idle hop/wiggle in place
+        const wobble = Math.sin(next.animElapsedMs / 240) * 6 * dtSec;
+        enc.x = Math.max(platform.minX, Math.min(platform.maxX - ENCOUNTER_ENTITY_SIZE, enc.x + wobble));
+      }
+
+      const petCenter = next.x + spriteWidth / 2;
+      const encCenter = enc.x + ENCOUNTER_ENTITY_SIZE / 2;
+      const dist = encCenter - petCenter;
+
+      if (Math.abs(dist) <= 18 && enc.y <= 10) {
+        if (enc.kind === "star") {
+          next.encounter = null;
+          next = triggerPetJump(next, "★", random, behavior);
+        } else {
+          enc.phase = "defeated";
+          enc.remainingMs = 520;
+          next.encounter = enc;
+          const winText =
+            ENCOUNTER_VICTORY_BUBBLES[Math.floor(random() * ENCOUNTER_VICTORY_BUBBLES.length)] ?? "WIN!";
+          next = triggerPetJump(next, winText, random, behavior);
+          next.action = "celebrate";
+          next.actionTimerMs = 650;
+        }
+        return next;
+      }
+
+      const dir: 1 | -1 = dist >= 0 ? 1 : -1;
+      next.facing = dir;
+      next.action = "run";
+      next.x = Math.max(minX, Math.min(maxX, next.x + dir * runSpeed * dtSec));
+      next.encounter = enc;
+      return next;
+    }
   }
 
   // Occasionally hop to another available blank surface (e.g. titlebar blank zone <-> statusbar line).

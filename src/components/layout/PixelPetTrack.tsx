@@ -13,6 +13,7 @@ import {
   type PetSimulationState,
 } from "@/lib/pixelPet";
 import {
+  drawPetEncounter,
   drawPixelBubble,
   drawPixelPetFrame,
   getPetRenderedDimensions,
@@ -163,6 +164,9 @@ export function PixelPetTrack() {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.clearRect(0, 0, width, height);
+          if (sim.encounter) {
+            drawPetEncounter(ctx, sim.encounter, groundY, sim.animElapsedMs);
+          }
           const frame = getPetSpriteFrame(sim.action, sim.animElapsedMs, activeConfig);
           drawPixelPetFrame(
             ctx,

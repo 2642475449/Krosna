@@ -2086,7 +2086,7 @@ function createPersistOptions(storage?: StateStorage) {
           state.pixelPetConfig = DEFAULT_PIXEL_PET_CONFIG;
         } else if (
           state.pixelPetConfig.id === "bot"
-          && state.pixelPetConfig.pixelSize !== 1
+          && state.pixelPetConfig.palette?.K !== "#1e293b"
         ) {
           const updatedBender = PIXEL_PET_PRESETS.find((p) => p.id === "bot");
           if (updatedBender) {

@@ -1,4 +1,4 @@
-import type { PetActionState } from "./pixelPet";
+import type { PetActionState, PetEncounterEntity } from "./pixelPet";
 import {
   DEFAULT_PIXEL_PET_CONFIG,
   type PixelPetConfig,
@@ -134,5 +134,150 @@ export function drawPixelBubble(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, Math.round(boxX + boxWidth / 2), boxY + Math.floor(boxHeight / 2) + 0.5);
+  ctx.restore();
+}
+
+const SLIME_FRAMES: PixelSpriteFrame[] = [
+  [
+    "...oooo...",
+    "..oggggo..",
+    ".oggggggo.",
+    "ogwogggwgo",
+    "ogkogggkgo",
+    "oggggggggo",
+    ".oooooooo.",
+  ],
+  [
+    "..........",
+    "..oooooo..",
+    ".oggggggo.",
+    "ogwogggwgo",
+    "ogkogggkgo",
+    "oggggggggo",
+    "oooooooooo",
+  ],
+];
+
+const GHOST_FRAMES: PixelSpriteFrame[] = [
+  [
+    "..oooooo..",
+    ".owwwwwwo.",
+    "owkwwwkwwo",
+    "owwwwwwwwo",
+    "owwwwwwwwo",
+    "ow.oww.owo",
+    "o..o..o..o",
+  ],
+  [
+    "..oooooo..",
+    ".owwwwwwo.",
+    "owkwwwkwwo",
+    "owwwwwwwwo",
+    "owwwwwwwwo",
+    "owo.ww.ow.",
+    ".o..o..o..",
+  ],
+];
+
+const STAR_FRAME: PixelSpriteFrame = [
+  "...y...",
+  "..yyy..",
+  "yyyyyyy",
+  ".yyyyy.",
+  "..yyy..",
+  ".yy.yy.",
+  "y.....y",
+];
+
+const ENCOUNTER_PALETTES: Record<string, Record<string, string>> = {
+  slime: {
+    o: "#1b4332",
+    g: "#52b788",
+    w: "#ffffff",
+    k: "#111827",
+  },
+  ghost: {
+    o: "#312e81",
+    w: "#e0e7ff",
+    k: "#1e1b4b",
+  },
+  star: {
+    y: "#facc15",
+  },
+};
+
+export function drawPetEncounter(
+  ctx: CanvasRenderingContext2D,
+  encounter: PetEncounterEntity,
+  groundY: number,
+  animElapsedMs: number,
+): void {
+  const pixelSize = 2;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  if (encounter.phase === "defeated") {
+    const progress = 1 - Math.max(0, Math.min(1, encounter.remainingMs / 520));
+    const spread = Math.round(4 + progress * 14);
+    const centerX = Math.round(encounter.x + 10);
+    const centerY = Math.round(groundY - 8 - encounter.y);
+    const sparkColor = encounter.kind === "star" ? "#fde047" : "#f8fafc";
+    const accentColor =
+      encounter.kind === "slime"
+        ? "#52b788"
+        : encounter.kind === "ghost"
+          ? "#a5b4fc"
+          : "#facc15";
+    const offsets = [
+      [-spread, -spread],
+      [spread, -spread],
+      [-spread, Math.round(spread * 0.4)],
+      [spread, Math.round(spread * 0.4)],
+      [0, -spread - 3],
+      [-Math.round(spread * 0.6), -Math.round(spread * 0.9)],
+      [Math.round(spread * 0.6), -Math.round(spread * 0.9)],
+    ];
+    offsets.forEach(([ox, oy], index) => {
+      ctx.fillStyle = index % 2 === 0 ? sparkColor : accentColor;
+      ctx.fillRect(centerX + ox, centerY + oy, 3, 3);
+    });
+    ctx.restore();
+    return;
+  }
+
+  const bob =
+    encounter.kind === "ghost"
+      ? Math.round(Math.sin(animElapsedMs / 180) * 2)
+      : 0;
+  const frameIndex = Math.floor(animElapsedMs / 240) % 2;
+  const frame =
+    encounter.kind === "slime"
+      ? SLIME_FRAMES[frameIndex]
+      : encounter.kind === "ghost"
+        ? GHOST_FRAMES[frameIndex]
+        : STAR_FRAME;
+  const palette = ENCOUNTER_PALETTES[encounter.kind];
+  const cols = frame[0]?.length ?? 0;
+  const rows = frame.length;
+  const drawX = Math.round(encounter.x);
+  const drawY = Math.round(groundY - rows * pixelSize - encounter.y + bob);
+
+  for (let r = 0; r < rows; r += 1) {
+    const row = frame[r];
+    for (let c = 0; c < cols; c += 1) {
+      const token = row[c];
+      if (!token || token === ".") continue;
+      const color = palette[token];
+      if (!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(
+        drawX + c * pixelSize,
+        drawY + r * pixelSize,
+        pixelSize,
+        pixelSize,
+      );
+    }
+  }
+
   ctx.restore();
 }

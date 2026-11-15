@@ -14,6 +14,7 @@ describe("pixelPetConfig", () => {
       if (result.ok) {
         expect(result.config.id).toBe(preset.id);
         expect(result.config.frames.walk.length).toBeGreaterThan(0);
+        expect(result.config.behavior.enableRandomEvents).toBe(preset.id === "bot");
       }
     }
   });
