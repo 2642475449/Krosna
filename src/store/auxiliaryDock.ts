@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-export type AuxiliaryTabKind = "terminal" | "task" | "file" | "review" | "task-monitor";
+export type AuxiliaryTabKind = "terminal" | "task" | "file" | "task-monitor";
 export type AuxiliaryDockWidths = Partial<Record<AuxiliaryTabKind, number>>;
 
 export interface AuxiliaryTab {
@@ -39,7 +39,6 @@ interface AuxiliaryDockState {
     title?: string;
     preview?: boolean;
   }) => void;
-  openReview: (input: { sessionId: string; projectPath: string; title: string }) => void;
   openTaskMonitor: (input: { title: string; projectPath?: string }) => void;
   pinTab: (tabId: string) => void;
   closeTab: (tabId: string, preferredTabId?: string) => void;
@@ -58,7 +57,7 @@ export function clampAuxiliaryDockWidth(width: number) {
 export function normalizeAuxiliaryDockWidths(value: unknown): AuxiliaryDockWidths {
   const widths: AuxiliaryDockWidths = {};
   if (!value || typeof value !== "object") return widths;
-  for (const kind of ["task-monitor", "file", "review", "terminal", "task"] as const) {
+  for (const kind of ["task-monitor", "file", "terminal", "task"] as const) {
     const width = (value as AuxiliaryDockWidths)[kind];
     if (typeof width === "number" && Number.isFinite(width)) {
       widths[kind] = clampAuxiliaryDockWidth(width);
@@ -181,27 +180,6 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) 
         open: true,
         activeTabId: id,
         tabs: existing ? tabs : [...tabs, tab],
-      };
-    }),
-  openReview: ({ sessionId, projectPath, title }) =>
-    set((state) => {
-      const id = `aux:review:${sessionId}`;
-      const existing = state.tabs.find((tab) => tab.id === id);
-      const tab: AuxiliaryTab = existing ?? {
-        id,
-        kind: "review",
-        title,
-        projectPath,
-        resourceId: sessionId,
-        preview: false,
-        createdAt: Date.now(),
-      };
-      return {
-        open: true,
-        activeTabId: id,
-        tabs: existing
-          ? state.tabs.map((item) => (item.id === id ? { ...item, title } : item))
-          : [...state.tabs, tab],
       };
     }),
   openTaskMonitor: ({ title, projectPath = "" }) =>

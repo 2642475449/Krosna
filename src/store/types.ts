@@ -222,6 +222,7 @@ export interface TabEntity {
   pinned: boolean;
   dirty: boolean;
   preview: boolean;
+  markdownViewMode?: "edit" | "preview";
   createdAt: number;
   lastActivatedAt: number;
 }
@@ -351,6 +352,8 @@ export interface AppState
   activeSidebarSection: SidebarSection;
   sidebarPinnedCollapsed: boolean;
   sidebarSessionsCollapsed: boolean;
+  sidebarStaleSessionsCollapsed: boolean;
+  staleSessionDays: number;
   sidebarGitChangesCollapsed: boolean;
   sidebarGitGraphCollapsed: boolean;
   gitChangeCount: number;
@@ -416,6 +419,7 @@ export interface AppState
   closeTab: (tabId: string, paneId?: string) => void;
   registerFileDocument: (document: FileDocumentState) => void;
   setTabDirty: (tabId: string, dirty: boolean) => void;
+  setTabMarkdownViewMode: (tabId: string, mode: "edit" | "preview") => void;
   reorderTabs: (
     sourceTabId: string,
     targetTabId: string,
@@ -448,6 +452,8 @@ export interface AppState
   setActiveSidebarSection: (section: SidebarSection) => void;
   togglePinnedCollapsed: () => void;
   toggleSessionsCollapsed: () => void;
+  toggleStaleSessionsCollapsed: () => void;
+  setStaleSessionDays: (days: number) => void;
   setPinnedCollapsed: (collapsed: boolean) => void;
   toggleGitChangesCollapsed: () => void;
   toggleGitGraphCollapsed: () => void;

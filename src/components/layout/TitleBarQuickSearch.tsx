@@ -5,46 +5,23 @@ import { SearchOutlined } from "@ant-design/icons";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Spin } from "antd";
 import type { InputRef } from "antd";
-import { searchProjectEntries } from "@/lib/api";
+import { listProjectDirectory, searchProjectEntries } from "@/lib/api";
 import { revealExplorerPath } from "@/lib/explorer";
 import { getFileIcon } from "@/lib/fileIcon";
 import { shouldIgnoreShortcut } from "@/hooks/useKeyboardShortcuts";
 import { useAppStore } from "@/store";
+import { EMPTY_GIT_STATUS, useGitStatusStore } from "@/store/slices/gitStatus";
 import { useTranslation } from "react-i18next";
-import type { FileTreeEntryKind } from "@/types";
-
-interface QuickSearchItem {
-  key: string;
-  path: string;
-  name: string;
-  relativePath: string;
-  parentPath: string;
-  kind: FileTreeEntryKind;
-  section: "recent" | "search";
-}
-
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
-}
-
-function buildRelativePath(rootPath: string, targetPath: string): string {
-  const normalizedRoot = normalizePath(rootPath);
-  const normalizedTarget = normalizePath(targetPath);
-  const prefix = `${normalizedRoot}/`;
-  if (normalizedTarget === normalizedRoot) {
-    return ".";
-  }
-  if (normalizedTarget.startsWith(prefix)) {
-    return normalizedTarget.slice(prefix.length);
-  }
-  return targetPath;
-}
-
-function getParentPath(relativePath: string): string {
-  const normalized = normalizePath(relativePath);
-  const separatorIndex = normalized.lastIndexOf("/");
-  return separatorIndex < 0 ? "." : normalized.slice(0, separatorIndex) || ".";
-}
+import type { FileTreeEntry } from "@/types";
+import {
+  buildDefaultQuickSearchItems,
+  buildRelativePath,
+  getParentPath,
+  loadRecentQuickSearchPaths,
+  MAX_DEFAULT_QUICK_SEARCH_ITEMS,
+  recordRecentQuickSearchPaths,
+  type QuickSearchItem,
+} from "./titleBarQuickSearchItems";
 
 function highlightMatch(value: string, query: string) {
   const keyword = query.trim().toLocaleLowerCase();
@@ -94,34 +71,112 @@ function TitleBarQuickSearch() {
   const currentProject = useAppStore((s) => s.currentProject);
   const tabsById = useAppStore((s) => s.tabsById);
   const openFileTab = useAppStore((s) => s.openFileTab);
+  const gitStatuses = useGitStatusStore(
+    (s) => (currentProject ? (s.entries[currentProject.path] ?? EMPTY_GIT_STATUS).fileStatuses : EMPTY_GIT_STATUS.fileStatuses)
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QuickSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
+  const [fallbackState, setFallbackState] = useState<{
+    projectPath: string;
+    entries: FileTreeEntry[];
+  } | null>(null);
   const deferredQuery = useDeferredValue(query);
   const inputRef = useRef<InputRef | null>(null);
   const resultListRef = useRef<HTMLDivElement | null>(null);
 
+  const openFileTabs = useMemo(
+    () =>
+      Object.values(tabsById)
+        .filter((tab) => tab.kind === "file")
+        .sort((left, right) => right.lastActivatedAt - left.lastActivatedAt),
+    [tabsById]
+  );
+
+  useEffect(() => {
+    if (!currentProject) {
+      setRecentFilePaths([]);
+      setFallbackState(null);
+      return;
+    }
+    const tabPaths = openFileTabs.map((tab) => tab.resourceId);
+    const base = loadRecentQuickSearchPaths(currentProject.path);
+    const updated =
+      tabPaths.length > 0
+        ? recordRecentQuickSearchPaths(currentProject.path, tabPaths, base)
+        : base;
+    setRecentFilePaths(updated);
+  }, [currentProject, openFileTabs]);
+
+  const fallbackEntries = useMemo(
+    () =>
+      currentProject && fallbackState?.projectPath === currentProject.path
+        ? fallbackState.entries
+        : [],
+    [currentProject, fallbackState]
+  );
+
+  const recentItemsWithoutFallback = useMemo(
+    () =>
+      currentProject
+        ? buildDefaultQuickSearchItems({
+            projectPath: currentProject.path,
+            openFileTabs,
+            recentFilePaths,
+            gitStatuses,
+            fallbackEntries: [],
+            limit: MAX_DEFAULT_QUICK_SEARCH_ITEMS,
+          })
+        : [],
+    [currentProject, gitStatuses, openFileTabs, recentFilePaths]
+  );
+
+  useEffect(() => {
+    if (!open || !currentProject || query.trim()) return;
+    if (recentItemsWithoutFallback.length >= MAX_DEFAULT_QUICK_SEARCH_ITEMS) return;
+    if (fallbackState?.projectPath === currentProject.path) return;
+
+    const projectPath = currentProject.path;
+    let cancelled = false;
+    void listProjectDirectory(projectPath)
+      .then((listing) => {
+        if (cancelled) return;
+        setFallbackState({ projectPath, entries: listing.entries });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFallbackState({ projectPath, entries: [] });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProject, fallbackState?.projectPath, open, query, recentItemsWithoutFallback.length]);
+
   const recentItems = useMemo<QuickSearchItem[]>(() => {
     if (!currentProject) return [];
-    return Object.values(tabsById)
-      .filter((tab) => tab.kind === "file")
-      .sort((left, right) => right.lastActivatedAt - left.lastActivatedAt)
-      .slice(0, 8)
-      .map((tab) => {
-        const relativePath = buildRelativePath(currentProject.path, tab.resourceId);
-        return {
-          key: `recent:${tab.resourceId}`,
-          path: tab.resourceId,
-          name: tab.title,
-          relativePath,
-          parentPath: getParentPath(relativePath),
-          kind: "file" as const,
-          section: "recent" as const,
-        };
-      });
-  }, [currentProject, tabsById]);
+    if (recentItemsWithoutFallback.length >= MAX_DEFAULT_QUICK_SEARCH_ITEMS) {
+      return recentItemsWithoutFallback;
+    }
+    return buildDefaultQuickSearchItems({
+      projectPath: currentProject.path,
+      openFileTabs,
+      recentFilePaths,
+      gitStatuses,
+      fallbackEntries,
+      limit: MAX_DEFAULT_QUICK_SEARCH_ITEMS,
+    });
+  }, [
+    currentProject,
+    fallbackEntries,
+    gitStatuses,
+    openFileTabs,
+    recentFilePaths,
+    recentItemsWithoutFallback,
+  ]);
 
   const visibleItems = useMemo(() => {
     const trimmedQuery = query.trim();
@@ -145,11 +200,16 @@ function TitleBarQuickSearch() {
       if (item.kind === "directory") {
         revealExplorerPath(item.path, "directory");
       } else {
+        if (currentProject) {
+          setRecentFilePaths((prev) =>
+            recordRecentQuickSearchPaths(currentProject.path, [item.path], prev)
+          );
+        }
         openFileTab(item.path, { preview: false });
       }
       closeSearch();
     },
-    [closeSearch, openFileTab]
+    [closeSearch, currentProject, openFileTab]
   );
 
   useEffect(() => {

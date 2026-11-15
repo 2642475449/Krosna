@@ -138,8 +138,6 @@ pub struct GitDiffHunk {
     pub new_lines: u32,
     pub header: String,
     pub lines: Vec<GitDiffLine>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub decision: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]

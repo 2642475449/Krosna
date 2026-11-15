@@ -196,6 +196,7 @@ export function QuickCommandDialog({
   return (
     <Modal
       open={open}
+      centered
       title={isEdit ? t("quickCommands.editCommand") : t("quickCommands.addCommand")}
       onCancel={saving ? undefined : onCancel}
       closable={!saving}

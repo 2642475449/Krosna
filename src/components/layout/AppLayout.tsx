@@ -15,7 +15,6 @@ import TabBar from "@/components/TabBar";
 import HomePage from "@/pages/home";
 import { WorkflowIllustration } from "@/components/ui/WorkflowIllustration";
 import { SettingsPanelSkeleton } from "@/components/settings/SettingsPanelSkeleton";
-import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { TerminalHistoryView } from "@/components/TerminalHistoryView";
 import { initializeRecoverableWindowContext } from "@/store/slices/workspaceRecovery";
 import { useWorkspaceSessionRestore } from "@/hooks/useWorkspaceSessionRestore";
@@ -44,7 +43,6 @@ import {
   openProjectWindow,
   spawnPty,
   resolveRecentCodexSessionId,
-  checkpointListTurns,
 } from "@/lib/api";
 import {
   getAgentCommandShell,
@@ -67,7 +65,6 @@ import type {
   Session,
   SessionLaunchOptions,
   SessionUsageUpdatePayload,
-  AgentTurnReview,
   AiAgentId,
   WindowProjectContext,
 } from "@/types";
@@ -92,7 +89,6 @@ import {
   getTerminalCompletionIngestSuppressionReason,
 } from "@/lib/terminalCompletionNotificationPolicy";
 import { isSessionVisibleInWorkspace } from "@/lib/sessionVisibility";
-import { checkpointSessionUpdates } from "@/lib/checkpointReview";
 import {
   OPEN_AUXILIARY_QUESTION_EVENT,
   openAuxiliarySession,
@@ -208,9 +204,6 @@ function WorkspacePane({ paneId }: { paneId: string }) {
   const resumeSession = useResumeSession();
 
   if (!pane) return null;
-  const activeSession = pane.activeTabId
-    ? sessions.find((session) => session.id === pane.activeTabId) ?? null
-    : null;
 
   return (
     <div
@@ -223,7 +216,6 @@ function WorkspacePane({ paneId }: { paneId: string }) {
       }}
     >
       <TabBar paneId={pane.id} tabIds={pane.tabIds} activeTabId={pane.activeTabId} />
-      {activeSession && <SessionCheckpointSummaryBar session={activeSession} />}
       <div className="relative min-h-0 flex-1">
         {pane.tabIds.length === 0 ? (
           <div
@@ -752,6 +744,7 @@ function AppLayout() {
         updateSession(sessionId, {
           active: true,
           status: agent.id === "opencode" && providerInitialPrompt ? "running" : "waiting",
+          ...(providerInitialPrompt ? { lastActivityAt: Date.now() } : {}),
         });
         if (presentation === "auxiliary") {
           openAuxiliarySession({
@@ -1230,55 +1223,6 @@ function AppLayout() {
   ]);
 
   useEffect(() => {
-    const startedUnlistenPromise = listen<AgentTurnReview>("checkpoint-turn-started", (event) => {
-      const turn = event.payload;
-      updateSession(turn.sessionId, {
-        checkpointActiveTurnId: turn.id,
-        checkpointReviewStatus: "running",
-        checkpointUpdatedAt: turn.updatedAt,
-        checkpointWarning: null,
-      });
-    });
-    const unlistenPromise = listen<AgentTurnReview>("checkpoint-review-ready", (event) => {
-      const review = event.payload;
-      const session = useAppStore
-        .getState()
-        .sessions.find((item) => item.id === review.sessionId);
-      if (!session) return;
-
-      checkpointListTurns(review.projectPath, review.sessionId)
-        .then((turns) => {
-          updateSession(review.sessionId, {
-            ...checkpointSessionUpdates(turns),
-            checkpointActiveTurnId: null,
-            checkpointWarning: null,
-          });
-        })
-        .catch((error) => {
-          console.error("Failed to refresh checkpoint review summary:", error);
-          updateSession(review.sessionId, {
-            checkpointActiveTurnId: null,
-            checkpointPendingTurns:
-              review.reviewStatus === "awaiting_review" ||
-              review.reviewStatus === "partially_reviewed"
-                ? Math.max(1, session.checkpointPendingTurns ?? 0)
-                : session.checkpointPendingTurns ?? 0,
-            checkpointFileCount: review.files.length,
-            checkpointInsertions: review.insertions,
-            checkpointDeletions: review.deletions,
-            checkpointReviewStatus: review.reviewStatus,
-            checkpointUpdatedAt: review.updatedAt,
-          });
-        });
-    });
-
-    return () => {
-      startedUnlistenPromise.then((fn) => fn()).catch(() => {});
-      unlistenPromise.then((fn) => fn()).catch(() => {});
-    };
-  }, [updateSession]);
-
-  useEffect(() => {
     const unlistenPromise = listen<AgentStatusUpdatePayload>("agent-status", (event) => {
       const payload = event.payload;
       const session = useAppStore.getState().sessions.find((item) => item.id === payload.sessionId);
@@ -1327,6 +1271,8 @@ function AppLayout() {
         active: true,
         statusRevision: payload.revision,
         statusUpdatedAt: payload.createdAt,
+        ...(payload.state === "completed" && payload.eventType === "assistant_complete"
+          ? { lastActivityAt: payload.createdAt } : {}),
         // 原生新状态取代本地中断标记，避免下一轮权限等待沿用旧的输入就绪状态。
         lastEventType: payload.eventType ?? undefined,
         ...(payload.agentSessionId ? { agentSessionId: payload.agentSessionId } : {}),

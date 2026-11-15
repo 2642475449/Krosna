@@ -238,6 +238,7 @@ export function QuickCommandsPage() {
 
       {/* 对话框 */}
       <Modal
+        centered
         open={!!deletingCommand && quickCommandMatchesRepository(deletingCommand, repositoryId)}
         title={t("quickCommands.deleteConfirmTitle")}
         onOk={() => void deleteCommand()}

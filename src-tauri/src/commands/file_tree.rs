@@ -42,6 +42,8 @@ pub struct FileTreeEntry {
     pub path: String,
     pub kind: FileTreeEntryKind,
     pub has_children: bool,
+    #[serde(default)]
+    pub ignored: bool,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
@@ -136,9 +138,16 @@ pub fn list_project_directory_blocking(
         return Err("目标路径不是文件夹".to_string());
     }
 
+    let git_repo = git2::Repository::discover(&root_path).ok();
+    let git_workdir = git_repo
+        .as_ref()
+        .and_then(|repo| repo.workdir())
+        .map(|dir| dir.to_path_buf());
+
     let mut entries = Vec::new();
     for entry in fs::read_dir(&target_path).map_err(|e| format!("读取目录失败: {}", e))? {
         let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
+        let name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path();
         let metadata = entry
             .metadata()
@@ -149,14 +158,27 @@ pub fn list_project_directory_blocking(
             FileTreeEntryKind::File
         };
 
+        // 资源管理器默认隐藏 .git 元数据目录，避免干扰日常文件浏览。
+        if name == ".git" && matches!(kind, FileTreeEntryKind::Directory) {
+            continue;
+        }
+
         let has_children = matches!(kind, FileTreeEntryKind::Directory)
             && directory_has_children(&path).unwrap_or(false);
 
+        let ignored = is_entry_git_ignored(
+            git_repo.as_ref(),
+            git_workdir.as_deref(),
+            &path,
+            matches!(kind, FileTreeEntryKind::Directory),
+        );
+
         entries.push(FileTreeEntry {
-            name: entry.file_name().to_string_lossy().to_string(),
+            name,
             path: display_path(&path),
             kind,
             has_children,
+            ignored,
         });
     }
 
@@ -167,6 +189,32 @@ pub fn list_project_directory_blocking(
         directory_path: display_path(&target_path),
         entries,
     })
+}
+
+fn is_entry_git_ignored(
+    repo: Option<&git2::Repository>,
+    workdir: Option<&Path>,
+    entry_path: &Path,
+    is_directory: bool,
+) -> bool {
+    let (Some(repo), Some(workdir)) = (repo, workdir) else {
+        return false;
+    };
+    let Ok(relative) = entry_path.strip_prefix(workdir) else {
+        return false;
+    };
+    let rel_str = relative.to_string_lossy().replace('\\', "/");
+    if rel_str.is_empty() {
+        return false;
+    }
+    if repo.is_path_ignored(&rel_str).unwrap_or(false) {
+        return true;
+    }
+    if is_directory {
+        let dir_rel = format!("{}/", rel_str.trim_end_matches('/'));
+        return repo.is_path_ignored(&dir_rel).unwrap_or(false);
+    }
+    false
 }
 
 /// Resolves a terminal file-link candidate without reading the target directory
@@ -1459,6 +1507,7 @@ fn collect_search_matches(
                         kind: kind.clone(),
                         has_children: matches!(kind, FileTreeEntryKind::Directory)
                             && directory_has_children(&child_path).unwrap_or(false),
+                        ignored: false,
                     },
                     score,
                     depth: relative_path.matches('/').count(),
@@ -1616,12 +1665,14 @@ mod tests {
             path: "D:/demo/src".to_string(),
             kind: FileTreeEntryKind::Directory,
             has_children: true,
+            ignored: false,
         };
         let file = FileTreeEntry {
             name: "README.md".to_string(),
             path: "D:/demo/README.md".to_string(),
             kind: FileTreeEntryKind::File,
             has_children: false,
+            ignored: false,
         };
 
         assert_eq!(compare_entries(&dir, &file), Ordering::Less);
@@ -1634,12 +1685,14 @@ mod tests {
             path: "D:/demo/alpha".to_string(),
             kind: FileTreeEntryKind::Directory,
             has_children: false,
+            ignored: false,
         };
         let beta = FileTreeEntry {
             name: "Beta".to_string(),
             path: "D:/demo/Beta".to_string(),
             kind: FileTreeEntryKind::Directory,
             has_children: false,
+            ignored: false,
         };
 
         assert_eq!(compare_entries(&alpha, &beta), Ordering::Less);
@@ -2194,5 +2247,29 @@ mod tests {
         let bytes = fs::read(&file_path).unwrap();
         assert_eq!(&bytes[..3], b"\xEF\xBB\xBF");
         assert_eq!(&bytes[3..], "中文".as_bytes());
+    }
+
+    #[test]
+    fn list_project_directory_hides_git_dir_and_marks_gitignored_entries() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        git2::Repository::init(root).unwrap();
+        fs::write(root.join(".gitignore"), "AGENTS.md\n.codex-tmp/\n").unwrap();
+        fs::write(root.join("AGENTS.md"), "# rules").unwrap();
+        fs::write(root.join("README.md"), "# readme").unwrap();
+        fs::create_dir(root.join(".codex-tmp")).unwrap();
+
+        let listing = list_project_directory_blocking(display_path(root), None).unwrap();
+        let names: Vec<&str> = listing.entries.iter().map(|e| e.name.as_str()).collect();
+        assert!(!names.contains(&".git"));
+
+        let agents = listing.entries.iter().find(|e| e.name == "AGENTS.md").unwrap();
+        assert!(agents.ignored);
+
+        let codex_tmp = listing.entries.iter().find(|e| e.name == ".codex-tmp").unwrap();
+        assert!(codex_tmp.ignored);
+
+        let readme = listing.entries.iter().find(|e| e.name == "README.md").unwrap();
+        assert!(!readme.ignored);
     }
 }

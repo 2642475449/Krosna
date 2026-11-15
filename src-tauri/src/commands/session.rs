@@ -1,7 +1,5 @@
-use super::git::checkpoint::{self, AgentTurnStartResult};
 use crate::hook_ingest::HookStatusRuntime;
 use crate::path_utils::normalize_input_path;
-use crate::pty::ActiveAgentTurn;
 use crate::pty::{
     check_claude_ready_in_shell, find_claude_exe, kill_stale_claude_processes, PtyManager,
 };
@@ -36,9 +34,6 @@ struct AgentHookConfigurationFailedPayload {
     agent_id: String,
     error: String,
 }
-
-const INTERACTIVE_BASELINE_TIMEOUT: Duration = Duration::from_millis(1_500);
-const PREVIOUS_TURN_COMPLETION_TIMEOUT: Duration = Duration::from_millis(750);
 
 // 修复 H-02: 原 `launch_session` 命令存在命令注入漏洞(SEC-001):
 //   format!("cd /d \"{}\" && ...", path) 直接把用户输入拼到 cmd /k 字符串,
@@ -104,21 +99,6 @@ pub async fn spawn_pty(
             );
         }
     }
-    let checkpoint_agent_id = agent_id.as_deref().unwrap_or("generic-cli");
-    let initial_turn = initial_prompt
-        .as_deref()
-        .filter(|prompt| !prompt.trim().is_empty())
-        .filter(|_| checkpoint_agent_id != "powershell" && checkpoint_agent_id != "cmd")
-        .and_then(|_| {
-            checkpoint::begin_turn_with_timeout(
-                &path,
-                &session_id,
-                checkpoint_agent_id,
-                INTERACTIVE_BASELINE_TIMEOUT,
-            )
-            .ok()
-        });
-    let app_for_checkpoint = app.clone();
     let network_proxy = super::network_proxy::load_resolved_proxy(&database)?;
     let manager = manager.inner().clone();
     let spawned_session_id = session_id.clone();
@@ -137,7 +117,7 @@ pub async fn spawn_pty(
         working_directory,
         runtime_metadata,
     );
-    let result = match result {
+    match result {
         Ok(Some(control)) => {
             let delivery = tauri::async_runtime::spawn_blocking(move || control.deliver())
                 .await
@@ -152,20 +132,7 @@ pub async fn spawn_pty(
         }
         Ok(None) => Ok(()),
         Err(error) => Err(error),
-    };
-    if result.is_ok() {
-        if let Some(turn) = initial_turn {
-            manager.replace_active_turn(
-                &turn.session_id,
-                ActiveAgentTurn {
-                    id: turn.id.clone(),
-                    project_path: turn.project_path.clone(),
-                },
-            );
-            let _ = app_for_checkpoint.emit("checkpoint-turn-started", turn);
-        }
     }
-    result
 }
 
 /// 在创建会话前检查 Claude Code 是否可用
@@ -264,107 +231,6 @@ pub fn infer_agent_interrupt(
     }
     runtime.infer_interrupt(&session_id, baseline_revision)
         .map(|(revision, created_at)| AgentInterruptResult { revision, created_at })
-}
-
-/// Atomically capture a provider-independent turn baseline before forwarding Enter to the PTY.
-/// Checkpoint failures never block the CLI: the input is still delivered and a warning is returned.
-#[tauri::command]
-pub async fn submit_agent_turn_input(
-    session_id: String,
-    data: String,
-    app: AppHandle,
-    manager: State<'_, Arc<PtyManager>>,
-) -> Result<AgentTurnStartResult, String> {
-    let manager = manager.inner().clone();
-    let (project_path, agent_id, input) = manager.prepare_input(&session_id)?;
-
-    if agent_id == "powershell" || agent_id == "cmd" {
-        input.write_async(data).await?;
-        return Ok(AgentTurnStartResult {
-            turn: None,
-            completed_previous: None,
-            warning: None,
-        });
-    }
-
-    let manager_for_checkpoint = manager.clone();
-    let session_for_checkpoint = session_id.clone();
-    let project_for_checkpoint = project_path.clone();
-    let checkpoint_result = tauri::async_runtime::spawn_blocking(move || {
-        let mut warnings = Vec::new();
-        let completed_previous = match manager_for_checkpoint.complete_active_turn_with_timeout(
-            &session_for_checkpoint,
-            "next_prompt",
-            PREVIOUS_TURN_COMPLETION_TIMEOUT,
-        ) {
-            Ok(turn) => turn,
-            Err(error) => {
-                warnings.push(format!(
-                    "Previous turn checkpoint could not be completed: {error}"
-                ));
-                None
-            }
-        };
-        let turn = match checkpoint::begin_turn_with_timeout(
-            &project_for_checkpoint,
-            &session_for_checkpoint,
-            &agent_id,
-            INTERACTIVE_BASELINE_TIMEOUT,
-        ) {
-            Ok(turn) => {
-                manager_for_checkpoint.replace_active_turn(
-                    &session_for_checkpoint,
-                    ActiveAgentTurn {
-                        id: turn.id.clone(),
-                        project_path: project_for_checkpoint,
-                    },
-                );
-                Some(turn)
-            }
-            Err(error) => {
-                warnings.push(format!("Checkpoint is unavailable for this turn: {error}"));
-                None
-            }
-        };
-        AgentTurnStartResult {
-            turn,
-            completed_previous,
-            warning: if warnings.is_empty() {
-                None
-            } else {
-                Some(warnings.join("; "))
-            },
-        }
-    })
-    .await
-    .map_err(|error| format!("Checkpoint task failed: {error}"))?;
-
-    // The baseline exists before Enter reaches the agent, so pre-existing dirty changes
-    // cannot be attributed to this turn.
-    input.write_async(data).await?;
-    if let Some(review) = checkpoint_result.completed_previous.clone() {
-        let _ = app.emit("checkpoint-review-ready", review);
-    }
-    Ok(checkpoint_result)
-}
-
-#[tauri::command]
-pub async fn complete_agent_turn(
-    session_id: String,
-    app: AppHandle,
-    manager: State<'_, Arc<PtyManager>>,
-) -> Result<Option<super::git::checkpoint::AgentTurnReview>, String> {
-    let manager = manager.inner().clone();
-    let session_for_task = session_id.clone();
-    let review = tauri::async_runtime::spawn_blocking(move || {
-        manager.complete_active_turn(&session_for_task, "user_confirmed")
-    })
-    .await
-    .map_err(|error| format!("Checkpoint task failed: {error}"))??;
-    if let Some(review) = review.clone() {
-        let _ = app.emit("checkpoint-review-ready", review);
-    }
-    Ok(review)
 }
 
 /// 只返回真实模型结果；失败原因交给前端保存和重试，禁止把兜底冒充成功。

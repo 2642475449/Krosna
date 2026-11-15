@@ -946,6 +946,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
       {/* Discard confirmation modal */}
       <Modal
+        centered
         title={discardConfirmTitle}
         open={discardConfirmVisible}
         okText={t("sidebar.gitDiscardConfirmOk")}

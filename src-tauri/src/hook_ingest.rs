@@ -302,7 +302,7 @@ pub fn start_ingest_server(
 
             match serde_json::from_str::<HookIngressPayload>(&body) {
                 Ok(payload) => {
-                    handle_agent_status(&app, manager.clone(), guards.clone(), payload);
+                    handle_agent_status(&app, guards.clone(), payload);
                     let _ = request
                         .respond(tiny_http::Response::from_string("ok").with_status_code(200));
                 }
@@ -319,7 +319,6 @@ pub fn start_ingest_server(
 
 fn handle_agent_status(
     app: &AppHandle,
-    manager: Arc<PtyManager>,
     guards: StatusGuards,
     payload: HookIngressPayload,
 ) {
@@ -470,7 +469,6 @@ fn handle_agent_status(
 
     if state == "completed" {
         let app = app.clone();
-        let manager = manager.clone();
         let Some(candidate) = completion_candidate else {
             return;
         };
@@ -482,11 +480,6 @@ fn handle_agent_status(
                     .then_some(guard.revision == revision)
             }) == Some(true);
             if can_finalize {
-                if let Ok(Some(review)) =
-                    manager.complete_active_turn(&update.session_id, "provider_event")
-                {
-                    let _ = app.emit("checkpoint-review-ready", review);
-                }
                 emit_status_and_attention(&app, &update);
             }
         });

@@ -48,6 +48,9 @@ export async function confirmCloseTab(tab: TabEntity | undefined, t: TFunction):
     };
     try {
       instance = Modal.confirm({
+        centered: true,
+        transitionName: "",
+        maskTransitionName: "",
         title: t("fileTabs.closeDirtyTitle"),
         content: t("fileTabs.closeDirtyDescription", { name: tab.title }),
         okText: t("fileTabs.closeWithoutSaving"),

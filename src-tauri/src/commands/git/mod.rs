@@ -1,6 +1,5 @@
 pub mod ai;
 pub mod branch;
-pub mod checkpoint;
 pub mod clone;
 pub mod commit;
 pub mod conflict;
@@ -19,7 +18,6 @@ pub mod workflow;
 // Re-export commands
 pub use ai::*;
 pub use branch::*;
-pub use checkpoint::*;
 pub use clone::*;
 pub use commit::*;
 pub use conflict::*;

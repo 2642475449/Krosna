@@ -34,6 +34,7 @@ import {
   DEFAULT_LAYOUT,
 } from "./utils/workspace";
 import { updateSessionCollection, mapStatusFromEvent } from "./utils/session";
+import { getNextSessionActivityAt } from "@/lib/sessionActivity";
 import { create, type StateCreator } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type {
@@ -743,6 +744,8 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       activeSidebarSection: "sessions",
       sidebarPinnedCollapsed: false,
       sidebarSessionsCollapsed: false,
+      sidebarStaleSessionsCollapsed: true,
+      staleSessionDays: 7,
       sidebarGitChangesCollapsed: false,
       sidebarGitGraphCollapsed: true,
       gitChangeCount: 0,
@@ -1266,6 +1269,22 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           return syncProjectState(state, path, state.sessions, nextWorkspace);
         }),
 
+      setTabMarkdownViewMode: (tabId, mode) =>
+        set((state) => {
+          const tab = state.tabsById[tabId];
+          if (!tab || !state.currentProject || tab.markdownViewMode === mode) {
+            return state;
+          }
+          const path = state.currentProject.path;
+          const currentWorkspace = state.projectWorkspaces[path] || createDefaultWorkspace();
+          const nextWorkspace = cloneWorkspace(currentWorkspace);
+          nextWorkspace.tabsById[tabId] = {
+            ...nextWorkspace.tabsById[tabId],
+            markdownViewMode: mode,
+          };
+          return syncProjectState(state, path, state.sessions, nextWorkspace);
+        }),
+
       reorderTabs: (sourceTabId, targetTabId, position, paneId) =>
         set((state) => {
           if (!state.currentProject) return state;
@@ -1427,6 +1446,12 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
       toggleSessionsCollapsed: () =>
         set((state) => ({ sidebarSessionsCollapsed: !state.sidebarSessionsCollapsed })),
+
+      toggleStaleSessionsCollapsed: () =>
+        set((state) => ({ sidebarStaleSessionsCollapsed: !state.sidebarStaleSessionsCollapsed })),
+
+      setStaleSessionDays: (days) =>
+        set({ staleSessionDays: Number.isFinite(days) && days >= 0 ? days : 7 }),
 
       setPinnedCollapsed: (collapsed) =>
         set({ sidebarPinnedCollapsed: collapsed }),
@@ -1739,8 +1764,16 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
               return session.unreadCount === unreadCount ? session : { ...session, unreadCount };
             }
             const isNewestEvent = event.createdAt >= (session.lastEventAt ?? 0);
+            const isConversationCompletion = event.eventType === "assistant_complete"
+              && event.projectPath === session.path
+              && session.agentId !== undefined
+              && (event.source === session.agentId || event.source === `${session.agentId}_hook`);
+            const activityAt = isConversationCompletion
+              ? getNextSessionActivityAt(session, event.createdAt)
+              : undefined;
             return {
               ...session,
+              ...(activityAt === undefined ? {} : { lastActivityAt: activityAt }),
               // Hook attention events carry a revision and have a paired
               // agent-status update. They must not independently roll back
               // runtime state. Runtime PTY events remain the legacy fallback.
@@ -1976,6 +2009,8 @@ function createPersistOptions(storage?: StateStorage) {
         defaultTerminalShell: state.defaultTerminalShell,
         sidebarPinnedCollapsed: state.sidebarPinnedCollapsed,
         sidebarSessionsCollapsed: state.sidebarSessionsCollapsed,
+        sidebarStaleSessionsCollapsed: state.sidebarStaleSessionsCollapsed,
+        staleSessionDays: state.staleSessionDays,
         sidebarGitChangesCollapsed: state.sidebarGitChangesCollapsed,
         sidebarGitGraphCollapsed: state.sidebarGitGraphCollapsed,
         voicePolishEnabled: state.voicePolishEnabled,

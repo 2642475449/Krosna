@@ -8,6 +8,7 @@ import {
 } from "@ant-design/icons";
 import { getTerminalTheme } from "@/lib/terminalTheme";
 import { openInAssociatedApplication } from "@/lib/api";
+import { useDelayedLoading } from "@/hooks/useDelayedLoading";
 import { useFileDocument } from "@/hooks/useFileDocument";
 import MonacoTextEditor from "@/components/editors/MonacoTextEditor";
 import {
@@ -78,12 +79,7 @@ function inferFileKind(path: string): FileKind {
   return "binary";
 }
 
-function isMarkdownFile(path: string) {
-  const normalizedPath = path.replace(/[\\/]+$/, "");
-  const fileName = normalizedPath.split(/[\\/]/).filter(Boolean).pop() ?? path;
-  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
-  return extension === "md" || extension === "markdown";
-}
+import { isMarkdownFile } from "@/lib/fileIcon";
 
 function formatFileSize(sizeBytes: number | null): string | null {
   if (sizeBytes === null || !Number.isFinite(sizeBytes)) {
@@ -159,12 +155,14 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
   const activeTheme = useAppStore((s) => s.activeTheme());
   const registerFileDocument = useAppStore((s) => s.registerFileDocument);
   const setTabDirty = useAppStore((s) => s.setTabDirty);
+  const setTabMarkdownViewMode = useAppStore((s) => s.setTabMarkdownViewMode);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const setActiveSidebarSection = useAppStore((s) => s.setActiveSidebarSection);
   const openFileTab = useAppStore((s) => s.openFileTab);
   const promoteTab = useAppStore((s) => s.promoteTab);
   const tab = useAppStore((s) => tabId ? s.tabsById[tabId] : undefined);
   const { document, status, loading, content, imageSrc, pdfData, error, conflict, isDirty } = useFileDocument(projectPath, path, isActive);
+  const showLoadingSpinner = useDelayedLoading(loading);
   const errorMessage = error ? getFilePreviewErrorMessage(error) : null;
   const kind = status?.kind ?? inferFileKind(path);
   const readOnly = status?.readOnly ?? true;
@@ -178,7 +176,15 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
   useEffect(() => {
     if (tabId) setTabDirty(tabId, isDirty);
   }, [isDirty, setTabDirty, tabId]);
-  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownViewMode>("preview");
+  const [localMarkdownViewMode, setLocalMarkdownViewMode] = useState<MarkdownViewMode>("preview");
+  const markdownViewMode: MarkdownViewMode = tabId ? (tab?.markdownViewMode ?? "preview") : localMarkdownViewMode;
+  const setMarkdownViewMode = useCallback((mode: MarkdownViewMode) => {
+    if (tabId) {
+      setTabMarkdownViewMode(tabId, mode);
+    } else {
+      setLocalMarkdownViewMode(mode);
+    }
+  }, [setTabMarkdownViewMode, tabId]);
   const [revealTarget, setRevealTarget] = useState<FileRevealTarget | null>(() =>
     tabId ? consumePendingFileNavigation(path) : null
   );
@@ -217,14 +223,16 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
   }, [path]);
 
   useEffect(() => {
-    setMarkdownViewMode("preview");
-  }, [path]);
+    if (!tabId) {
+      setLocalMarkdownViewMode("preview");
+    }
+  }, [path, tabId]);
 
   useEffect(() => {
     if (revealTarget) {
       setMarkdownViewMode("edit");
     }
-  }, [revealTarget]);
+  }, [revealTarget, setMarkdownViewMode]);
 
   useEffect(() => {
     if (!tabId) return;
@@ -358,7 +366,7 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
     ) : null;
 
   const showDocumentIdentity = !tabId;
-  const showMarkdownMode = markdownFile && (!error || !!status);
+  const showMarkdownMode = !tabId && markdownFile && (!error || !!status);
   const toolbarActions = renderActions?.(() => handleSave({ silent: true }));
   const toolbar = showDocumentIdentity || showMarkdownMode || toolbarActions ? (
     <div
@@ -396,6 +404,9 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
   ) : null;
 
   if (loading) {
+    if (!showLoadingSpinner) {
+      return <div className="h-full" />;
+    }
     return (
       <div className="h-full flex items-center justify-center">
         <Spin description={t("fileTabs.loading")} />

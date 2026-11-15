@@ -130,11 +130,6 @@
 .app-rail-button:hover .app-nav-settings-gear,
 .app-rail-button:focus-visible .app-nav-settings-gear { transform: rotate(30deg); }
 
-.app-checkpoint-tone-icon,
-.app-checkpoint-status { transition: color var(--cs-motion-normal) ease, background-color var(--cs-motion-normal) ease; }
-.app-checkpoint-status-text { display: inline-block; animation: app-text-swap var(--cs-motion-normal) var(--cs-motion-ease); }
-.app-checkpoint-summary[data-feedback="reviewed"] .app-checkpoint-tone-icon { animation: app-status-arrive 480ms var(--cs-motion-ease); }
-
 .app-text-swap {
   display: inline-block;
   animation: app-text-swap var(--cs-motion-fast) var(--cs-motion-ease);
@@ -302,9 +297,6 @@
   .app-tab-selection-indicator,
   .app-nav-settings-gear,
   .app-nav-artwork *,
-  .app-checkpoint-tone-icon,
-  .app-checkpoint-status,
-  .app-checkpoint-status-text,
   .app-text-swap,
   .app-copy-icon,
   .app-badge-pop,

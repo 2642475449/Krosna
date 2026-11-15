@@ -106,3 +106,34 @@ it("does not dispose a tab runtime still open in another pane", async () => {
   expect(mocks.close).toHaveBeenCalledExactlyOnceWith("file", "main");
   expect(mocks.runtime).not.toHaveBeenCalled();
 });
+it("closes all other tabs together without waiting sequentially for each runtime teardown", async () => {
+  const s1 = { id: "s1", kind: "session", title: "Session 1", resourceId: "s1" };
+  const s2 = { id: "s2", kind: "session", title: "Session 2", resourceId: "s2" };
+  const keep = { id: "keep", kind: "session", title: "Keep", resourceId: "keep" };
+  mocks.state.sessions = [
+    { id: "s1", name: "Session 1", path: "D:/project", agentId: "codex", active: true, status: "running" },
+    { id: "s2", name: "Session 2", path: "D:/project", agentId: "codex", active: true, status: "running" },
+    { id: "keep", name: "Keep", path: "D:/project", agentId: "codex", active: true, status: "running" },
+  ];
+  mocks.state.tabsById = { s1, s2, keep };
+  mocks.state.panesById = { main: { tabIds: ["s1", "keep", "s2"] } };
+  let resolveTeardown!: () => void;
+  mocks.runtime.mockImplementation(() => new Promise<void>((resolve) => { resolveTeardown = resolve; }));
+
+  await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds: ["s1", "keep", "s2"], activeTabId: "keep" })));
+  const keepTab = host.querySelectorAll(".tab-item")[1]!;
+  await act(async () => {
+    keepTab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const closeOthersItem = Array.from(document.body.querySelectorAll(".ant-dropdown-menu-item"))
+    .find((el) => el.textContent?.includes("tabBar.closeOtherTabs")) as HTMLElement | undefined;
+  expect(closeOthersItem).toBeDefined();
+  await act(async () => {
+    closeOthersItem!.click();
+  });
+
+  expect(mocks.close.mock.calls).toEqual([["s1", "main"], ["s2", "main"]]);
+  expect(mocks.runtime.mock.calls).toEqual([[s1], [s2]]);
+  resolveTeardown();
+});
+

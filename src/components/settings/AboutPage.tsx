@@ -330,6 +330,7 @@ export const AboutPage: FC = () => {
 
       {/* License Modal */}
       <Modal
+        centered
         title={t("settings.about.licenseModalTitle")}
         open={licenseModalOpen}
         onCancel={() => setLicenseModalOpen(false)}
@@ -355,6 +356,7 @@ export const AboutPage: FC = () => {
 
       {/* Third Party Notices Modal */}
       <Modal
+        centered
         title={t("settings.about.thirdPartyModalTitle")}
         open={thirdPartyModalOpen}
         onCancel={() => setThirdPartyModalOpen(false)}

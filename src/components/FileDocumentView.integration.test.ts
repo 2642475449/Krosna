@@ -7,9 +7,9 @@ import AuxiliaryFileView from "./AuxiliaryFileView";
 import { inspectProjectFile, readProjectFile, readProjectImage, writeProjectFile, openInAssociatedApplication } from "@/lib/api";
 
 const app = vi.hoisted(() => ({
-  activeTheme: () => "light-glass" as const, registerFileDocument: vi.fn(), setTabDirty: vi.fn(), setSidebarCollapsed: vi.fn(),
+  activeTheme: () => "light-glass" as const, registerFileDocument: vi.fn(), setTabDirty: vi.fn(), setTabMarkdownViewMode: vi.fn(), setSidebarCollapsed: vi.fn(),
   setActiveSidebarSection: vi.fn(), openFileTab: vi.fn(), promoteTab: vi.fn(),
-  tabsById: { main: { preview: true } },
+  tabsById: { main: { preview: true, markdownViewMode: "preview" as "edit" | "preview" } },
 }));
 vi.mock("@/store", () => ({ useAppStore: (select: (state: typeof app) => unknown) => select(app) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -90,8 +90,12 @@ it("shares one disk read and live edits between the workspace and auxiliary host
   expect(readProjectFile).toHaveBeenCalledTimes(1);
   expect(host.querySelectorAll("[data-preview]")).toHaveLength(2);
   const main = host.querySelector("[data-main]")!;
-  const editMode = Array.from(main.querySelectorAll("button")).find((button) => button.textContent === "fileTabs.markdownModeEdit")!;
-  await act(async () => editMode.click());
+  expect(main.querySelector("[data-mode-control]")).toBeNull();
+  app.tabsById.main.markdownViewMode = "edit";
+  await act(async () => root.render(createElement("div", null,
+    createElement("section", { "data-main": true }, createElement(FileTabView, { tabId: "main", projectPath, path, isActive: true })),
+    createElement("section", { "data-auxiliary": true }, auxiliary(path)),
+  )));
   const edit = Array.from(main.querySelectorAll("button")).find((button) => button.textContent === "Edit document")!;
   await act(async () => edit.click());
   expect(main.querySelector("[data-editor]")?.textContent).toBe("# Edited in shared document");

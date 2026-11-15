@@ -560,6 +560,7 @@ export function GitCommitComposer({
         </div>
       ) : null}
       <Modal
+        centered
         title={t("sidebar.gitStageAllCommitConfirmTitle", {
           defaultValue: "暂存所有更改并提交？",
         })}
@@ -578,6 +579,7 @@ export function GitCommitComposer({
         </p>
       </Modal>
       <Modal
+        centered
         title={t("sidebar.gitPullWithStashTitle")}
         open={pullConfirmOpen}
         okText={t("sidebar.gitPullWithStashAction")}

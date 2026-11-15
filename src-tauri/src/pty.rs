@@ -1,6 +1,5 @@
 use crate::claude_usage::spawn_usage_monitor;
 use crate::commands::agents::agent_definition;
-use crate::commands::git::checkpoint::{self, AgentTurnReview};
 use crate::events::{emit_session_event, SessionEvent, SessionEventSeverity, SessionEventType};
 use crate::hook_ingest::HookIngestConfig;
 use crate::opencode_control::{with_tui_server_args, OpenCodePromptControl};
@@ -19,7 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 mod output_flow;
 mod output_transport;
@@ -416,16 +415,9 @@ pub struct PtyManager {
     sessions: Mutex<HashMap<String, PtySession>>,
     pub output: OutputHub,
     next_instance_id: AtomicU64,
-    active_turns: Mutex<HashMap<String, ActiveAgentTurn>>,
     ingest_config: Arc<HookIngestConfig>,
     pub(crate) runtime_output: RuntimeOutputStore,
     pub(crate) runtime_context: crate::runtime_context::RuntimeContext,
-}
-
-#[derive(Clone)]
-pub struct ActiveAgentTurn {
-    pub id: String,
-    pub project_path: String,
 }
 
 struct SessionShell {
@@ -440,7 +432,6 @@ impl PtyManager {
             sessions: Mutex::new(HashMap::new()),
             output: OutputHub::default(),
             next_instance_id: AtomicU64::new(1),
-            active_turns: Mutex::new(HashMap::new()),
             ingest_config,
             runtime_output: RuntimeOutputStore::default(),
             runtime_context: crate::runtime_context::RuntimeContext::default(),
@@ -660,9 +651,6 @@ impl PtyManager {
                 .or_else(|| wait_for_pty_exit(exited_session.child.as_mut()));
             exited_session.exit_code = code;
             output_log.lock().finish(code, false);
-            if let Ok(Some(review)) = manager.complete_active_turn(&sid, "process_exit") {
-                let _ = app_clone.emit("checkpoint-review-ready", review);
-            }
             emit_session_event(
                 &app_clone,
                 &SessionEvent {
@@ -722,65 +710,6 @@ impl PtyManager {
             .lock()
             .get(session_id)
             .map(|session| (session.project_path.clone(), session.agent_id.clone()))
-    }
-
-    pub fn replace_active_turn(
-        &self,
-        session_id: &str,
-        turn: ActiveAgentTurn,
-    ) -> Option<ActiveAgentTurn> {
-        self.active_turns
-            .lock()
-            .insert(session_id.to_string(), turn)
-    }
-
-    pub fn take_active_turn(&self, session_id: &str) -> Option<ActiveAgentTurn> {
-        self.active_turns.lock().remove(session_id)
-    }
-
-    pub fn complete_active_turn(
-        &self,
-        session_id: &str,
-        source: &str,
-    ) -> Result<Option<AgentTurnReview>, String> {
-        self.complete_active_turn_inner(session_id, source, None)
-    }
-
-    pub fn complete_active_turn_with_timeout(
-        &self,
-        session_id: &str,
-        source: &str,
-        timeout: Duration,
-    ) -> Result<Option<AgentTurnReview>, String> {
-        self.complete_active_turn_inner(session_id, source, Some(timeout))
-    }
-
-    fn complete_active_turn_inner(
-        &self,
-        session_id: &str,
-        source: &str,
-        timeout: Option<Duration>,
-    ) -> Result<Option<AgentTurnReview>, String> {
-        let Some(active) = self.take_active_turn(session_id) else {
-            return Ok(None);
-        };
-        let result = match timeout {
-            Some(timeout) => checkpoint::complete_turn_with_timeout(
-                &active.id,
-                &active.project_path,
-                source,
-                timeout,
-            ),
-            None => checkpoint::complete_turn(&active.id, &active.project_path, source),
-        };
-        match result {
-            Ok(turn) => Ok(Some(turn)),
-            Err(error) => {
-                // Put the turn back so a later provider event or manual completion can retry.
-                self.replace_active_turn(session_id, active);
-                Err(error)
-            }
-        }
     }
 
     pub fn get_size(&self, session_id: &str) -> Result<Option<PtyGridSize>, String> {

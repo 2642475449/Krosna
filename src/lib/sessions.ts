@@ -1,6 +1,7 @@
 import type { Session, TerminalSplitTarget } from "@/types";
 import type { AppState } from "@/store/types";
 import { normalizeSessionTitles } from "./sessionTitles";
+import { getSessionActivityAt } from "./sessionActivity";
 
 /** 单标签分屏创建独立会话，保留源标签；复用现有 store action 处理布局。 */
 export function addTerminalSession(
@@ -49,8 +50,11 @@ export function toPersistedSession(session: Session): Session {
     ? "stopped"
     : session.status;
 
+  const { lastActivityAt: _activityAt, ...snapshot } = normalizeSessionTitles(session);
+  const activityAt = getSessionActivityAt(session);
   return {
-    ...normalizeSessionTitles(session),
+    ...snapshot,
+    ...(activityAt === undefined ? {} : { lastActivityAt: activityAt }),
     active: false,
     workspaceRestorePending: undefined,
     status,

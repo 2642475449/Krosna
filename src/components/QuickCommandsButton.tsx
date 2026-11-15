@@ -188,7 +188,10 @@ export function QuickCommandsButton() {
           undefined,
           { label: command.label, kind: isAgentPrompt ? "agent" : "terminal" },
         );
-        updateSession(sessionId, { active: true, status: "running" });
+        updateSession(sessionId, {
+          active: true, status: "running",
+          ...(isAgentPrompt ? { lastActivityAt: Date.now() } : {}),
+        });
         void useQuickCommandUsageStore.getState().setCommandUsed(projectPath, command.id);
         if (isAgentPrompt && selectedAgent!.id === "codex") {
           try {
@@ -583,6 +586,7 @@ export function QuickCommandsButton() {
       />
 
       <Modal
+        centered
         open={deletingCommand !== null}
         title={t("quickCommands.deleteConfirmTitle")}
         okText={t("common.confirm")}

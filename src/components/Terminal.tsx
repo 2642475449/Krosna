@@ -29,7 +29,6 @@ import {
   ptyInput,
   ptyResize,
   ptyGetSize,
-  submitAgentTurnInput,
   inspectProjectFile,
   resolveTerminalLink,
   openInAssociatedApplication,
@@ -79,7 +78,7 @@ import { canRestoreTerminalInputCursor, createTerminalAgentInterrupt } from "@/l
 import { getTerminalTheme, TERMINAL_FONT_FAMILY } from "@/lib/terminalTheme";
 import {
   createTerminalAgentUserResponse,
-  getAgentTurnInputResponseBaseline,
+  getAgentSubmitResponseBaseline,
   isAgentUserResponseBaselineCurrent,
   type AgentUserResponseBaseline,
 } from "@/lib/agentUserResponse";
@@ -92,6 +91,7 @@ import {
   writeTerminalOutputWithCursorRefresh,
 } from "@/lib/terminalOutputFrames";
 import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
+import { createTerminalActivityTracker } from "@/lib/terminalActivity";
 import { terminalInputErrorKey } from "@/lib/terminalInputError";
 import { createTerminalRevealRepaint, terminalRenderingPool } from "@/lib/terminalRendering";
 import { createTerminalOutputMonitor } from "@/lib/terminalOutputMonitor";
@@ -263,6 +263,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const pendingSubmissionInputRef = useRef("");
   const pendingSubmissionEscapeSequenceRef = useRef("");
   const enqueueInputRef = useRef<((operation: () => Promise<void>) => Promise<void>) | null>(null);
+  const activityTrackerRef = useRef<ReturnType<typeof createTerminalActivityTracker> | null>(null);
+  const terminalInputRef = useRef<((data: string) => void) | null>(null);
   const sideQuestionSubmittingRef = useRef(false);
   const outputFrameGateRef = useRef<ReturnType<typeof createTerminalOutputFrameGate> | null>(null);
   const suppressedFocusSequenceUntilRef = useRef(0);
@@ -569,7 +571,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         case "clear-input":
           if (runnerOptions) {
             window.dispatchEvent(new CustomEvent("terminal:clear", { detail: { sessionId } }));
-          } else ptyInput(sessionId, "\x15").catch(reportInputError);
+          } else terminalInputRef.current?.("\x15");
           break;
       }
     },
@@ -609,6 +611,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
     if (draft.context.potentialSecret) {
       Modal.confirm({
+        centered: true,
+        transitionName: "",
+        maskTransitionName: "",
         title: t("terminal.sensitiveSideQuestionTitle"),
         content: t("terminal.sensitiveSideQuestionContent"),
         okText: t("terminal.sendToAgent"),
@@ -804,11 +809,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       if (!text) return;
       if (currentSessionPathRef.current !== sessionPath) return;
 
-      if (enqueueInputRef.current) {
-        await enqueueInputRef.current(() => ptyInput(sessionId, text));
-      } else {
-        await ptyInput(sessionId, text);
-      }
+      const tracker = activityTrackerRef.current;
+      const insert = async () => {
+        if (tracker) await tracker.write(text, () => ptyInput(sessionId, text), true);
+        else await ptyInput(sessionId, text);
+      };
+      if (enqueueInputRef.current) await enqueueInputRef.current(insert);
+      else await insert();
       message.success(t("terminal.agentFilesInserted", { count: payload.entries.length }));
     },
     [currentSession?.agentId, sessionId, t]
@@ -1307,12 +1314,18 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
     const getSession = () => useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    const activityTracker = createTerminalActivityTracker(() => {
+      if (!isTerminalDisposed && getSession()?.active) {
+        updateSession(sessionId, { hasPromptHistory: true, lastActivityAt: Date.now() });
+      }
+    });
+    activityTrackerRef.current = activityTracker;
     const confirmUserResponse = async (baseline: AgentUserResponseBaseline) => {
       const revision = await inferAgentUserResponse(sessionId, baseline.revision, baseline.eventType);
       if (isTerminalDisposed || revision === null || !isAgentUserResponseBaselineCurrent(getSession(), baseline)) return;
       updateSession(sessionId, {
         status: "running", statusRevision: revision,
-        statusUpdatedAt: Date.now(), lastEventType: "user_response",
+        statusUpdatedAt: Date.now(), lastEventType: "user_response", lastActivityAt: Date.now(),
       });
     };
     const userResponseTracker = createTerminalAgentUserResponse({
@@ -1394,9 +1407,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         && outputFrameGate.hasNativeCursor()
         && (/^[^\x00-\x1f\x7f]+$/u.test(data) || /^[\x08\x7f]$/.test(data)
           || /^\x1b\[(?:[CDFH]|3~)$/.test(data));
+      const pasted = processingClipboardPaste;
       const sendInput = async () => {
         try {
-          await ptyInput(sessionId, data);
+          await activityTracker.write(data, () => ptyInput(sessionId, data), pasted);
           acknowledgeInput(true);
           acknowledgeUserResponse(true);
           const latest = getSession();
@@ -1421,31 +1435,24 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         const waitingSession = useAppStore.getState().sessions.find(
           (item) => item.id === sessionId,
         );
-        const responseBaseline = getAgentTurnInputResponseBaseline(waitingSession);
+        const responseBaseline = getAgentSubmitResponseBaseline(waitingSession);
         if (responseBaseline !== null) {
-          const sendInput = async () => {
-            await ptyInput(sessionId, data);
+          const sendResponse = async () => {
+            await sendInput();
             await confirmUserResponse(responseBaseline);
           };
-          void enqueueInput(sendInput).catch(reportRuntimeInputError);
+          void enqueueInput(sendResponse).catch(reportRuntimeInputError);
           return;
         }
         if (!hasTerminalPromptText(submissionCapture.submittedText)) {
-          void enqueueInput(() => ptyInput(sessionId, data)).catch(reportRuntimeInputError);
+          void enqueueInput(sendInput).catch(reportRuntimeInputError);
           return;
         }
 
-        enqueueInput(async () => {
+        void enqueueInput(async () => {
           try {
-            const result = await submitAgentTurnInput(sessionId, data);
-            updateSession(sessionId, {
-              hasPromptHistory: true,
-              checkpointActiveTurnId: result.turn?.id ?? null,
-              checkpointWarning: result.warning,
-            });
-            if (result.warning) {
-              console.warn(`[checkpoint:${sessionId}] ${result.warning}`);
-            }
+            await sendInput();
+            if (!isTerminalDisposed) updateSession(sessionId, { hasPromptHistory: true });
           } catch (error) {
             // The backend only rejects when the PTY input itself could not be delivered.
             reportRuntimeInputError(error);
@@ -1462,6 +1469,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         void enqueueInput(sendInput).catch(reportRuntimeInputError);
       }
     };
+    terminalInputRef.current = handleTerminalData;
     const pasteGate = createTerminalPasteGate({
       input: handleTerminalData,
       paste: (text) => {
@@ -1543,7 +1551,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         }
         event.preventDefault();
         event.stopPropagation();
-        ptyInput(sessionId, "\x15").catch(reportRuntimeInputError);
+        handleTerminalData("\x15");
         return false; // don't send raw \x0c to PTY
       }
 
@@ -1555,7 +1563,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           !matchesShortcut(event, getAppShortcut(useShortcutStore.getState().overrides, "clearInput"))) return;
       event.preventDefault();
       event.stopPropagation();
-      ptyInput(sessionId, "\x15").catch(reportRuntimeInputError);
+      handleTerminalData("\x15");
     };
     container.addEventListener("mousedown", handleMouseShortcut, true);
 
@@ -1860,6 +1868,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       unsubscribeSession();
       interruptTracker.dispose();
       userResponseTracker.dispose();
+      activityTracker.dispose();
+      if (activityTrackerRef.current === activityTracker) activityTrackerRef.current = null;
+      if (terminalInputRef.current === handleTerminalData) terminalInputRef.current = null;
       titleDisposable.dispose();
       programStatusDisposable.dispose();
       parsedDisposable.dispose();
@@ -2100,6 +2111,9 @@ function confirmAntigravityDirectoryDrop(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     Modal.confirm({
+      centered: true,
+      transitionName: "",
+      maskTransitionName: "",
       title: t("terminal.antigravityDirectoryDropTitle"),
       content: t("terminal.antigravityDirectoryDropContent"),
       okText: t("common.confirm"),

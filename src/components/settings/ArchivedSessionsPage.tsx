@@ -180,6 +180,7 @@ export function ArchivedSessionsPage() {
 
   function confirmDeleteSession(row: ArchivedRow) {
     modal.confirm({
+      centered: true,
       title: t("settings.archived.confirmDelete"),
       okText: t("common.confirm"),
       cancelText: t("common.cancel"),
@@ -202,6 +203,7 @@ export function ArchivedSessionsPage() {
 
   function confirmDeleteAll() {
     modal.confirm({
+      centered: true,
       title: t("settings.archived.confirmDeleteAllGlobal", {
         count: allRows.length,
         defaultValue: `永久删除全部 ${allRows.length} 个归档会话？此操作不可撤销。`,

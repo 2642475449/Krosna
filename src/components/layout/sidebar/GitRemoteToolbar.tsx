@@ -201,6 +201,7 @@ export function GitRemoteToolbar({
         </button>
       </Dropdown>
       <Modal
+        centered
         open={errorDetails !== null}
         title={t("sidebar.gitFetchFailed")}
         onCancel={() => setErrorDetails(null)}
@@ -230,6 +231,7 @@ export function GitRemoteToolbar({
         </pre>
       </Modal>
       <Modal
+        centered
         open={dialog !== null}
         title={t(`sidebar.remoteActions.${dialog ?? "add"}`)}
         onCancel={() => {

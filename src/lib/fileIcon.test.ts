@@ -10,10 +10,23 @@ function getSvg(fileName: string): string {
 }
 
 describe("fileIcon", () => {
-  it("embeds the shared type color so icons do not inherit a surface accent", () => {
-    for (const fileName of ["README.md", "document.pdf", "Main.java", "index.ts", "form.jsp", "pom.xml", "slides.pptx"]) {
+  it("embeds the shared type color and unified 16x16 viewBox on all file icons", () => {
+    for (const fileName of [
+      "README.md",
+      "document.pdf",
+      "Main.java",
+      "index.ts",
+      "form.jsp",
+      "pom.xml",
+      "slides.pptx",
+      "vite.config.ts",
+      "vitest.config.ts",
+    ]) {
       const visual = getFileIconByName(fileName);
-      expect(getSvg(fileName)).toContain(`<svg color="${visual.color}"`);
+      const svg = getSvg(fileName);
+      expect(svg).toContain(`<svg color="${visual.color}"`);
+      expect(svg).toContain('viewBox="0 0 16 16"');
+      expect(svg).not.toContain("<text");
     }
   });
 
@@ -23,9 +36,12 @@ describe("fileIcon", () => {
     expect(getFileExtension("README")).toBe("");
   });
 
-  it("uses Seti's exact file-name associations", () => {
+  it("uses dedicated artwork for exact project filenames and config prefixes", () => {
     expect(getSvg("package.json")).not.toBe(getSvg("unknown-file"));
     expect(getSvg(".gitignore")).not.toBe(getSvg("unknown-file"));
+    expect(getSvg("vite.config.ts")).not.toBe(getSvg("index.ts"));
+    expect(getSvg("vitest.config.ts")).not.toBe(getSvg("index.ts"));
+    expect(getSvg("pnpm-lock.yaml")).not.toBe(getSvg("unknown-file"));
   });
 
   it("uses distinct artwork for common languages", () => {
@@ -34,41 +50,38 @@ describe("fileIcon", () => {
     expect(getSvg("index.html")).not.toBe(getSvg("styles.css"));
   });
 
-  it("uses a dedicated JSP file logo", () => {
+  it("uses a dedicated vector JSP icon without text elements", () => {
     const element = getFileIconByName("form.JSP").icon as ReactElement<{
       className: string;
       dangerouslySetInnerHTML: { __html: string };
     }>;
     expect(element.props.className).toContain("app-jsp-file-icon");
-    expect(element.props.dangerouslySetInnerHTML.__html).toContain(">JSP</text>");
+    expect(element.props.dangerouslySetInnerHTML.__html).not.toContain("<text");
     expect(element.props.dangerouslySetInnerHTML.__html).not.toBe(getSvg("unknown-file"));
-    expect(getFileIconByName("form.JSP").color).toBe("#c65353");
   });
 
-  it("uses a clear markup-file glyph for XML instead of Seti's RSS-like artwork", () => {
+  it("uses a clear markup-file glyph for XML", () => {
     const element = getFileIconByName("report.XML").icon as ReactElement<{
       className: string;
       dangerouslySetInnerHTML: { __html: string };
     }>;
     expect(element.props.className).toContain("app-xml-file-icon");
     expect(element.props.dangerouslySetInnerHTML.__html).toContain("<svg");
-    expect(element.props.dangerouslySetInnerHTML.__html).not.toBe(getSvg("feed.rss"));
-    expect(getFileIconByName("report.XML").color).toBe("#c87532");
+    expect(element.props.dangerouslySetInnerHTML.__html).not.toBe(getSvg("unknown-file"));
   });
 
-  it("uses the compact vector M-down-arrow glyph for Markdown", () => {
+  it("uses a unified Markdown glyph across md, mdx, and markdown", () => {
     const element = getFileIconByName("NOTES.md").icon as ReactElement<{
       className: string;
       dangerouslySetInnerHTML: { __html: string };
     }>;
     expect(element.props.className).toContain("app-markdown-file-icon");
     expect(element.props.dangerouslySetInnerHTML.__html).toContain("<svg");
-    expect(element.props.dangerouslySetInnerHTML.__html).not.toContain(">M<");
     expect(getFileIconByName("guide.mdx").color).toBe(getFileIconByName("NOTES.md").color);
     expect(getFileIconByName("manual.markdown").color).toBe(getFileIconByName("NOTES.md").color);
   });
 
-  it("uses a dedicated PowerPoint logo for presentation files", () => {
+  it("uses a dedicated PowerPoint icon for presentation files", () => {
     const element = getFileIconByName("proposal.PPTX").icon as ReactElement<{
       className: string;
       dangerouslySetInnerHTML: { __html: string };
@@ -76,8 +89,7 @@ describe("fileIcon", () => {
     expect(element.props.className).toContain("app-powerpoint-file-icon");
     expect(element.props.dangerouslySetInnerHTML.__html).toContain("<svg");
     expect(element.props.dangerouslySetInnerHTML.__html).not.toBe(getSvg("unknown-file"));
-    expect(getFileIconByName("slides.ppt").color).toBe("#d24726");
-    expect(getFileIconByName("show.ppsx").color).toBe("#d24726");
+    expect(getFileIconByName("slides.ppt").color).toBe(getFileIconByName("show.ppsx").color);
   });
 
   it("uses one clear zipper-file logo for common archive formats", () => {
@@ -105,18 +117,22 @@ describe("fileIcon", () => {
     expect(archiveSvg).not.toBe(getSvg("unknown-file"));
   });
 
-  it("highlights generated or dependency folders while keeping regular folders consistent", () => {
+  it("distinguishes excluded folders, semantic folders, and default folders", () => {
+    const regularA = getFileIcon("design", true);
+    const regularB = getFileIcon("experiments", true);
     const src = getFileIcon("src", true);
-    const docs = getFileIcon("docs", true);
     const nodeModules = getFileIcon("node_modules", true);
     const dist = getFileIcon("dist", true);
     const expanded = getFileIcon("src", true, true);
-    expect(src.color).toBe(docs.color);
+
+    expect(regularA.color).toBe(regularB.color);
+    expect(regularA.tone).toBeUndefined();
     expect(src.tone).toBeUndefined();
+    expect(src.color).not.toBe(regularA.color);
     expect(nodeModules.color).toBe(dist.color);
     expect(nodeModules.tone).toBe("excluded");
     expect(dist.tone).toBe("excluded");
-    expect(nodeModules.color).not.toBe(src.color);
+    expect(nodeModules.color).not.toBe(regularA.color);
     expect(src.icon).not.toEqual(expanded.icon);
 
     const nestedDir = getFileIcon("react", true, false, "excluded");
@@ -126,7 +142,7 @@ describe("fileIcon", () => {
     expect(nestedFile.tone).toBe("excluded");
   });
 
-  it("returns a default Seti icon for unknown files", () => {
+  it("returns a consistent default icon for unknown files", () => {
     expect(getSvg("unknown.one-extension")).toBe(getSvg("unknown.another-extension"));
   });
 });

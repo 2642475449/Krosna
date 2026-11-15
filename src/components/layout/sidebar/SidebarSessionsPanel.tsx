@@ -1,10 +1,10 @@
 import {
   CodeOutlined,
   DownOutlined,
+  HistoryOutlined,
   InboxOutlined,
   PushpinOutlined,
   PushpinFilled,
-  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Empty, Tooltip } from "antd";
 import { WorkbenchEmptyArtwork } from "@/components/ui/WorkbenchGlyph";
@@ -12,11 +12,18 @@ import type { MenuProps } from "antd";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
+import "dayjs/locale/ja";
 import type { Session } from "@/types";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import { useTranslation } from "react-i18next";
 import type { AttentionItem } from "@/lib/attention";
+import {
+  DEFAULT_STALE_SESSION_DAYS,
+  getSessionTime,
+  getStaleSessionThresholdMs,
+  partitionSidebarSessions,
+} from "@/lib/sessionActivity";
 
 dayjs.extend(relativeTime);
 
@@ -33,14 +40,20 @@ interface SidebarSessionsPanelProps {
   unpinSessionText: string;
   pinnedSectionText: string;
   sessionsSectionText: string;
+  staleSectionText: string;
+  archiveStaleSessionsText: string;
   pinnedCollapsed: boolean;
   sessionsCollapsed: boolean;
+  staleCollapsed: boolean;
+  staleSessionDays?: number;
+  now?: number;
   onTogglePinned: () => void;
   onToggleSessions: () => void;
+  onToggleStale: () => void;
   onOpenSession: (sessionId: string) => void;
   onArchiveSession: (sessionId: string) => void;
+  onArchiveStaleSessions: (sessionIds: string[]) => void;
   onTogglePinSession: (sessionId: string) => void;
-  onOpenCheckpointReview: (sessionId: string) => void;
   getSessionMenuItems: (session: Session) => MenuProps["items"];
 }
 
@@ -56,14 +69,20 @@ function SidebarSessionsPanel({
   unpinSessionText,
   pinnedSectionText,
   sessionsSectionText,
+  staleSectionText,
+  archiveStaleSessionsText,
   pinnedCollapsed,
   sessionsCollapsed,
+  staleCollapsed,
+  staleSessionDays = DEFAULT_STALE_SESSION_DAYS,
+  now,
   onTogglePinned,
   onToggleSessions,
+  onToggleStale,
   onOpenSession,
   onArchiveSession,
+  onArchiveStaleSessions,
   onTogglePinSession,
-  onOpenCheckpointReview,
   getSessionMenuItems,
 }: SidebarSessionsPanelProps) {
   const { t } = useTranslation();
@@ -87,17 +106,24 @@ function SidebarSessionsPanel({
     );
   }
 
-  const pinnedSessions = sessions.filter((session) => session.pinned);
-  const normalSessions = sessions.filter((session) => !session.pinned);
+  const { pinnedSessions, recentSessions, staleSessions } = partitionSidebarSessions(
+    sessions,
+    activeSessionId,
+    now,
+    getStaleSessionThresholdMs(staleSessionDays),
+  );
 
   function renderSessionItem(session: Session) {
     const isActive = activeSessionId === session.id;
     const titleColor = isActive ? "var(--cs-text-primary)" : "var(--cs-text-secondary)";
-    const hasPendingCheckpoint = (session.checkpointPendingTurns ?? 0) > 0;
-    const timestamp = session.lastEventAt ?? session.createdAt;
+    const { timestamp, kind } = getSessionTime(session);
     const relative = dayjs(timestamp)
-      .locale(locale.startsWith("zh") ? "zh-cn" : "en")
+      .locale(locale.startsWith("zh") ? "zh-cn" : locale.startsWith("ja") ? "ja" : "en")
       .fromNow();
+    const timeLabel = relative;
+    const timeTooltip = kind === "activity"
+      ? `${t("sidebar.sessionLastActivity", { time: dayjs(timestamp).format("YYYY-MM-DD HH:mm:ss") })}\n${t("sidebar.sessionCreatedAt", { time: dayjs(session.createdAt).format("YYYY-MM-DD HH:mm:ss") })}`
+      : t("sidebar.sessionCreatedAt", { time: dayjs(timestamp).format("YYYY-MM-DD HH:mm:ss") });
 
     return (
       <Dropdown
@@ -127,44 +153,13 @@ function SidebarSessionsPanel({
                 <span className="min-w-0 flex-1 truncate">{session.name}</span>
               </Tooltip>
             </div>
-            {hasPendingCheckpoint && (
-              <div className="app-session-meta mt-0.5 flex min-w-0 items-center gap-1.5">
-                {hasPendingCheckpoint && (
-                  <Tooltip
-                    title={t("checkpointReview.pendingHint", {
-                      files: session.checkpointFileCount ?? 0,
-                      additions: session.checkpointInsertions ?? 0,
-                      deletions: session.checkpointDeletions ?? 0,
-                    })}
-                    mouseEnterDelay={0.35}
-                  >
-                    <button
-                      type="button"
-                      className="inline-flex min-w-0 items-center gap-1 truncate font-medium"
-                      style={{ color: "var(--cs-primary)" }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onOpenCheckpointReview(session.id);
-                      }}
-                    >
-                      <SafetyCertificateOutlined className="shrink-0 text-[10px]" />
-                      <span className="truncate">
-                        {t("checkpointReview.pendingBadge", {
-                          count: session.checkpointPendingTurns,
-                        })}
-                      </span>
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-            )}
           </div>
 
           <div className="app-session-trailing ml-auto grid shrink-0 items-center">
             <div className="app-session-summary flex items-center justify-end gap-2">
-              <Tooltip title={dayjs(timestamp).format("YYYY-MM-DD HH:mm:ss")} mouseEnterDelay={0.5}>
+              <Tooltip title={<span className="whitespace-pre-line">{timeTooltip}</span>} mouseEnterDelay={0.5}>
                 <span className="app-session-time whitespace-nowrap text-xs">
-                  {relative}
+                  {timeLabel}
                 </span>
               </Tooltip>
               <AgentSessionStatus session={session} />
@@ -248,13 +243,13 @@ function SidebarSessionsPanel({
           </div>
         </>
       )}
-      {pinnedSessions.length > 0 && normalSessions.length > 0 && (
+      {pinnedSessions.length > 0 && recentSessions.length > 0 && (
         <div
           className="mx-3 my-1.5"
           style={{ borderTop: "1px solid var(--cs-border-sidebar)" }}
         />
       )}
-      {normalSessions.length > 0 && (
+      {recentSessions.length > 0 && (
         <>
           <div
             className="app-sidebar-section-header flex items-center gap-1.5 px-2.5 py-1 cursor-pointer select-none rounded-lg"
@@ -272,13 +267,64 @@ function SidebarSessionsPanel({
                 color: "var(--cs-text-tertiary)",
               }}
             >
-              {normalSessions.length}
+              {recentSessions.length}
             </span>
             <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!sessionsCollapsed} />
           </div>
           <div className="app-accordion" data-open={!sessionsCollapsed ? "true" : "false"} aria-hidden={sessionsCollapsed}>
             <div className="app-accordion__inner">
-              {normalSessions.map(renderSessionItem)}
+              {recentSessions.map(renderSessionItem)}
+            </div>
+          </div>
+        </>
+      )}
+      {(pinnedSessions.length > 0 || recentSessions.length > 0) && staleSessions.length > 0 && (
+        <div
+          className="mx-3 my-1.5"
+          style={{ borderTop: "1px solid var(--cs-border-sidebar)" }}
+        />
+      )}
+      {staleSessions.length > 0 && (
+        <>
+          <div
+            className="app-sidebar-section-header flex items-center gap-1.5 px-2.5 py-1 cursor-pointer select-none rounded-lg"
+            style={{ color: "var(--cs-text-secondary)" }}
+            onClick={onToggleStale}
+          >
+            <HistoryOutlined className="text-[10px]" />
+            <span className="text-[10px] font-medium uppercase tracking-wider flex-1">
+              {staleSectionText}
+            </span>
+            <span
+              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold"
+              style={{
+                background: "color-mix(in srgb, var(--cs-text-secondary) 8%, transparent)",
+                color: "var(--cs-text-tertiary)",
+              }}
+            >
+              {staleSessions.length}
+            </span>
+            <Tooltip title={archiveStaleSessionsText} mouseEnterDelay={0.5}>
+              <button
+                type="button"
+                aria-label={archiveStaleSessionsText}
+                className="flex h-5 w-5 items-center justify-center rounded-sm"
+                style={{ color: "var(--cs-text-tertiary)" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchiveStaleSessions(staleSessions.map((session) => session.id));
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--cs-primary)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--cs-text-tertiary)")}
+              >
+                <InboxOutlined className="text-xs" />
+              </button>
+            </Tooltip>
+            <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!staleCollapsed} />
+          </div>
+          <div className="app-accordion" data-open={!staleCollapsed ? "true" : "false"} aria-hidden={staleCollapsed}>
+            <div className="app-accordion__inner">
+              {staleSessions.map(renderSessionItem)}
             </div>
           </div>
         </>

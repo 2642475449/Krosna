@@ -100,7 +100,7 @@ describe("auxiliary dock store", () => {
     });
   });
 
-  it("returns to a preferred session tab after closing its review", () => {
+  it("returns to a preferred session tab after closing a file", () => {
     const store = useAuxiliaryDockStore.getState();
     store.openSession({
       sessionId: "session-1",
@@ -109,16 +109,12 @@ describe("auxiliary dock store", () => {
       kind: "task",
     });
     const sessionTabId = useAuxiliaryDockStore.getState().activeTabId!;
-    store.openReview({
-      sessionId: "session-1",
-      projectPath: "D:/repo",
-      title: "Review",
-    });
-    const reviewTabId = useAuxiliaryDockStore.getState().activeTabId!;
+    store.openFile({ projectPath: "D:/repo", path: "D:/repo/before.md", preview: false });
+    const fileTabId = useAuxiliaryDockStore.getState().activeTabId!;
     store.openFile({ projectPath: "D:/repo", path: "D:/repo/after.md", preview: false });
-    store.activateTab(reviewTabId);
+    store.activateTab(fileTabId);
 
-    store.closeTab(reviewTabId, sessionTabId);
+    store.closeTab(fileTabId, sessionTabId);
 
     expect(useAuxiliaryDockStore.getState().activeTabId).toBe(sessionTabId);
   });
@@ -186,7 +182,7 @@ it("ignores the legacy shared width so a wide document cannot become the monitor
 it("validates persisted widths independently and ignores unknown content types", async () => {
   const values = stubDockStorage();
   values.set("krosna-auxiliary-dock", JSON.stringify({ state: { widths: {
-    "task-monitor": 10, file: 10000, review: "invalid", task: null, terminal: 510, unknown: 600,
+    "task-monitor": 10, file: 10000, review: 650, task: null, terminal: 510, unknown: 600,
   } }, version: 0 }));
   vi.resetModules();
   const { useAuxiliaryDockStore: store } = await import("./auxiliaryDock");

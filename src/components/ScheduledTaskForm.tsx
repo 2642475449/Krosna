@@ -466,6 +466,7 @@ export function ScheduledTaskForm({
         </div>
       </Form>
       <Modal
+        centered
         open={discardConfirmOpen}
         title={t("scheduledTasks.discardDraftTitle")}
         okText={t("scheduledTasks.discardDraft")}

@@ -25,8 +25,6 @@ vi.mock("antd", () => {
   return { Dropdown, Tooltip: Pass, Empty, Input: () => null, Modal, Spin: () => null, message: { error: vi.fn() } };
 });
 vi.mock("@/components/AgentActivityIcon", () => ({ AgentActivityIcon: () => null }));
-vi.mock("@/components/CheckpointReviewDrawer", () => ({ default: () => null }));
-vi.mock("@/components/SessionCheckpointSummaryBar", () => ({ default: () => null }));
 vi.mock("@/components/TaskMonitorPopover", () => ({ TaskMonitorPanel: () => null }));
 vi.mock("@/components/AuxiliaryFileView", () => ({ default: () => null }));
 vi.mock("@/lib/api", () => ({ cleanupSessionProcess: vi.fn(), searchProjectEntries: vi.fn(), openInAssociatedApplication: vi.fn(), openInFileManager: vi.fn() }));

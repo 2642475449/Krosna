@@ -55,7 +55,7 @@ export function QuotaUsageStatus({
         style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <AgentIcon agentId={agentId} size={15} />
+          <AgentIcon agentId={agentId} size={20} />
           <div className="min-w-0">
             <div className="truncate text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
               {t(`${translationRoot}.title`)}
@@ -172,7 +172,7 @@ export function QuotaUsageStatus({
         title={summary}
         aria-label={summary}
       >
-        <AgentIcon agentId={agentId} size={15} />
+        <AgentIcon agentId={agentId} size={20} />
         {compactWindows.map((window) => <QuotaUsageRing key={`${window.bucketId}:${window.id}`}
           label={quotaWindowLabel(window, t, false)} descriptionLabel={quotaWindowLabel(window, t)} remaining={remainingQuota(window)} />)}
         {(stale || details.limitReached || openCode?.status === "error") && <WarningOutlined aria-label={t("statusBar.quota.attention")} style={{ color: "var(--cs-warning)", fontSize: 12 }} />}

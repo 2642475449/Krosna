@@ -330,7 +330,7 @@ export function SkillsSettingsPage() {
       </div>}
     </Modal>
 
-    <Modal title={t("settings.skills.addSkill")} open={addOpen} onCancel={() => !installing && setAddOpen(false)} onOk={() => void submit()}
+    <Modal centered title={t("settings.skills.addSkill")} open={addOpen} onCancel={() => !installing && setAddOpen(false)} onOk={() => void submit()}
       confirmLoading={installing} closable={!installing} mask={{ closable: !installing }} keyboard={!installing}
       okText={t(mode === "create" ? "common.create" : "settings.skills.importLocal")}
       okButtonProps={{ disabled: !targets.length || !preview.length || (mode === "create" ? !name.trim() : !source) }}>

@@ -58,7 +58,7 @@ export function ProjectLaunchersButton() {
         <PlayCircleOutlined />
       </button>
     </Tooltip>
-    <Modal open={open} title={t("projectLaunchers.title")} width={720}
+    <Modal centered open={open} title={t("projectLaunchers.title")} width={720}
       closable={!busy} mask={{ closable: !busy }} keyboard={!busy} onCancel={() => setOpen(false)}
       footer={editing ? <>
         <Button disabled={busy} onClick={() => setEditing(false)}>{t("common.cancel")}</Button>

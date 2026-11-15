@@ -198,6 +198,8 @@ export interface Session {
   };
   status?: "starting" | "running" | "waiting" | "completed" | "error" | "stopped";
   unreadCount?: number;
+  /** Last successfully submitted message or confirmed assistant completion; persisted. */
+  lastActivityAt?: number;
   lastEventAt?: number;
   lastEventType?: string;
   statusRevision?: number;
@@ -221,14 +223,6 @@ export interface Session {
   antigravitySandbox?: boolean | null;
   antigravityMode?: AntigravitySessionLaunchOptions["mode"] | null;
   qoderPermissionMode?: QoderSessionLaunchOptions["permissionMode"] | null;
-  checkpointActiveTurnId?: string | null;
-  checkpointPendingTurns?: number;
-  checkpointFileCount?: number;
-  checkpointInsertions?: number;
-  checkpointDeletions?: number;
-  checkpointReviewStatus?: CheckpointReviewStatus | null;
-  checkpointUpdatedAt?: number;
-  checkpointWarning?: string | null;
 }
 
 export type ClaudeSessionMode = "default" | "auto" | "accept-edits" | "plan";
@@ -657,6 +651,7 @@ export interface FileTreeEntry {
   path: string;
   kind: FileTreeEntryKind;
   hasChildren: boolean;
+  ignored?: boolean;
 }
 
 export interface FileTreeListing {
@@ -1156,7 +1151,6 @@ export interface GitDiffHunk {
   newLines: number;
   header: string;
   lines: GitDiffLine[];
-  decision?: CheckpointReviewDecision;
 }
 
 export interface GitDiffLine {
@@ -1169,64 +1163,6 @@ export interface GitDiffLine {
 export interface GitDiffHunkResult {
   filePath: string;
   hunks: GitDiffHunk[];
-}
-
-export type CheckpointReviewDecision = "pending" | "accepted" | "rejected";
-export type CheckpointReviewStatus =
-  | "running"
-  | "no_changes"
-  | "awaiting_review"
-  | "partially_reviewed"
-  | "reviewed"
-  | "restored";
-
-export interface CheckpointSnapshot {
-  commitOid: string;
-  treeOid: string;
-  reference: string;
-  createdAt: number;
-}
-
-export interface CheckpointChangedFile {
-  path: string;
-  oldPath: string | null;
-  status: "added" | "deleted" | "renamed" | "copied" | "typechange" | "modified" | string;
-  insertions: number | null;
-  deletions: number | null;
-  isBinary: boolean;
-  decision: CheckpointReviewDecision;
-}
-
-export interface AgentTurnReview {
-  version: number;
-  id: string;
-  sessionId: string;
-  agentId: string;
-  projectPath: string;
-  startedAt: number;
-  completedAt: number | null;
-  completionSource: string | null;
-  attributionConfidence: "strong" | "medium" | "ambiguous" | string;
-  baseline: CheckpointSnapshot;
-  result: CheckpointSnapshot | null;
-  files: CheckpointChangedFile[];
-  hunkDecisions: Record<string, CheckpointReviewDecision>;
-  insertions: number;
-  deletions: number;
-  reviewStatus: CheckpointReviewStatus;
-  reviewedAt: number | null;
-  updatedAt: number;
-}
-
-export interface AgentTurnStartResult {
-  turn: AgentTurnReview | null;
-  completedPrevious: AgentTurnReview | null;
-  warning: string | null;
-}
-
-export interface CheckpointRestoreResult {
-  safetyCheckpoint: CheckpointSnapshot;
-  turn: AgentTurnReview;
 }
 
 export interface GitConflictDetail {

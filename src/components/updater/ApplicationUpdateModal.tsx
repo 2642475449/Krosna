@@ -71,6 +71,7 @@ export function ApplicationUpdateModal() {
   return (
     <>
       <Modal
+        centered
         open={update.modalOpen}
         title={update.availableVersion
           ? t("updater.updateAvailable", { version: update.availableVersion })
@@ -176,6 +177,7 @@ export function ApplicationUpdateModal() {
       </Modal>
 
       <Modal
+        centered
         open={confirmCounts !== null}
         title={t("updater.confirmInstallTitle")}
         okText={t("updater.installAnyway")}

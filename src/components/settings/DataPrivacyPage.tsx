@@ -63,6 +63,9 @@ export function DataPrivacyPage() {
 
   const confirmClear = () => {
     Modal.confirm({
+      centered: true,
+      transitionName: "",
+      maskTransitionName: "",
       title: t("settings.usageData.clearConfirmTitle"),
       content: t("settings.usageData.clearConfirmContent"),
       okText: t("settings.usageData.clear"),

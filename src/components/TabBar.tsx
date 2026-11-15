@@ -19,7 +19,7 @@ import {
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
 import { inspectAgentClis } from "@/lib/api";
-import { getFileIconByName } from "@/lib/fileIcon";
+import { getFileIconByName, isMarkdownFile } from "@/lib/fileIcon";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
@@ -126,7 +126,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const activeSessionId = activeTabId;
   const sessions = useAppStore((s) => s.sessions);
   const tabsById = useAppStore((s) => s.tabsById);
-  const panesById = useAppStore((s) => s.panesById);
   const dragState = useAppStore((s) => s.dragState);
   const currentProject = useAppStore((s) => s.currentProject);
   const defaultTerminalShell = useAppStore((s) => s.defaultTerminalShell);
@@ -159,6 +158,13 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     dragState.targetPaneId === paneId &&
     dragState.sourcePaneId !== paneId;
   const ownsActiveDrag = dragState?.sourcePaneId === paneId;
+  const activeTab = activeSessionId ? tabsById[activeSessionId] : undefined;
+  const isActiveMarkdownTab = Boolean(
+    activeTab && activeTab.kind === "file" && isMarkdownFile(activeTab.resourceId)
+  );
+  const activeMarkdownViewMode = activeTab?.markdownViewMode ?? "preview";
+  const setTabMarkdownViewMode = useAppStore((s) => s.setTabMarkdownViewMode);
+
   const sessionById = useMemo(
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions]
@@ -525,18 +531,46 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   }
 
   async function requestCloseTabs(tabIds: string[]) {
+    const projectPath = currentProject?.path ?? null;
+    const confirmedIds: string[] = [];
+
     for (const id of tabIds) {
-      const nextTab = tabsById[id];
+      const nextTab = useAppStore.getState().tabsById[id];
       const canClose = await confirmCloseTab(nextTab, t);
+      if ((useAppStore.getState().currentProject?.path ?? null) !== projectPath) {
+        return;
+      }
       if (!canClose) {
         break;
       }
-      const openInAnotherPane = Object.entries(panesById).some(
+      confirmedIds.push(id);
+    }
+
+    if (confirmedIds.length === 0) {
+      return;
+    }
+
+    const { tabsById: latestTabsById, panesById: latestPanesById } = useAppStore.getState();
+    const runtimeTargets: NonNullable<typeof latestTabsById[string]>[] = [];
+
+    for (const id of confirmedIds) {
+      const nextTab = latestTabsById[id];
+      if (!nextTab) continue;
+      const openInAnotherPane = Object.entries(latestPanesById).some(
         ([otherPaneId, pane]) => otherPaneId !== paneId && pane.tabIds.includes(id),
       );
-      if (!openInAnotherPane) await closeTabRuntime(nextTab);
+      if (!openInAnotherPane) {
+        runtimeTargets.push(nextTab);
+      }
+    }
+
+    // Remove all confirmed tabs synchronously so React batches them into one UI update
+    // instead of waiting for each PTY/runtime teardown sequentially.
+    for (const id of confirmedIds) {
       closeTab(id, paneId);
     }
+
+    await Promise.allSettled(runtimeTargets.map((target) => closeTabRuntime(target)));
   }
 
   function handleCreateSession(request: NewSessionLaunchRequest) {
@@ -839,7 +873,47 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           </Dropdown>
         </div>
       )}
+      {isActiveMarkdownTab && activeTab ? (
+        <div
+          className="ml-auto shrink-0 flex items-center gap-0.5 pr-2"
+          style={{ minHeight: 36 }}
+          role="group"
+          aria-label={t("fileTabs.markdownModePreview")}
+        >
+          <Tooltip title={t("fileTabs.markdownModeEdit")} mouseEnterDelay={0.4}>
+            <button
+              type="button"
+              className="app-tabbar-mode-button"
+              data-active={activeMarkdownViewMode === "edit" ? "true" : "false"}
+              aria-pressed={activeMarkdownViewMode === "edit"}
+              aria-label={t("fileTabs.markdownModeEdit")}
+              onClick={() => setTabMarkdownViewMode(activeTab.id, "edit")}
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" focusable="false">
+                <path d="M2.5 4h11M2.5 8h7.5M2.5 12h11" />
+              </svg>
+            </button>
+          </Tooltip>
+          <Tooltip title={t("fileTabs.markdownModePreview")} mouseEnterDelay={0.4}>
+            <button
+              type="button"
+              className="app-tabbar-mode-button"
+              data-active={activeMarkdownViewMode === "preview" ? "true" : "false"}
+              aria-pressed={activeMarkdownViewMode === "preview"}
+              aria-label={t("fileTabs.markdownModePreview")}
+              onClick={() => setTabMarkdownViewMode(activeTab.id, "preview")}
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" focusable="false">
+                <rect x="2" y="2.5" width="12" height="11" rx="1.6" />
+                <circle cx="5.4" cy="5.8" r="1" fill="currentColor" stroke="none" />
+                <path d="M3.2 11.4l3-3.1 2.2 2.1 1.7-1.8 2.7 2.8" />
+              </svg>
+            </button>
+          </Tooltip>
+        </div>
+      ) : null}
       <Modal
+        centered
         open={Boolean(pendingRestart)}
         title={t("tabBar.restartSessionTitle", { name: pendingRestart?.name })}
         okText={t("tabBar.restartSession")}

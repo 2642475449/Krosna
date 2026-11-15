@@ -264,12 +264,14 @@ function GeneralPage() {
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
   const terminalScrollback = useAppStore((s) => s.terminalScrollback);
+  const staleSessionDays = useAppStore((s) => s.staleSessionDays);
   const setLightTheme = useAppStore((s) => s.setLightTheme);
   const setDarkTheme = useAppStore((s) => s.setDarkTheme);
   const setThemeCategory = useAppStore((s) => s.setThemeCategory);
   const setLanguage = useAppStore((s) => s.setLanguage);
   const setProjectOpenBehavior = useAppStore((s) => s.setProjectOpenBehavior);
   const setTerminalScrollback = useAppStore((s) => s.setTerminalScrollback);
+  const setStaleSessionDays = useAppStore((s) => s.setStaleSessionDays);
   const setExplorerContextMenuEnabledInStore = useAppStore(
     (s) => s.setExplorerContextMenuEnabled
   );
@@ -410,6 +412,27 @@ function GeneralPage() {
               label: rows.toLocaleString(),
             }))}
             onChange={setTerminalScrollback}
+          />
+        </SettingRow>
+      </SettingSection>
+
+      <SettingSection title={t("settings.general.sessionsSection")}>
+        <SettingRow
+          label={t("settings.general.staleSessionThreshold")}
+          description={t("settings.general.staleSessionThresholdDesc")}
+        >
+          <Select
+            className="w-[150px]"
+            value={staleSessionDays}
+            options={[
+              { value: 1, label: t("settings.general.staleDaysOption", { count: 1 }) },
+              { value: 3, label: t("settings.general.staleDaysOption", { count: 3 }) },
+              { value: 7, label: t("settings.general.staleDaysOption", { count: 7 }) },
+              { value: 14, label: t("settings.general.staleDaysOption", { count: 14 }) },
+              { value: 30, label: t("settings.general.staleDaysOption", { count: 30 }) },
+              { value: 0, label: t("settings.general.staleDaysNever") },
+            ]}
+            onChange={setStaleSessionDays}
           />
         </SettingRow>
       </SettingSection>
@@ -904,8 +927,7 @@ export function VoiceRecognitionPage() {
   return (
     <div className="app-voice-settings">
       <SettingsPageHeader title={t("settings.menu.voiceRecognition")}
-        description={t("settings.voiceRecognition.layout.description")}
-        decoration={<span className="app-settings-signal"><span /><span /><span /><span /><span /><span /><span /></span>} />
+        description={t("settings.voiceRecognition.layout.description")} />
 
       <VoiceSettingsSection title={t("settings.voiceRecognition.layout.recognition")} actions={
         <Tooltip title={t("settings.voiceRecognition.testConnectionDesc")}>
@@ -1836,6 +1858,7 @@ function CommandsPage() {
       />
 
       <Modal
+        centered
         title={editingCommand ? t("settings.commands.editCommand") : t("settings.commands.newCommand")}
         open={editorOpen}
         onCancel={closeEditor}

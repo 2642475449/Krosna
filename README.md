@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>面向终端的 CLI 智能体工作台</strong><br>
-  本地优先 · 项目与会话管理 · 嵌入式终端 · Git 工作流 · 检查点审阅
+  本地优先 · 项目与会话管理 · 嵌入式终端 · Git 工作流
 </p>
 
 <p align="center">
@@ -52,7 +52,6 @@ Krosna 原生支持以下 CLI 智能体：
 - 📁 **文件管理与编辑**：浏览项目文件，支持 Markdown 预览与即时编辑，并可将文件拖放到当前 CLI 输入框
 - 🎤 **语音输入**：支持 MiMo 与 DashScope ASR，全局快捷键触发
 - 📊 **Git 面板**：完整的 Git 工作流 + AI 生成提交信息
-- 🔍 **检查点审阅**：Agent 回合检查点审阅与差异对比
 - ⚡ **快速命令**：自定义快捷命令，一键执行常用操作
 - 💾 **会话持久化**：关闭应用后无缝恢复历史对话
 
@@ -101,7 +100,6 @@ Krosna 最初是为了做一款符合自己使用习惯的应用。在功能与�
 | **旁路任务与辅助工作区**：遇到终端报错或文件问题时，可从终端选区发起侧边提问，并在右侧同时查看相关文件或运行独立任务；主会话保持原位，排查完成后随时返回。 | <img src=".github/assets/demos/side-task-workspace.gif" alt="Krosna 旁路任务与辅助工作区演示" width="240"> |
 | **文件与上下文协作**：浏览、搜索和编辑项目文件，预览 Markdown，并将文件从项目树拖放到当前 CLI 输入框，为智能体快速补充上下文。 | <img src=".github/assets/demos/file-context-collaboration.gif" alt="Krosna 文件与上下文协作演示" width="240"> |
 | **Git 变更工作流**：集中完成变更查看、暂存、分支管理、提交、推送、拉取和同步，并可使用 AI 生成提交信息。 | <a href=".github/assets/demos/git-change-workflow.mp4"><img src=".github/assets/krosna-overview.png" alt="Krosna Git 变更工作流" width="240"></a> |
-| **检查点与差异审阅**：自动记录 Agent 回合检查点，集中查看文件摘要和变更差异，并可回到任意检查点。 | <img src=".github/assets/krosna-overview.png" alt="Krosna 检查点与差异审阅" width="240"> |
 | **快捷命令与语音输入**：通过可搜索、可参数化的快捷命令执行常用操作；支持 MiMo 与 DashScope ASR、全局快捷键和录音状态悬浮窗。 | <img src=".github/assets/krosna-overview.png" alt="Krosna 快捷命令与语音输入" width="240"> |
 | **工作状态概览**：汇总会话活动、Token 使用和工作节奏，通过注意力中心与智能通知提示需要处理的任务。 | <img src=".github/assets/demos/work-status-overview.gif" alt="Krosna 工作状态概览演示" width="240"> |
 

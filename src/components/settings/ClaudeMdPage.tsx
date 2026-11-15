@@ -306,6 +306,9 @@ export function ClaudeMdPage() {
   function handleRefresh() {
     if (activeDirty) {
       Modal.confirm({
+        centered: true,
+        transitionName: "",
+        maskTransitionName: "",
         title: t("settings.claudeMd.confirmRefreshTitle"),
         content: t("settings.claudeMd.confirmRefreshDesc"),
         okText: t("common.refresh"),

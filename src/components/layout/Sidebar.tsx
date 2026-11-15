@@ -17,7 +17,6 @@ import {
   PushpinFilled,
   InboxOutlined,
   CheckOutlined,
-  SafetyCertificateOutlined,
   ClockCircleOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SidebarSection } from "@/store";
@@ -30,7 +29,6 @@ import {
 } from "@/lib/api";
 import { archiveSessionRuntime } from "@/lib/tabClose";
 import { isSessionVisibleInHistory } from "@/lib/sessions";
-import { openCheckpointReview } from "@/lib/checkpointReview";
 import { openAuxiliarySession } from "@/lib/auxiliaryDock";
 import { useTranslation } from "react-i18next";
 import type { Session } from "@/types";
@@ -78,8 +76,11 @@ function Sidebar({ collapsed, section }: SidebarProps) {
   const setGitSyncCounts = useAppStore((s) => s.setGitSyncCounts);
   const pinnedCollapsed = useAppStore((s) => s.sidebarPinnedCollapsed);
   const sessionsCollapsed = useAppStore((s) => s.sidebarSessionsCollapsed);
+  const staleCollapsed = useAppStore((s) => s.sidebarStaleSessionsCollapsed);
+  const staleSessionDays = useAppStore((s) => s.staleSessionDays);
   const togglePinnedCollapsed = useAppStore((s) => s.togglePinnedCollapsed);
   const toggleSessionsCollapsed = useAppStore((s) => s.toggleSessionsCollapsed);
+  const toggleStaleSessionsCollapsed = useAppStore((s) => s.toggleStaleSessionsCollapsed);
   const projectAttentionItems = useAppStore((s) => s.projectAttentionItems);
   const resolveAttentionForSession = useAppStore((s) => s.resolveAttentionForSession);
 
@@ -237,19 +238,6 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         )
       : undefined;
     const items: MenuProps["items"] = [
-      ...((session.checkpointPendingTurns ?? 0) > 0 ||
-      Boolean(session.checkpointActiveTurnId) ||
-      Boolean(session.checkpointUpdatedAt)
-        ? [
-            {
-              key: "checkpoint-review",
-              label: t("checkpointReview.open"),
-              icon: <SafetyCertificateOutlined />,
-              onClick: () => openCheckpointReview(session.id),
-            },
-            { type: "divider" as const },
-          ]
-        : []),
       ...(openAttention?.kind === "failure"
         ? [
             {
@@ -335,6 +323,41 @@ function Sidebar({ collapsed, section }: SidebarProps) {
     } finally {
       archivingSessionIdsRef.current.delete(sessionId);
     }
+  }
+
+  function handleArchiveStaleSessions(sessionIds: string[]) {
+    if (sessionIds.length === 0) return;
+    Modal.confirm({
+      centered: true,
+      transitionName: "",
+      maskTransitionName: "",
+      title: t("sidebar.archiveStaleConfirmTitle"),
+      content: t("sidebar.archiveStaleConfirmContent", { count: sessionIds.length, days: staleSessionDays }),
+      okText: t("sidebar.archiveStaleConfirmOk"),
+      cancelText: t("common.cancel"),
+      onOk: async () => {
+        let succeeded = 0;
+        let failed = 0;
+        for (const sessionId of sessionIds) {
+          if (archivingSessionIdsRef.current.has(sessionId)) continue;
+          archivingSessionIdsRef.current.add(sessionId);
+          try {
+            await archiveSessionRuntime(sessionId, archiveSession);
+            succeeded += 1;
+          } catch (error) {
+            console.error("Failed to stop and archive stale session:", error);
+            failed += 1;
+          } finally {
+            archivingSessionIdsRef.current.delete(sessionId);
+          }
+        }
+        if (failed > 0) {
+          message.error(t("sidebar.staleSessionsArchiveFailed", { succeeded, failed }));
+        } else if (succeeded > 0) {
+          message.success(t("sidebar.staleSessionsArchived", { count: succeeded }));
+        }
+      },
+    });
   }
 
   function handleOpenPathInManager(path: string) {
@@ -513,14 +536,20 @@ function Sidebar({ collapsed, section }: SidebarProps) {
                 unpinSessionText={t("sidebar.unpinSession")}
                 pinnedSectionText={t("sidebar.pinnedSection")}
                 sessionsSectionText={t("sidebar.sessionsSection")}
+                staleSectionText={t("sidebar.staleSessionsSection")}
+                archiveStaleSessionsText={t("sidebar.archiveStaleSessions")}
                 pinnedCollapsed={pinnedCollapsed}
                 sessionsCollapsed={sessionsCollapsed}
+                staleCollapsed={staleCollapsed}
+                staleSessionDays={staleSessionDays}
+                now={now}
                 onTogglePinned={togglePinnedCollapsed}
                 onToggleSessions={toggleSessionsCollapsed}
+                onToggleStale={toggleStaleSessionsCollapsed}
                 onOpenSession={handleSessionClick}
                 onArchiveSession={handleArchiveSession}
+                onArchiveStaleSessions={handleArchiveStaleSessions}
                 onTogglePinSession={togglePinSession}
-                onOpenCheckpointReview={openCheckpointReview}
                 getSessionMenuItems={getSessionMenuItems}
               />
             )}
@@ -548,6 +577,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
       )}
 
       <Modal
+        centered
         title={t("sidebar.renameSessionTitle")}
         open={renameModalOpen}
         onOk={handleConfirmRename}

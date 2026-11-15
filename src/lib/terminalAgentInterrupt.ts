@@ -6,7 +6,7 @@ const CONFIRMATION_WINDOW_MS = 2_000;
 const SETTLE_MS = 80;
 
 export type TerminalInterruptBaseline = Pick<Session,
-  "id" | "agentId" | "agentSessionId" | "statusRevision" | "statusUpdatedAt" | "checkpointActiveTurnId"
+  "id" | "agentId" | "agentSessionId" | "statusRevision" | "statusUpdatedAt"
 >;
 export interface TerminalScreenLine { row: number; text: string }
 
@@ -15,8 +15,7 @@ export function canRestoreTerminalInputCursor(session: Session | undefined): boo
   if (!session?.active || session.archived || !isAiAgentId(session.agentId)
     || session.agentId === "antigravity") return false;
   return session.status === "completed" || (session.status === "waiting"
-    && (session.lastEventType === "interrupted" || (!session.checkpointActiveTurnId
-      && session.lastEventType !== "permission_request" && session.lastEventType !== "waiting_input")));
+    && session.lastEventType !== "permission_request" && session.lastEventType !== "waiting_input");
 }
 
 export function isTerminalInterruptBaselineCurrent(
@@ -27,8 +26,7 @@ export function isTerminalInterruptBaselineCurrent(
     && session.id === baseline.id && session.agentId === baseline.agentId
     && session.agentSessionId === baseline.agentSessionId
     && session.statusRevision === baseline.statusRevision
-    && session.statusUpdatedAt === baseline.statusUpdatedAt
-    && session.checkpointActiveTurnId === baseline.checkpointActiveTurnId);
+    && session.statusUpdatedAt === baseline.statusUpdatedAt);
 }
 
 function cancellationMarkers(agentId: unknown, lines: TerminalScreenLine[]): Map<string, number> {
@@ -122,7 +120,6 @@ export function createTerminalAgentInterrupt(options: {
       const baseline: TerminalInterruptBaseline = {
         id: session.id, agentId: session.agentId, agentSessionId: session.agentSessionId,
         statusRevision: session.statusRevision, statusUpdatedAt: session.statusUpdatedAt,
-        checkpointActiveTurnId: session.checkpointActiveTurnId,
       };
       // OpenCode 的第一次 Esc 可能仅关闭界面；第二次仍须等待实际空闲证据。
       if (session.agentId === "opencode" && (data === "\x1b" || data.startsWith("\x1b[27"))) {

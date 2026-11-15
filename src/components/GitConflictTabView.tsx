@@ -182,6 +182,7 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
 
   const confirmReplacement = (action: () => void) => {
     modal.confirm({
+      centered: true,
       title: t("sidebar.gitConflictDiscardTitle"),
       content: t("sidebar.gitConflictDiscardDescription"),
       okText: t("sidebar.gitConflictDiscard"), cancelText: t("common.cancel"),

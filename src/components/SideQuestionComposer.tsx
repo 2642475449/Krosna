@@ -43,6 +43,7 @@ export function SideQuestionComposer({
 
   return (
     <Modal
+      centered
       open={open}
       title={
         <span className="flex items-center gap-2">

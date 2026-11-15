@@ -276,7 +276,6 @@ pub(crate) fn parse_patch_hunks(patch_text: &str) -> Vec<GitDiffHunk> {
                 new_lines,
                 header: line.to_string(),
                 lines: Vec::new(),
-                decision: None,
             });
         } else if let Some(ref mut hunk) = current_hunk {
             let (origin, content) = if let Some(rest) = line.strip_prefix('+') {

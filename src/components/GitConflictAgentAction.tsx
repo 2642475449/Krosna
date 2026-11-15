@@ -89,7 +89,7 @@ export function GitConflictAgentAction({ projectPath, disabled }: { projectPath:
 
   return <>
     <Button size="small" disabled={disabled || conflictBusy || busy} onClick={() => setOpen(true)}>{t("sidebar.gitConflictAgentTitle")}</Button>
-    <Modal open={open} title={t("sidebar.gitConflictAgentTitle")} width={720}
+    <Modal centered open={open} title={t("sidebar.gitConflictAgentTitle")} width={720}
       onCancel={() => { if (!launching.current) setOpen(false); }} onOk={() => void launch()}
       confirmLoading={loading} okText={t("sidebar.gitConflictAgentSend")} cancelText={t("common.cancel")}
       okButtonProps={{ disabled: loading || disabled || conflictBusy || busy || dirty || !agentId || !prompt.trim() }}>

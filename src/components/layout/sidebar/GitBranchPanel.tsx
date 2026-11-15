@@ -508,6 +508,7 @@ export function GitBranchPanel({
 
       {/* 删除确认对话框 */}
       <Modal
+        centered
         title={t("sidebar.gitDeleteBranch")}
         open={deleteConfirmVisible}
         okText={t("common.delete")}

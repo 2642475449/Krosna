@@ -6,7 +6,6 @@ import {
   FolderOpenOutlined,
   PlusOutlined,
   RobotOutlined,
-  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -15,8 +14,6 @@ import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
-import CheckpointReviewDrawer from "@/components/CheckpointReviewDrawer";
-import SessionCheckpointSummaryBar from "@/components/SessionCheckpointSummaryBar";
 import { TaskMonitorPanel } from "@/components/TaskMonitorPopover";
 import { getFileDocument } from "@/lib/fileDocument";
 import { cleanupSessionProcess, openInAssociatedApplication, openInFileManager, searchProjectEntries } from "@/lib/api";
@@ -24,7 +21,6 @@ import {
   OPEN_AUXILIARY_FILE_EVENT,
   type OpenAuxiliaryFileDetail,
 } from "@/lib/auxiliaryDock";
-import { OPEN_CHECKPOINT_REVIEW_EVENT } from "@/lib/checkpointReview";
 import { useAppStore } from "@/store";
 import { getFileIconByName } from "@/lib/fileIcon";
 import {
@@ -48,7 +44,6 @@ interface AuxiliaryDockProps {
 function tabIcon(kind: AuxiliaryTab["kind"]) {
   if (kind === "terminal") return <CodeOutlined />;
   if (kind === "task") return <RobotOutlined />;
-  if (kind === "review") return <SafetyCertificateOutlined />;
   if (kind === "task-monitor") return <FileSearchOutlined />;
   return <FileOutlined />;
 }
@@ -72,7 +67,6 @@ export default function AuxiliaryDock({
   const setWidth = useAuxiliaryDockStore((state) => state.setWidth);
   const activateTab = useAuxiliaryDockStore((state) => state.activateTab);
   const openFile = useAuxiliaryDockStore((state) => state.openFile);
-  const openReview = useAuxiliaryDockStore((state) => state.openReview);
   const openTaskMonitor = useAuxiliaryDockStore((state) => state.openTaskMonitor);
   const pinTab = useAuxiliaryDockStore((state) => state.pinTab);
   const closeTab = useAuxiliaryDockStore((state) => state.closeTab);
@@ -130,22 +124,6 @@ export default function AuxiliaryDock({
     window.addEventListener(OPEN_AUXILIARY_FILE_EVENT, handler);
     return () => window.removeEventListener(OPEN_AUXILIARY_FILE_EVENT, handler);
   }, [openFile]);
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const sessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId;
-      if (!sessionId || !currentProject) return;
-      const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
-      if (!session) return;
-      openReview({
-        sessionId,
-        projectPath: currentProject.path,
-        title: `${t("auxiliaryDock.reviewPrefix")} · ${session.name}`,
-      });
-    };
-    window.addEventListener(OPEN_CHECKPOINT_REVIEW_EVENT, handler);
-    return () => window.removeEventListener(OPEN_CHECKPOINT_REVIEW_EVENT, handler);
-  }, [currentProject, openReview, t]);
 
   useEffect(() => {
     if (!filePickerOpen || !currentProject || !fileQuery.trim()) {
@@ -347,11 +325,9 @@ export default function AuxiliaryDock({
                 : null;
               const displayTitle = session
                 ? session.name
-                : tab.kind === "review"
-                  ? `${t("auxiliaryDock.reviewPrefix")} · ${sessions.find((item) => item.id === tab.resourceId)?.name ?? tab.title}`
-                  : tab.kind === "task-monitor"
-                    ? t("taskMonitor.title")
-                    : tab.title;
+                : tab.kind === "task-monitor"
+                  ? t("taskMonitor.title")
+                  : tab.title;
               const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
               return (
                 <Dropdown key={tab.id} trigger={["contextMenu"]} menu={tabMenu(tab)}>
@@ -507,9 +483,6 @@ export default function AuxiliaryDock({
                 {tab.kind === "terminal" || tab.kind === "task" ? (
                   session ? (
                     <div className="flex h-full min-h-0 flex-col">
-                      {tab.kind === "task" ? (
-                        <SessionCheckpointSummaryBar session={session} />
-                      ) : null}
                       <div className="relative min-h-0 flex-1">
                         <Suspense
                           fallback={(
@@ -547,23 +520,8 @@ export default function AuxiliaryDock({
                     />
                   </Suspense>
                   </ErrorBoundary>
-                ) : tab.kind === "task-monitor" ? (
-                  <TaskMonitorPanel active={open && active} embedded />
                 ) : (
-                  <CheckpointReviewDrawer
-                    embedded
-                    open={active}
-                    projectPath={tab.projectPath}
-                    session={session}
-                    onClose={() => {
-                      const sessionTab = tabs.find((item) =>
-                        item.kind === "task" && item.resourceId === tab.resourceId,
-                      ) ?? tabs.find((item) =>
-                        item.kind === "terminal" && item.resourceId === tab.resourceId,
-                      );
-                      closeTab(tab.id, sessionTab?.id);
-                    }}
-                  />
+                  <TaskMonitorPanel active={open && active} embedded />
                 )}
               </div>
             );
@@ -572,6 +530,7 @@ export default function AuxiliaryDock({
       </aside>
 
       <Modal
+        centered
         open={pendingClose.length > 0}
         title={t("auxiliaryDock.closeProcessesTitle")}
         confirmLoading={closing}
@@ -587,6 +546,7 @@ export default function AuxiliaryDock({
         {t("auxiliaryDock.closeProcessesDescription")}
       </Modal>
       <Modal
+        centered
         open={filePickerOpen}
         title={t("auxiliaryDock.openFile")}
         footer={null}

@@ -491,14 +491,13 @@ function StatusBar() {
 
   return (
     <div
-      className={`app-shell-chrome app-statusbar h-8 px-3 flex shrink-0 items-center justify-between gap-3 text-[12px]${fileTab ? " app-statusbar-file" : ""}`}
+      className={`app-shell-chrome app-statusbar h-[28px] pr-3 flex shrink-0 items-center justify-between gap-3 text-[12px]${fileTab ? " pl-3 app-statusbar-file" : " pl-[6px]"}`}
       style={{
         background: "transparent",
-        borderTop: "0",
         color: "var(--cs-text-tertiary)",
       }}
     >
-      <div className="flex min-w-0 flex-1 items-center justify-start">
+      <div className="flex h-full min-w-0 flex-1 items-center justify-start">
         <WorkbenchFeedback>
         {fileTab && <FileStatusPath path={fileTab.resourceId} projectPath={currentProject?.path} />}
         <div className="app-statusbar-quotas flex min-w-0 items-center gap-1 overflow-x-auto">
@@ -523,7 +522,7 @@ function StatusBar() {
           >
             <button
               type="button"
-              className="app-statusbar-task flex h-6 min-w-0 items-center gap-2 px-0 text-left transition-colors"
+              className="app-statusbar-task flex h-5 min-w-0 items-center gap-2 px-0 text-left transition-colors"
               style={{
                 background: "transparent",
                 border: "0",
@@ -634,7 +633,7 @@ function QoderUsageStatus({
         style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <AgentIcon agentId="qoder" size={15} />
+          <AgentIcon agentId="qoder" size={20} />
           <div className="min-w-0">
             <div className="truncate text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
               {t("statusBar.qoderUsage.title")}
@@ -720,7 +719,7 @@ function QoderUsageStatus({
         style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
         title={summary}
       >
-        <AgentIcon agentId="qoder" size={15} />
+        <AgentIcon agentId="qoder" size={20} />
         {hasData && remaining != null ? <QuotaUsageRing label={t("statusBar.qoderUsage.title")} remaining={remaining} /> : <span className="truncate tabular-nums">{summary}</span>}
       </button>
     </Popover>
@@ -800,7 +799,7 @@ export function AntigravityUsageStatus({
         style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <AgentIcon agentId="antigravity" size={15} />
+          <AgentIcon agentId="antigravity" size={20} />
           <div className="min-w-0">
             <div className="truncate text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
               {t("statusBar.antigravityUsage.title")}
@@ -858,7 +857,7 @@ export function AntigravityUsageStatus({
         aria-label={`${t("statusBar.antigravityUsage.title")} · ${accessibleSummary || summary}`}
         style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
       >
-        <AgentIcon agentId="antigravity" size={15} />
+        <AgentIcon agentId="antigravity" size={20} />
         {compactWindows.length > 0 ? compactWindows.map((window) => (
           <QuotaUsageRing key={window.id} label={antigravityQuotaPeriodLabel(window.window, t)}
             descriptionLabel={antigravityQuotaLabel(window, t)} remaining={window.remainingPercent} />

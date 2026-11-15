@@ -19,6 +19,7 @@
   .app-window-control {
     width: 40px;
     height: 100%;
+    padding-top: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -103,11 +104,6 @@
   .app-session-list-item[data-active="true"] {
     background: var(--cs-bg-active);
     border-color: color-mix(in srgb, var(--cs-primary) 18%, transparent);
-  }
-
-  .app-session-meta {
-    font-size: 12px;
-    line-height: 18px;
   }
 
   .app-session-summary,

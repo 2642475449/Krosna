@@ -11,7 +11,7 @@
 
 <p align="center">
   <strong>A CLI agent workspace for the terminal</strong><br>
-  Local-first · Project and session management · Embedded terminal · Git workflow · Checkpoint review
+  Local-first · Project and session management · Embedded terminal · Git workflow
 </p>
 
 <p align="center">
@@ -51,7 +51,6 @@ Key capabilities:
 - **File management and editing** — browse project files, preview and edit Markdown in place, and drag files into the active CLI input.
 - **Voice input** — MiMo and DashScope ASR with a global shortcut.
 - **Git panel** — a complete Git workflow plus AI-generated commit messages.
-- **Checkpoint review** — inspect agent-turn checkpoints and compare changes.
 - **Quick commands** — define and run common actions with one click.
 - **Persistent sessions** — reopen historical conversations after restarting the app.
 
@@ -69,7 +68,6 @@ Krosna started as an application built around the workflow I wanted to use every
 | **Side tasks and auxiliary workspace** | When a terminal error or file issue appears, launch a side question from the selected terminal output, then inspect related files or run an independent task in the right-hand workspace without leaving the main session. |
 | **File and context collaboration** | Browse, search, and edit project files, preview Markdown, and drag files from the project tree into the active CLI input to give an agent context quickly.<br><br><img src=".github/assets/demos/file-context-collaboration.gif" alt="Krosna file and context collaboration demo" width="240"> |
 | **Git change workflow** | Review and stage changes, manage branches, commit, push, pull, and sync from one place, with optional AI-generated commit messages. |
-| **Checkpoint and diff review** | Record checkpoints for agent turns automatically, review file summaries and diffs, and return to any checkpoint. |
 | **Quick commands and voice input** | Run common actions through searchable, parameterized quick commands; use MiMo or DashScope ASR with a global shortcut and recording-status overlay. |
 | **Work status overview** | Summarize session activity, token usage, and work patterns, while the attention center and smart notifications highlight tasks that need action.<br><br><img src=".github/assets/demos/work-status-overview.gif" alt="Krosna work status overview demo" width="240"> |
 

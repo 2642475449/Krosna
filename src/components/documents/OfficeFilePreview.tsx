@@ -6,6 +6,7 @@ import { spreadsheetRenderer } from "@file-viewer/renderer-spreadsheet";
 import { presentationRenderer } from "@file-viewer/renderer-presentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDelayedLoading } from "@/hooks/useDelayedLoading";
 import { openInAssociatedApplication, readProjectOfficePreview } from "@/lib/api";
 import { useAppStore } from "@/store";
 
@@ -30,6 +31,7 @@ export default function OfficeFilePreview({ projectPath, path, modifiedAtMs, siz
   const previewTheme = useAppStore((state) => state.activeTheme().startsWith("dark-") ? "dark" : "light");
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [loading, setLoading] = useState(true);
+  const showLoadingSpinner = useDelayedLoading(loading);
   const [error, setError] = useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -119,6 +121,9 @@ export default function OfficeFilePreview({ projectPath, path, modifiedAtMs, siz
   }, [data]);
 
   if (loading) {
+    if (!showLoadingSpinner) {
+      return <div className="h-full" />;
+    }
     return <div className="flex h-full items-center justify-center"><Spin description={t("fileTabs.loading")} /></div>;
   }
 

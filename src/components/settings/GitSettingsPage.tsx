@@ -550,6 +550,7 @@ export function GitSettingsPage() {
       </p>
 
       <Modal
+        centered
         open={createOpen}
         title={t("settings.agents.gitProfiles.createTitle")}
         okText={t("settings.agents.gitProfiles.save")}
@@ -645,6 +646,7 @@ export function GitSettingsPage() {
       </Modal>
 
       <Modal
+        centered
         open={deleteProfileId !== null}
         title={t("settings.agents.gitProfiles.deleteTitle")}
         okText={t("common.delete")}

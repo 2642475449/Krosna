@@ -5,7 +5,7 @@ import { applyPersistentSettingsToStore, createAppStore, getPersistentSettingsSn
 import { useAppStore } from "./index";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import type { TabEntity } from "./types";
-import { getAgentTurnInputResponseBaseline } from "@/lib/agentUserResponse";
+import { getAgentUserResponseBaseline } from "@/lib/agentUserResponse";
 import { getSessionFeedback } from "@/lib/sessionFeedback";
 
 function createSession(
@@ -44,11 +44,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("resolves a permission indicator through updateSession without a checkpoint and preserves the next question", () => {
+it("resolves a permission indicator through updateSession and preserves the next question", () => {
   const store = createAppStore();
   const projectPath = "D:/workspace/demo";
   const session = createSession("permission", "Codex", projectPath, {
-    agentId: "codex", status: "waiting", statusRevision: 4, checkpointActiveTurnId: null,
+    agentId: "codex", status: "waiting", statusRevision: 4,
   });
   store.setState({
     currentProject: { path: projectPath, name: "demo" },
@@ -61,7 +61,7 @@ it("resolves a permission indicator through updateSession without a checkpoint a
     sessionName: session.name, eventType: "permission_request", title: "Approve", body: "",
     severity: "warning", source: "codex", requiresAttention: true, actionable: true, createdAt: 200,
   });
-  const baseline = getAgentTurnInputResponseBaseline(store.getState().sessions[0]);
+  const baseline = getAgentUserResponseBaseline(store.getState().sessions[0]);
   expect(baseline).toEqual({ revision: 4, eventType: "permission_request" });
   store.getState().updateSession(session.id, {
     status: "running", statusRevision: 5, statusUpdatedAt: 300, lastEventType: "user_response",
@@ -77,6 +77,9 @@ it("resolves a permission indicator through updateSession without a checkpoint a
     id: "question-6", sessionId: session.id, projectPath, revision: 6,
     sessionName: session.name, eventType: "waiting_input", title: "Choose", body: "",
     severity: "warning", source: "codex", requiresAttention: true, actionable: true, createdAt: 400,
+  });
+  expect(getAgentUserResponseBaseline(store.getState().sessions[0])).toEqual({
+    revision: 6, eventType: "waiting_input",
   });
   expect(getSessionFeedback(store.getState().sessions[0], store.getState().projectAttentionItems[projectPath][0])?.state).toBe("waiting");
 });

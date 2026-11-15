@@ -107,6 +107,7 @@ export const ANTD_COMPONENT_OVERRIDES = {
   },
   Modal: {
     ...overlayTokens,
+    motion: false,
     contentBg: "var(--cs-overlay-bg)",
     headerBg: "var(--cs-overlay-bg)",
     footerBg: "var(--cs-overlay-footer-bg)",

@@ -1,5 +1,6 @@
 import type { Session } from "@/types";
 import { normalizeSessionTitles } from "@/lib/sessionTitles";
+import { getNextSessionActivityAt } from "@/lib/sessionActivity";
 import type { SessionEventType, SessionRuntimeStatus } from "../types";
 
 export function updateSessionCollection(
@@ -7,13 +8,18 @@ export function updateSessionCollection(
   sessionId: string,
   updates: Partial<Session>
 ) {
-  return sessions.map((session) =>
-    session.id === sessionId ? normalizeSessionTitles({
-      ...session, ...updates,
+  return sessions.map((session) => {
+    if (session.id !== sessionId) return session;
+    const next = { ...session, ...updates };
+    const activityAt = getNextSessionActivityAt(session, updates.lastActivityAt);
+    if (activityAt === undefined) delete next.lastActivityAt;
+    else next.lastActivityAt = activityAt;
+    return normalizeSessionTitles({
+      ...next,
       ...(updates.titleSource === "manual" && updates.name
         ? { manualTitle: updates.name } : {}),
-    }) : session
-  );
+    });
+  });
 }
 
 export function mapStatusFromEvent(eventType: SessionEventType): SessionRuntimeStatus {

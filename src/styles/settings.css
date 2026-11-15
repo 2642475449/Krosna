@@ -82,11 +82,6 @@
 .app-settings-control-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .app-settings-danger { border-top: 1px solid var(--cs-border-card); margin-top: 16px; padding-top: 16px; }
 .app-settings-warning { color: var(--cs-text-secondary); background: var(--cs-bg-hover); border: 1px solid var(--cs-border-card); border-left: 2px solid var(--cs-warning); border-radius: 6px; }
-.app-settings-signal { display: flex; align-items: center; gap: 4px; height: 32px; padding-inline: 3px; }
-.app-settings-signal > span { width: 3px; height: 12px; border-radius: 4px; background: currentColor; opacity: .6; }
-.app-settings-signal > span:nth-child(2), .app-settings-signal > span:nth-child(6) { height: 21px; opacity: .8; }
-.app-settings-signal > span:nth-child(3), .app-settings-signal > span:nth-child(5) { height: 31px; opacity: 1; }
-.app-settings-signal > span:nth-child(4) { height: 18px; opacity: .7; }
 .app-settings-theme { width: 100%; min-width: 0; overflow: hidden; border: 1px solid var(--cs-border); border-radius: 8px; text-align: left; background: var(--cs-bg-card-solid); color: var(--cs-text-primary); transition: border-color 140ms; }
 .app-settings-theme:hover { border-color: var(--cs-primary); }
 .app-settings-theme[aria-checked="true"] { border-color: var(--cs-primary); box-shadow: inset 0 0 0 1px var(--cs-primary); }

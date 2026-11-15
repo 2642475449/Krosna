@@ -76,7 +76,14 @@ const EMPTY_GIT_FILE_STATUSES: GitFileStatus[] = [];
 
 type FlatTreeRow =
   | { kind: "inline-create"; key: string; depth: number; inheritedTone?: FolderTone }
-  | { kind: "node"; key: string; node: ResourceTreeNode; depth: number; inheritedTone?: FolderTone };
+  | {
+      kind: "node";
+      key: string;
+      node: ResourceTreeNode;
+      depth: number;
+      inheritedTone?: FolderTone;
+      inheritedIgnored?: boolean;
+    };
 
 function readPersistedExpandedPaths(projectPath: string): Record<string, boolean> {
   if (!projectPath || typeof window === "undefined") return {};
@@ -675,6 +682,15 @@ function SidebarProjectPanel({
   ]);
 
   useEffect(() => {
+    if (!currentProject) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    const entry = useGitStatusStore.getState().entries[currentProject.path];
+    if (!entry || (entry.isRepo === null && !entry.loading)) {
+      void useGitStatusStore.getState().refresh(currentProject.path);
+    }
+  }, [currentProject]);
+
+  useEffect(() => {
     const container = treeContainerRef.current;
     if (!container) return;
     const syncViewportHeight = () => {
@@ -823,18 +839,25 @@ function SidebarProjectPanel({
     if (inlineCreate && normalizePath(inlineCreate.parentPath) === normalizePath(projectRootPath)) {
       result.push({ kind: "inline-create", key: "__inline-create__", depth: 0 });
     }
-    const visit = (nodes: ResourceTreeNode[], depth: number, inheritedTone?: FolderTone) => {
+    const visit = (
+      nodes: ResourceTreeNode[],
+      depth: number,
+      inheritedTone?: FolderTone,
+      inheritedIgnored = false
+    ) => {
       for (const node of nodes) {
         const { entry, isExpanded, children } = node;
         const isDirectory = entry.kind === "directory";
         const visual = getFileIcon(entry.name, isDirectory, isExpanded, inheritedTone);
         const rowTone = visual.tone ?? inheritedTone;
+        const rowIgnored = !!entry.ignored || inheritedIgnored;
         result.push({
           kind: "node",
           key: entry.path,
           node,
           depth,
           inheritedTone,
+          inheritedIgnored: rowIgnored,
         });
         if (isDirectory && isExpanded) {
           const hasInlineChild =
@@ -848,7 +871,7 @@ function SidebarProjectPanel({
             });
           }
           if (children.length > 0) {
-            visit(children, depth + 1, rowTone);
+            visit(children, depth + 1, rowTone, rowIgnored);
           }
         }
       }
@@ -2148,7 +2171,7 @@ function SidebarProjectPanel({
           return renderInlineCreateRow(item.depth, item.inheritedTone);
         }
 
-        const { node, depth, inheritedTone } = item;
+        const { node, depth, inheritedTone, inheritedIgnored } = item;
         const { entry, isExpanded, isLoadingChildren } = node;
         const isDirectory = entry.kind === "directory";
         const isActive = selectedPath === entry.path;
@@ -2158,6 +2181,7 @@ function SidebarProjectPanel({
           !!renamingEntry && normalizePath(renamingEntry.path) === normalizePath(entry.path);
         const visual = getFileIcon(entry.name, isDirectory, isExpanded, inheritedTone);
         const rowTone = visual.tone ?? inheritedTone;
+        const isGitIgnored = (!!entry.ignored || !!inheritedIgnored) && rowTone !== "excluded";
         const gitStatus = getTreeEntryGitStatus(gitStatusIndex, entry.path, isDirectory);
         const gitBadge = gitStatus ? getTreeGitBadge(gitStatus) : null;
 
@@ -2178,6 +2202,7 @@ function SidebarProjectPanel({
                 data-active={isActive ? "true" : "false"}
                 data-selected={isSelected ? "true" : "false"}
                 data-folder-tone={rowTone}
+                data-git-ignored={isGitIgnored ? "true" : undefined}
                 data-git-tone={gitBadge?.tone}
                 data-path={entry.path}
                 data-drag-over={isDirectory && dragOverPath === entry.path ? "true" : "false"}
@@ -2222,6 +2247,7 @@ function SidebarProjectPanel({
                 data-active={isActive ? "true" : "false"}
                 data-selected={isSelected ? "true" : "false"}
                 data-folder-tone={rowTone}
+                data-git-ignored={isGitIgnored ? "true" : undefined}
                 data-git-tone={gitBadge?.tone}
                 data-cut={
                   clipboardOperation === "cut" &&
@@ -2274,14 +2300,10 @@ function SidebarProjectPanel({
                   {visual.icon}
                 </span>
                 <span className="app-file-tree-name truncate min-w-0 flex-1">{entry.name}</span>
-                {gitBadge ? (
-                  isDirectory ? (
-                    <span className="app-file-tree-git-dot" aria-hidden="true" />
-                  ) : (
-                    <span className="app-file-tree-git-badge" aria-hidden="true">
-                      {gitBadge.label}
-                    </span>
-                  )
+                {gitBadge && !isDirectory ? (
+                  <span className="app-file-tree-git-badge" aria-hidden="true">
+                    {gitBadge.label}
+                  </span>
                 ) : null}
               </button>
             )}
@@ -2611,6 +2633,7 @@ function SidebarProjectPanel({
       </div>
 
       <Modal
+        centered
         title={
           pendingExternalCopy
             ? pendingExternalCopy.sourcePaths.length === 1
@@ -2775,6 +2798,7 @@ function SidebarProjectPanel({
       </Modal>
 
       <Modal
+        centered
         title={t("sidebar.resourceDeleteTitle")}
         open={deletingEntries.length > 0}
         okText={t("common.delete")}

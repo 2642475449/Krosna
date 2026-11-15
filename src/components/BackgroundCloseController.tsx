@@ -45,7 +45,7 @@ export function BackgroundCloseController() {
 
   return (
     <>
-      <Modal open={promptOpen && !exitPreparing && !closePreparing} title={t("background.closeTitle")} width={640} onCancel={() => setPromptOpen(false)}
+      <Modal centered open={promptOpen && !exitPreparing && !closePreparing} title={t("background.closeTitle")} width={640} onCancel={() => setPromptOpen(false)}
         closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
         footer={[
           <Button key="cancel" disabled={busy} onClick={() => setPromptOpen(false)}>{t("common.cancel")}</Button>,
@@ -56,7 +56,7 @@ export function BackgroundCloseController() {
         <p className="mb-4">{t("background.closeStopDescription")}</p>
         <Checkbox checked={remember} disabled={busy} onChange={(event) => setRemember(event.target.checked)}>{t("background.remember")}</Checkbox>
       </Modal>
-      <Modal open={documentPromptOpen && !exitPreparing && !closePreparing} title={t("background.unsavedTitle")}
+      <Modal centered open={documentPromptOpen && !exitPreparing && !closePreparing} title={t("background.unsavedTitle")}
         onCancel={cancelWorkspaceDocumentClose} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
         footer={[
           <Button key="cancel" disabled={busy} onClick={cancelWorkspaceDocumentClose}>{t("common.cancel")}</Button>,
@@ -72,7 +72,7 @@ export function BackgroundCloseController() {
           {unsavedPaths.map((path) => <li key={path}>{path}</li>)}
         </ul>
       </Modal>
-      <Modal open={exitPreparing || closePreparing} title={t(exitPreparing ? "background.preparingExit" : "background.preparingClose")} closable={false}
+      <Modal centered open={exitPreparing || closePreparing} title={t(exitPreparing ? "background.preparingExit" : "background.preparingClose")} closable={false}
         mask={{ closable: false }} keyboard={false} footer={null}>
         <div className="flex items-center gap-3"><Spin /><span>{t(exitPreparing ? "background.preparingExitDescription" : "background.preparingCloseDescription")}</span></div>
       </Modal>

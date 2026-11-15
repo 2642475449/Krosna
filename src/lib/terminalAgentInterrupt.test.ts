@@ -10,7 +10,6 @@ function setup(agentId: Session["agentId"] = "claude") {
   let session: Session = {
     id: "session", name: "task", path: "project", createdAt: 1, active: true,
     agentId, status: "running", statusRevision: 3, statusUpdatedAt: 1,
-    checkpointActiveTurnId: "turn-a",
   };
   let screen = [{ row: 5, text: "prompt" }];
   const confirm = vi.fn();
@@ -35,11 +34,12 @@ it("does not mark Escape or silence alone as a successful interruption", () => {
 it("repairs the prompt caret after interruption but leaves permission and question overlays alone", () => {
   const session: Session = {
     id: "session", name: "task", path: "project", createdAt: 1,
-    agentId: "claude", active: true, status: "waiting", checkpointActiveTurnId: "turn-a",
+    agentId: "claude", active: true, status: "waiting",
   };
   expect(canRestoreTerminalInputCursor({ ...session, lastEventType: "interrupted" })).toBe(true);
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed" })).toBe(true);
-  for (const lastEventType of ["permission_request", "waiting_input", undefined]) {
+  expect(canRestoreTerminalInputCursor(session)).toBe(true);
+  for (const lastEventType of ["permission_request", "waiting_input"]) {
     expect(canRestoreTerminalInputCursor({ ...session, lastEventType })).toBe(false);
   }
   expect(canRestoreTerminalInputCursor({ ...session, status: "running" })).toBe(false);
@@ -78,7 +78,7 @@ it("keeps a menu-closing Escape running when native activity stays busy", () => 
 
 it.each([
   { statusRevision: 4 }, { status: "completed" as const }, { status: "waiting" as const },
-  { checkpointActiveTurnId: "turn-b" }, { active: false }, { agentSessionId: "new-session" },
+  { id: "new-session" }, { active: false }, { agentSessionId: "new-session" },
   { statusUpdatedAt: 10 }, { archived: true },
 ])("rejects old interruption evidence after the session changes: %j", (updates) => {
   const { tracker, confirm, idle, update } = setup();

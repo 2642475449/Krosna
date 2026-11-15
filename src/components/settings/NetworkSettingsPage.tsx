@@ -13,6 +13,8 @@ import {
   normalizeNetworkProxySettings,
 } from "@/lib/networkProxy";
 import { useAppStore } from "@/store";
+import geminiLogo from "@/assets/network-provider-icons/gemini.svg";
+import qwenLogo from "@/assets/network-provider-icons/qwen.png";
 import type {
   NetworkProxyTestResult,
   NetworkProxyTestTarget,
@@ -230,11 +232,11 @@ function NetworkTargetLogo({ target }: { target: NetworkProxyTestTarget }) {
     case "claude":
       return <div className={containerClassName}><img className="h-6 w-6 object-contain" src="/agents/claude.svg" alt="" aria-hidden="true" /></div>;
     case "gemini":
-      return <div className={containerClassName}><GeminiLogo /></div>;
+      return <div className={containerClassName}><img className="h-6 w-6 object-contain" src={geminiLogo} alt="" aria-hidden="true" /></div>;
     case "glm":
       return <div className={containerClassName}><GlmLogo /></div>;
     case "qwen":
-      return <div className={containerClassName}><QwenLogo /></div>;
+      return <div className={containerClassName}><img className="h-6 w-6 object-contain" src={qwenLogo} alt="" aria-hidden="true" /></div>;
   }
 }
 
@@ -257,34 +259,11 @@ function GitHubLogo() {
   );
 }
 
-function GeminiLogo() {
-  return (
-    <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden="true">
-      <defs>
-        <linearGradient id="network-gemini-gradient" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#1C7DFF" />
-          <stop offset=".48" stopColor="#8E75FF" />
-          <stop offset="1" stopColor="#FF5EA0" />
-        </linearGradient>
-      </defs>
-      <path d="M12 1.5c.42 5.83 4.67 10.08 10.5 10.5-5.83.42-10.08 4.67-10.5 10.5C11.58 16.67 7.33 12.42 1.5 12 7.33 11.58 11.58 7.33 12 1.5Z" fill="url(#network-gemini-gradient)" />
-    </svg>
-  );
-}
-
 function GlmLogo() {
   return (
     <svg className="h-6 w-6" viewBox="0 0 30 30" aria-hidden="true">
       <rect x="1.5" y="1.5" width="27" height="27" rx="6" fill="#2D2D2D" />
       <path fill="#fff" d="M6.2 7.1h9.27l-2.33 3.32H6.2V7.1Zm10.66 0h7.44L13.14 22.9H5.7L16.86 7.1Zm-2.33 15.8 2.33-3.32h6.97v3.32h-9.3Z" />
-    </svg>
-  );
-}
-
-function QwenLogo() {
-  return (
-    <svg className="h-6 w-6" viewBox="0 0 233 236" aria-hidden="true">
-      <path fill="#082DFF" d="M187.25 36.08h-52.9c0-2.25-.58-4.5-1.75-6.52l-7.08-12.26a13.04 13.04 0 0 0-11.28-6.52h-14.16A13.04 13.04 0 0 0 88.79 17.3L67.11 54.86a13.04 13.04 0 0 0 0 13.02l7.08 12.27a13.04 13.04 0 0 0 11.28 6.51h101.78a13.04 13.04 0 0 0 11.29-6.51l7.08-12.27a13.04 13.04 0 0 0 0-13.02l-7.08-12.27a13.04 13.04 0 0 0-11.29-6.51ZM12.35 99.5l26.45 45.82a13 13 0 0 0-4.77 4.77l-7.08 12.26a13.04 13.04 0 0 0 0 13.03l7.08 12.27a13.04 13.04 0 0 0 11.28 6.51h43.37a13.04 13.04 0 0 0 11.29-6.51l7.08-12.27a13.04 13.04 0 0 0 0-13.03L56.16 74.21a13.04 13.04 0 0 0-11.29-6.52H30.71a13.04 13.04 0 0 0-11.28 6.52l-7.08 12.26a13.04 13.04 0 0 0 0 13.03Zm142.38 119.76 26.45-45.81a13 13 0 0 0 6.51 1.74h14.17a13.04 13.04 0 0 0 11.28-6.51l7.08-12.27a13.04 13.04 0 0 0 0-13.03l-21.68-37.56a13.04 13.04 0 0 0-11.29-6.51h-14.16a13.04 13.04 0 0 0-11.28 6.51l-50.89 88.15a13.04 13.04 0 0 0 0 13.03l7.08 12.26a13.04 13.04 0 0 0 11.28 6.52h14.16a13.04 13.04 0 0 0 11.29-6.52Z" />
     </svg>
   );
 }

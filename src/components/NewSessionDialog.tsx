@@ -130,7 +130,7 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
   }, [open, choices, agentId, taskKey, defaultLabel]);
   const taskOpen = Boolean(choices && agentId);
   const displayTask = taskOpen && choices && agentId ? { agentId, choices, taskKey, defaultLabel } : lastTask;
-  return <Modal open={open} title={null} closable={false} footer={null} width={580} keyboard={!selectOpen} className="app-session-launcher-modal" classNames={{ mask: "app-session-launcher-mask" }} onCancel={() => { if (!creating) onCancel(); }} afterOpenChange={visible => {
+  return <Modal centered open={open} title={null} closable={false} footer={null} width={580} keyboard={!selectOpen} className="app-session-launcher-modal" classNames={{ mask: "app-session-launcher-mask" }} onCancel={() => { if (!creating) onCancel(); }} afterOpenChange={visible => {
     // 默认回车创建会话，避免 Modal 将焦点放在标题编辑按钮上。
     if (visible) focusCreateButton();
   }} destroyOnHidden>

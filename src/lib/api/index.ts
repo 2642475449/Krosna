@@ -123,10 +123,6 @@ import type {
   GitGraphCommit,
   GitGraphCommitDetail,
   GitRepoInfo,
-  AgentTurnReview,
-  AgentTurnStartResult,
-  CheckpointRestoreResult,
-  CheckpointReviewDecision,
   ScheduledTask,
   ScheduledTaskInput,
   ScheduledTaskRun,
@@ -761,17 +757,6 @@ export async function generateSessionTitle(
 
 export async function readCodexSessionTitles(sessionIds: string[]): Promise<Record<string, string>> {
   return await invoke("read_codex_session_titles", { sessionIds });
-}
-
-export async function submitAgentTurnInput(
-  sessionId: string,
-  data: string,
-): Promise<AgentTurnStartResult> {
-  return await invoke("submit_agent_turn_input", { sessionId, data });
-}
-
-export async function completeAgentTurn(sessionId: string): Promise<AgentTurnReview | null> {
-  return await invoke("complete_agent_turn", { sessionId });
 }
 
 export async function ptyResize(
@@ -1899,94 +1884,6 @@ export async function gitUnstageHunk(
   hunkHeader: string
 ): Promise<void> {
   await invoke("git_unstage_hunk", { projectPath, filePath, hunkHeader });
-}
-
-// Provider-independent Agent turn checkpoints
-
-export async function checkpointListTurns(
-  projectPath: string,
-  sessionId?: string,
-): Promise<AgentTurnReview[]> {
-  return await invoke("checkpoint_list_turns", {
-    projectPath,
-    sessionId: sessionId ?? null,
-  });
-}
-
-export async function checkpointFileDiff(
-  projectPath: string,
-  turnId: string,
-  filePath: string,
-): Promise<GitDiffContentResult> {
-  return await invoke<GitDiffContentResult>("checkpoint_file_diff", { projectPath, turnId, filePath })
-    .catch(rethrowPreviewError);
-}
-
-export async function checkpointFileHunks(
-  projectPath: string,
-  turnId: string,
-  filePath: string,
-): Promise<GitDiffHunkResult> {
-  return await invoke("checkpoint_file_hunks", { projectPath, turnId, filePath });
-}
-
-export async function checkpointSetFileDecision(
-  projectPath: string,
-  turnId: string,
-  filePath: string,
-  decision: CheckpointReviewDecision,
-): Promise<AgentTurnReview> {
-  return await invoke("checkpoint_set_file_decision", {
-    projectPath,
-    turnId,
-    filePath,
-    decision,
-  });
-}
-
-export async function checkpointRejectFile(
-  projectPath: string,
-  turnId: string,
-  filePath: string,
-): Promise<CheckpointRestoreResult> {
-  return await invoke("checkpoint_reject_file", { projectPath, turnId, filePath });
-}
-
-export async function checkpointSetHunkDecision(
-  projectPath: string,
-  turnId: string,
-  filePath: string,
-  hunkHeader: string,
-  decision: CheckpointReviewDecision,
-): Promise<CheckpointRestoreResult> {
-  return await invoke("checkpoint_set_hunk_decision", {
-    projectPath,
-    turnId,
-    filePath,
-    hunkHeader,
-    decision,
-  });
-}
-
-export async function checkpointMarkReviewed(
-  projectPath: string,
-  turnId: string,
-): Promise<AgentTurnReview> {
-  return await invoke("checkpoint_mark_reviewed", { projectPath, turnId });
-}
-
-export async function checkpointRestoreTurn(
-  projectPath: string,
-  turnId: string,
-): Promise<CheckpointRestoreResult> {
-  return await invoke("checkpoint_restore_turn", { projectPath, turnId });
-}
-
-export async function checkpointDiscardTurn(
-  projectPath: string,
-  turnId: string,
-): Promise<CheckpointRestoreResult> {
-  return await invoke("checkpoint_discard_turn", { projectPath, turnId });
 }
 
 // Conflict Resolution API

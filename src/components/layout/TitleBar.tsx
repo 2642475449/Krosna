@@ -115,7 +115,7 @@ function TitleBar() {
     <div
       className="app-shell-chrome app-glass-toolbar app-titlebar flex items-center select-none"
     >
-      <div className="flex-1 flex items-center h-full pl-2">
+      <div className="flex-1 flex items-center h-full pl-2 pt-1.5">
         <div className="flex shrink-0 items-center gap-2 px-2">
           <img
             src="/logo.png"
@@ -148,27 +148,29 @@ function TitleBar() {
 
       {/* Right: window controls */}
       <div className="flex items-center h-full">
-        <ApplicationUpdateBadge />
-        {currentProject && (
-          <div className="h-full shrink-0 flex items-center justify-center pl-2 pr-1">
-            <QuickCommandsButton />
-          </div>
-        )}
-        {currentProject && (
-          <>
-            <Tooltip title={t("auxiliaryDock.toggle")}>
-              <button
-                type="button"
-                aria-pressed={auxiliaryOpen}
-                data-active={auxiliaryOpen ? "true" : "false"}
-                className="app-rail-button app-marker-host app-marker-rail mr-1 flex h-8 w-10 items-center justify-center rounded-md"
-                onClick={toggleAuxiliary}
-              >
-                <AuxiliaryPanelGlyph />
-              </button>
-            </Tooltip>
-          </>
-        )}
+        <div className="flex items-center h-full pt-1.5">
+          <ApplicationUpdateBadge />
+          {currentProject && (
+            <div className="h-full shrink-0 flex items-center justify-center pl-2 pr-1">
+              <QuickCommandsButton />
+            </div>
+          )}
+          {currentProject && (
+            <>
+              <Tooltip title={t("auxiliaryDock.toggle")}>
+                <button
+                  type="button"
+                  aria-pressed={auxiliaryOpen}
+                  data-active={auxiliaryOpen ? "true" : "false"}
+                  className="app-rail-button app-marker-host app-marker-rail mr-1 flex h-8 w-10 items-center justify-center rounded-md"
+                  onClick={toggleAuxiliary}
+                >
+                  <AuxiliaryPanelGlyph />
+                </button>
+              </Tooltip>
+            </>
+          )}
+        </div>
         <button
           className="app-window-control"
           onClick={handleMinimize}

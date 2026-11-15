@@ -24,16 +24,12 @@ export function getAgentUserResponseBaseline(
   };
 }
 
-/**
- * 权限选择始终属于现有请求，不依赖检查点是否启用或恢复。
- * Provider 在普通提示符上也可能保留 waiting_input；此时没有活动检查点，
- * 下一次提交必须作为新回合建立 baseline。
- */
-export function getAgentTurnInputResponseBaseline(
+/** 权限菜单可由回车确认；等待输入的回车也可能只是空提交或编辑换行。 */
+export function getAgentSubmitResponseBaseline(
   session: Session | undefined,
 ): AgentUserResponseBaseline | null {
-  if (session?.lastEventType !== "permission_request" && !session?.checkpointActiveTurnId) return null;
-  return getAgentUserResponseBaseline(session);
+  const baseline = getAgentUserResponseBaseline(session);
+  return baseline?.eventType === "permission_request" ? baseline : null;
 }
 
 /** 快捷键可能直接完成选择；写入成功且根 CLI 报告恢复运行后，才补齐回复状态。 */
@@ -57,8 +53,10 @@ export function createTerminalAgentUserResponse(options: {
       cancel();
       const session = options.getSession();
       const baseline = getAgentUserResponseBaseline(session);
-      // 回车由提交分流处理；普通按键不能单独证明用户已经完成选择。
-      if (disposed || !session?.active || !baseline || data === "\r" || data === "\n") return () => {};
+      // 权限回车由提交流程确认；提问回车仍须等待根 CLI 实际恢复运行。
+      const submitting = data === "\r" || data === "\n";
+      if (disposed || !session?.active || !baseline
+        || (submitting && baseline.eventType === "permission_request")) return () => {};
       const candidate: Pending = { baseline, written: false, working: false };
       pending = candidate;
       return (written: boolean) => {

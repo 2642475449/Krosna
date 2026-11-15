@@ -38,6 +38,7 @@ function RemoteHostEditor() {
   };
   return (
     <Modal
+      centered
       open={open} title={t(draft.id ? "remote.host.edit" : "remote.host.add")}
       onCancel={() => { if (!pending) setEditor(false); }}
       onOk={() => void save()} confirmLoading={pending}
@@ -291,7 +292,7 @@ export function RemoteWorkspacePanel() {
         </div>
       </Modal>
       <RemoteHostEditor />
-      <Modal open={!!pendingStop} className="app-remote-stop-modal" title={t(`remote.sessions.${pendingSessionAction}Title`)} okText={t(`remote.sessions.${pendingSessionAction}`)} cancelText={t("common.cancel")}
+      <Modal centered open={!!pendingStop} className="app-remote-stop-modal" title={t(`remote.sessions.${pendingSessionAction}Title`)} okText={t(`remote.sessions.${pendingSessionAction}`)} cancelText={t("common.cancel")}
         okButtonProps={{ danger: true }} confirmLoading={pendingStop ? pending[`${pendingStop.hostId}:${pendingSessionAction}`] : false}
         cancelButtonProps={{ disabled: pendingStop ? pending[`${pendingStop.hostId}:${pendingSessionAction}`] : false }} mask={{ closable: false }}
         onCancel={() => { if (!pendingStop || !pending[`${pendingStop.hostId}:${pendingSessionAction}`]) useRemoteWorkspaceStore.getState().setPendingStop(null); }}
@@ -299,7 +300,7 @@ export function RemoteWorkspacePanel() {
         <p>{t(`remote.sessions.${pendingSessionAction}Description`, { name: pendingStop?.session.title, pid: pendingStop?.session.pid })}</p>
         {pendingStop && errors[pendingStop.hostId] && <div className="app-remote-error" role="alert"><RemoteErrorMessage error={errors[pendingStop.hostId]!} /></div>}
       </Modal>
-      <Modal open={!!pendingServerAction} className="app-remote-server-modal" title={t(`remote.server.${pendingServerAction?.action ?? "stop"}`)}
+      <Modal centered open={!!pendingServerAction} className="app-remote-server-modal" title={t(`remote.server.${pendingServerAction?.action ?? "stop"}`)}
         okText={t(`remote.server.${pendingServerAction?.action ?? "stop"}`)} cancelText={t("common.cancel")}
         okButtonProps={{ danger: true }} confirmLoading={pendingServerAction ? pending[`${pendingServerAction.hostId}:server`] : false}
         cancelButtonProps={{ disabled: pendingServerAction ? pending[`${pendingServerAction.hostId}:server`] : false }} mask={{ closable: false }}

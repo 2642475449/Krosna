@@ -529,6 +529,7 @@ export function SearchIndexPage() {
       </SettingsSection>
 
       <Modal
+        centered
         open={clearDialogOpen}
         title={t("settings.searchIndex.clearCacheConfirmTitle")}
         okText={t("settings.searchIndex.clearCache")}
@@ -541,6 +542,7 @@ export function SearchIndexPage() {
         <p>{t("settings.searchIndex.clearCacheConfirmDescription")}</p>
       </Modal>
       <Modal
+        centered
         open={deleteDialogProjectPath !== null}
         title={t("settings.searchIndex.deleteConfirmTitle")}
         okText={t("settings.searchIndex.deleteIndex")}
