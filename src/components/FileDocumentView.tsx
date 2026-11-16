@@ -33,6 +33,9 @@ export interface FileDocumentViewProps {
   tabId?: string;
   onOpenProjectPath?: (path: string) => void;
   renderActions?: (save: () => Promise<boolean>) => ReactNode;
+  markdownViewMode?: MarkdownViewMode;
+  onMarkdownViewModeChange?: (mode: MarkdownViewMode) => void;
+  hideToolbar?: boolean;
   projectPath: string;
   path: string;
   isActive: boolean;
@@ -150,7 +153,17 @@ function collapseBreadcrumbs(items: FileBreadcrumbItem[]) {
   };
 }
 
-function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPath, renderActions }: FileDocumentViewProps) {
+function FileDocumentView({
+  tabId,
+  projectPath,
+  path,
+  isActive,
+  onOpenProjectPath,
+  renderActions,
+  markdownViewMode: controlledMarkdownViewMode,
+  onMarkdownViewModeChange,
+  hideToolbar = false,
+}: FileDocumentViewProps) {
   const { t } = useTranslation();
   const activeTheme = useAppStore((s) => s.activeTheme());
   const registerFileDocument = useAppStore((s) => s.registerFileDocument);
@@ -177,14 +190,16 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
     if (tabId) setTabDirty(tabId, isDirty);
   }, [isDirty, setTabDirty, tabId]);
   const [localMarkdownViewMode, setLocalMarkdownViewMode] = useState<MarkdownViewMode>("preview");
-  const markdownViewMode: MarkdownViewMode = tabId ? (tab?.markdownViewMode ?? "preview") : localMarkdownViewMode;
+  const markdownViewMode: MarkdownViewMode = controlledMarkdownViewMode ?? (tabId ? (tab?.markdownViewMode ?? "preview") : localMarkdownViewMode);
   const setMarkdownViewMode = useCallback((mode: MarkdownViewMode) => {
-    if (tabId) {
+    if (onMarkdownViewModeChange) {
+      onMarkdownViewModeChange(mode);
+    } else if (tabId) {
       setTabMarkdownViewMode(tabId, mode);
     } else {
       setLocalMarkdownViewMode(mode);
     }
-  }, [setTabMarkdownViewMode, tabId]);
+  }, [onMarkdownViewModeChange, setTabMarkdownViewMode, tabId]);
   const [revealTarget, setRevealTarget] = useState<FileRevealTarget | null>(() =>
     tabId ? consumePendingFileNavigation(path) : null
   );
@@ -365,9 +380,9 @@ function FileDocumentView({ tabId, projectPath, path, isActive, onOpenProjectPat
       </div>
     ) : null;
 
-  const showDocumentIdentity = !tabId;
-  const showMarkdownMode = !tabId && markdownFile && (!error || !!status);
-  const toolbarActions = renderActions?.(() => handleSave({ silent: true }));
+  const showDocumentIdentity = !tabId && !hideToolbar;
+  const showMarkdownMode = !tabId && !hideToolbar && markdownFile && (!error || !!status);
+  const toolbarActions = hideToolbar ? null : renderActions?.(() => handleSave({ silent: true }));
   const toolbar = showDocumentIdentity || showMarkdownMode || toolbarActions ? (
     <div
         data-file-document-toolbar

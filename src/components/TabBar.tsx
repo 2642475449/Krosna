@@ -32,6 +32,7 @@ import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
+import { MarkdownModeButtons } from "@/components/ui/MarkdownModeButtons";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
   getAgentIdsWithCapability,
@@ -973,41 +974,13 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       )}
       {isActiveMarkdownTab && activeTab ? (
         <div
-          className="ml-auto shrink-0 flex items-center gap-0.5 pr-2"
+          className="ml-auto shrink-0 flex items-center pr-2"
           style={{ minHeight: 36 }}
-          role="group"
-          aria-label={t("fileTabs.markdownModePreview")}
         >
-          <Tooltip title={t("fileTabs.markdownModeEdit")} mouseEnterDelay={0.4}>
-            <button
-              type="button"
-              className="app-tabbar-mode-button"
-              data-active={activeMarkdownViewMode === "edit" ? "true" : "false"}
-              aria-pressed={activeMarkdownViewMode === "edit"}
-              aria-label={t("fileTabs.markdownModeEdit")}
-              onClick={() => setTabMarkdownViewMode(activeTab.id, "edit")}
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" focusable="false">
-                <path d="M2.5 4h11M2.5 8h7.5M2.5 12h11" />
-              </svg>
-            </button>
-          </Tooltip>
-          <Tooltip title={t("fileTabs.markdownModePreview")} mouseEnterDelay={0.4}>
-            <button
-              type="button"
-              className="app-tabbar-mode-button"
-              data-active={activeMarkdownViewMode === "preview" ? "true" : "false"}
-              aria-pressed={activeMarkdownViewMode === "preview"}
-              aria-label={t("fileTabs.markdownModePreview")}
-              onClick={() => setTabMarkdownViewMode(activeTab.id, "preview")}
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" focusable="false">
-                <rect x="2" y="2.5" width="12" height="11" rx="1.6" />
-                <circle cx="5.4" cy="5.8" r="1" fill="currentColor" stroke="none" />
-                <path d="M3.2 11.4l3-3.1 2.2 2.1 1.7-1.8 2.7 2.8" />
-              </svg>
-            </button>
-          </Tooltip>
+          <MarkdownModeButtons
+            mode={activeMarkdownViewMode}
+            onChange={(mode) => setTabMarkdownViewMode(activeTab.id, mode)}
+          />
         </div>
       ) : null}
       <Modal

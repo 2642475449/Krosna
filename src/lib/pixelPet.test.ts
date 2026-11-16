@@ -47,7 +47,7 @@ describe("derivePetCodingMood", () => {
 });
 
 describe("stepPetSimulation", () => {
-  it("walks forward and reverses at the right boundary", () => {
+  it("brakes, looks over the edge and turns before walking back", () => {
     const width = 300;
     const maxX = width - PET_TRACK_PADDING_X - PET_SPRITE_LOGICAL_SIZE;
     let sim: PetSimulationState = {
@@ -59,8 +59,20 @@ describe("stepPetSimulation", () => {
     };
 
     sim = stepPetSimulation(sim, 100, width, "idle", { random: () => 0.5 });
+    expect(sim.x).toBeLessThan(maxX);
+    for (let i = 0; i < 20 && sim.clip !== "edgeLook"; i++) {
+      sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
+    }
     expect(sim.x).toBe(maxX);
+    expect(sim.facing).toBe(1);
+    expect(sim.clip).toBe("edgeLook");
+    for (let i = 0; i < 15 && sim.facing === 1; i++) {
+      sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
+      expect(sim.x).toBe(maxX);
+    }
     expect(sim.facing).toBe(-1);
+    sim = stepPetSimulation(sim, 50, width, "idle");
+    expect(sim.x).toBeLessThan(maxX);
   });
 
   it("walks toward clicked target and stops upon arrival", () => {
@@ -88,11 +100,19 @@ describe("stepPetSimulation", () => {
     expect(sim.bubble?.text).toBe("GO!");
 
     sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
+    expect(sim.y).toBe(0);
+    expect(sim.clip).toBe("crouch");
+    sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
+    sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
     expect(sim.y).toBeGreaterThan(0);
 
+    const clips = new Set<string>();
     for (let i = 0; i < 30; i++) {
       sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
+      clips.add(sim.clip);
     }
+    expect(clips.has("fall")).toBe(true);
+    expect(clips.has("land")).toBe(true);
     expect(sim.y).toBe(0);
     expect(sim.vy).toBe(0);
   });

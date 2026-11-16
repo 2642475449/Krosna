@@ -27,8 +27,16 @@ vi.mock("antd", () => {
 vi.mock("@/components/AgentActivityIcon", () => ({ AgentActivityIcon: () => null }));
 vi.mock("@/components/TaskMonitorPopover", () => ({ TaskMonitorPanel: () => null }));
 vi.mock("@/components/AuxiliaryFileView", () => ({ default: () => null }));
-vi.mock("@/lib/api", () => ({ cleanupSessionProcess: vi.fn(), searchProjectEntries: vi.fn(), openInAssociatedApplication: vi.fn(), openInFileManager: vi.fn() }));
-vi.mock("@/lib/fileIcon", () => ({ getFileIconByName: () => null }));
+vi.mock("@/lib/api", () => ({
+  cleanupSessionProcess: vi.fn(),
+  searchProjectEntries: vi.fn(),
+  openInAssociatedApplication: vi.fn(async () => undefined),
+  openInFileManager: vi.fn(),
+}));
+vi.mock("@/lib/fileIcon", () => ({
+  getFileIconByName: () => null,
+  isMarkdownFile: (path: string) => /\.(md|markdown)$/i.test(path),
+}));
 
 vi.mock("@/lib/fileDocument", () => ({ getFileDocument: vi.fn(() => ({ save: vi.fn(async () => true) })) }));
 
@@ -182,4 +190,41 @@ it("pins previews and closes only other auxiliary tabs", async () => {
   await act(async () => host.querySelector<HTMLButtonElement>('[data-menu="close-others"]')!.click());
   expect(useAuxiliaryDockStore.getState().tabs.map((tab) => tab.resourceId)).toEqual(["D:/repo/one.md"]);
   expect(useAppStore.getState().openFileTab).not.toHaveBeenCalled();
+});
+
+it("places markdown mode buttons and file actions in the auxiliary tab bar without extra toolbars", async () => {
+  const store = useAuxiliaryDockStore.getState();
+  await act(async () => store.openFile({ projectPath: "D:/repo", path: "D:/repo/notes.md" }));
+  const tabBar = host.querySelector(".app-tabbar")!;
+  expect(tabBar).not.toBeNull();
+  expect(tabBar.querySelector(".app-tabbar-new-button")).not.toBeNull();
+  expect(host.querySelector("[data-file-document-toolbar]")).toBeNull();
+
+  const editButton = tabBar.querySelector<HTMLButtonElement>('button[aria-label="fileTabs.markdownModeEdit"]')!;
+  const previewButton = tabBar.querySelector<HTMLButtonElement>('button[aria-label="fileTabs.markdownModePreview"]')!;
+  expect(editButton.getAttribute("aria-pressed")).toBe("false");
+  expect(previewButton.getAttribute("aria-pressed")).toBe("true");
+
+  await act(async () => editButton.click());
+  expect(editButton.getAttribute("aria-pressed")).toBe("true");
+  expect(useAuxiliaryDockStore.getState().tabs[0].markdownViewMode).toBe("edit");
+
+  const associated = tabBar.querySelector<HTMLButtonElement>('[aria-label="common.openInAssociatedApp"]')!;
+  await act(async () => associated.click());
+  expect(openInAssociatedApplication).toHaveBeenCalledWith("D:/repo/notes.md");
+
+  const promote = tabBar.querySelector<HTMLButtonElement>('[aria-label="auxiliaryDock.openInWorkspace"]')!;
+  await act(async () => promote.click());
+  expect(useAppStore.getState().openFileTab).toHaveBeenCalledWith("D:/repo/notes.md", { preview: false });
+});
+
+it.each(["pdf", "docx", "bin"])("shows workspace promotion and external open actions in the tab bar for %s files", async (extension) => {
+  const store = useAuxiliaryDockStore.getState();
+  const path = `D:/repo/document.${extension}`;
+  await act(async () => store.openFile({ projectPath: "D:/repo", path }));
+  const tabBar = host.querySelector(".app-tabbar")!;
+  expect(tabBar.querySelector('[aria-label="fileTabs.markdownModeEdit"]')).toBeNull();
+  expect(tabBar.querySelector('[aria-label="common.openInAssociatedApp"]')).not.toBeNull();
+  await act(async () => tabBar.querySelector<HTMLButtonElement>('[aria-label="auxiliaryDock.openInWorkspace"]')!.click());
+  expect(useAppStore.getState().openFileTab).toHaveBeenCalledWith(path, { preview: false });
 });

@@ -1,4 +1,5 @@
-import type { PetActionState } from "./pixelPet";
+import type { PetActionState, PetClipId } from "./pixelPet";
+import { HERO_FRAMES, HERO_PALETTE } from "./pixelPetHeroFrames";
 
 export type PixelSpriteFrame = readonly string[];
 
@@ -9,6 +10,7 @@ export interface PixelPetBehaviorConfig {
   gravityPxPerSec2: number;
   sleepAfterIdleMs: number;
   allowPlatformHop: boolean;
+  allowWallClimb: boolean;
   reactToCodingMood: boolean;
   enableRandomEvents: boolean;
   cheerBubbles: string[];
@@ -22,7 +24,9 @@ export interface PixelPetConfig {
   submergeRows?: number;
   palette: Record<string, string>;
   frames: Record<PetActionState, string[][]>;
-  frameDurationsMs?: Partial<Record<PetActionState, number>>;
+  clips?: Partial<Record<PetClipId, string[][]>>;
+  frameDurationsMs?: Partial<Record<PetActionState | PetClipId, number>>;
+  frameTimingsMs?: Partial<Record<PetClipId, number[]>>;
   behavior: PixelPetBehaviorConfig;
 }
 
@@ -33,276 +37,11 @@ export const DEFAULT_PET_BEHAVIOR: PixelPetBehaviorConfig = {
   gravityPxPerSec2: 720,
   sleepAfterIdleMs: 10_000,
   allowPlatformHop: true,
+  allowWallClimb: true,
   reactToCodingMood: true,
   enableRandomEvents: false,
   cheerBubbles: ["!", "+1", "★", "GO!", ":)"],
   workBubbles: ["</>", "...", "RUN", "⚡"],
-};
-
-const HERO_PALETTE: Record<string, string> = {
-  R: "#e53935",
-  r: "#b71c1c",
-  S: "#ffd1a4",
-  s: "#e5a97c",
-  H: "#5d3a1a",
-  E: "#1b1917",
-  B: "#1e88e5",
-  b: "#1565c0",
-  Y: "#fdd835",
-  W: "#ffffff",
-  K: "#6d4c41",
-  k: "#4e342e",
-};
-
-const HERO_FRAMES: Record<PetActionState, string[][]> = {
-  idle: [
-    [
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBR.....",
-      "...RRRBRRBRRR...",
-      "..WW.RBYBBYBR...",
-      "..WW.BBBBBBBB...",
-      ".....BBBBBBBB...",
-      "....BBBb..bBBB..",
-      "....KKK....KKK..",
-      "...KKKK....KKKK.",
-    ],
-    [
-      "................",
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBR.....",
-      "...RRRBRRBRRR...",
-      "..WW.RBYBBYBR...",
-      "..WW.BBBBBBBB...",
-      ".....BBBb.bBBB..",
-      "....KKK....KKK..",
-      "...KKKK....KKKK.",
-    ],
-  ],
-  walk: [
-    [
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBR.....",
-      "...RRRBRRBRRR...",
-      "..W..RBYBBYBRW..",
-      ".....BBBBBBBB...",
-      "....BBBBBBBB....",
-      "...BBB....BBB...",
-      "..KKK......KKK..",
-      "..KKk......KKKK.",
-    ],
-    [
-      "................",
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBR.....",
-      "...RRRBRRBRRR...",
-      "...WWRBYBBYBR...",
-      ".....BBBBBBBB...",
-      ".....BBBBBBB....",
-      ".....KKK.KKK....",
-      ".....KKKKKKK....",
-    ],
-    [
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBR.....",
-      "...RRRBRRBRRR...",
-      "....WRBYBBYBRWW.",
-      ".....BBBBBBBB...",
-      ".....BBBBBBBB...",
-      "....BBB..BBB....",
-      "....KKK...KKK...",
-      "....KKKK..KKk...",
-    ],
-    [
-      "................",
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBR.....",
-      "...RRRBRRBRRR...",
-      "...WWRBYBBYBR...",
-      ".....BBBBBBBB...",
-      ".....BBBBBBB....",
-      ".....KKK.KKK....",
-      ".....KKKKKKK....",
-    ],
-  ],
-  run: [
-    [
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "...RRRBRRBR.....",
-      "..WW.RBYBBYBRW..",
-      ".....BBBBBBBB...",
-      "....BBBBBBBB....",
-      "...BBB....BBBB..",
-      "..KKK......KKK..",
-      ".KKk........KKK.",
-      "................",
-    ],
-    [
-      "................",
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBRRR...",
-      "....WRBYBBYBRWW.",
-      ".....BBBBBBBB...",
-      ".....BBBBBBB....",
-      "....BBB...BBB...",
-      "....KKK...KKK...",
-      "....KKKK..KKk...",
-    ],
-  ],
-  jump: [
-    [
-      ".....RRRRRR..WW.",
-      "....RRRRWRRR.RR.",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "...RRRBRRBRR....",
-      "..WW.RBYBBYBR...",
-      ".....BBBBBBBB...",
-      "....BBBBBBBB....",
-      "...BBB....BBB...",
-      "..KKK......KKK..",
-      "..KKk......KKk..",
-      "................",
-    ],
-  ],
-  celebrate: [
-    [
-      ".WW..RRRRRR..WW.",
-      ".RR.RRRRWRRR.RR.",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBRR....",
-      ".....RBYBBYBR...",
-      ".....BBBBBBBB...",
-      ".....BBBBBBBB...",
-      "....BBB....BBB..",
-      "...KKK......KKK.",
-      "...KKk......KKk.",
-      "................",
-    ],
-  ],
-  sleep: [
-    [
-      "................",
-      "................",
-      "................",
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSH...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBRRR...",
-      "...WWRBYBBYBR...",
-      "....BBBBBBBBb...",
-      "...KKKK..KKKK...",
-      "...kkk....kkk...",
-    ],
-    [
-      "................",
-      "................",
-      "................",
-      "................",
-      ".....RRRRRR.....",
-      "....RRRRWRRR....",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSH...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "....RRBRRBRRR...",
-      "...WWRBYBBYBR...",
-      "....BBBBBBBBb...",
-      "...KKKK..KKKK...",
-    ],
-  ],
-  alert: [
-    [
-      ".....RRRRRR..WW.",
-      "....RRRRWRRR.RR.",
-      "....RRRRRRRRRR..",
-      "....HHHHSSSS....",
-      "...HHSHHSSSHS...",
-      "...HHSHHHSSSE...",
-      "...HHHHSSSSHHH..",
-      ".....SSSSSSS....",
-      "...RRRBRRBRR....",
-      "..WW.RBYBBYBR...",
-      ".....BBBBBBBB...",
-      "....BBBBBBBB....",
-      "...BBB....BBB...",
-      "..KKK......KKK..",
-      "..KKk......KKk..",
-      "................",
-    ],
-  ],
 };
 
 const CAT_PALETTE: Record<string, string> = {
@@ -674,17 +413,41 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     name: "Red Cap Hero",
     pixelSize: 2,
     palette: HERO_PALETTE,
-    frames: HERO_FRAMES,
+    frames: {
+      idle: HERO_FRAMES.idle,
+      walk: HERO_FRAMES.walk,
+      run: HERO_FRAMES.run,
+      jump: HERO_FRAMES.jump,
+      sleep: HERO_FRAMES.sleep,
+      celebrate: HERO_FRAMES.celebrate,
+      alert: HERO_FRAMES.alert,
+    },
+    clips: HERO_FRAMES,
+    frameTimingsMs: {
+      idle: [1800, 180, 1100, 100, 260, 160],
+      land: [65, 125],
+      celebrate: [260, 100, 120, 280],
+    },
     frameDurationsMs: {
       idle: 520,
       walk: 145,
       run: 95,
       jump: 200,
+      fall: 160,
+      crouch: 90,
+      land: 95,
+      turn: 110,
+      stop: 120,
+      edgeLook: 320,
       sleep: 650,
-      celebrate: 200,
+      celebrate: 190,
       alert: 220,
+      wallGrab: 100,
+      climb: 140,
+      wallHang: 480,
+      wallJump: 110,
     },
-    behavior: { ...DEFAULT_PET_BEHAVIOR },
+    behavior: { ...DEFAULT_PET_BEHAVIOR, allowWallClimb: true },
   },
   {
     id: "cat",
@@ -692,7 +455,8 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     pixelSize: 2,
     palette: CAT_PALETTE,
     frames: {
-      idle: [CAT_IDLE_0, CAT_IDLE_1],
+      idle: [CAT_IDLE_0, CAT_IDLE_1, CAT_IDLE_0,
+        CAT_IDLE_1.map((row) => row.replaceAll("E", "o"))],
       walk: [CAT_WALK_0, CAT_WALK_1, CAT_WALK_2, CAT_WALK_1],
       run: [CAT_WALK_0, CAT_WALK_2],
       jump: [CAT_JUMP],
@@ -707,6 +471,7 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
+      allowWallClimb: false,
       walkSpeedPxPerSec: 24,
       runSpeedPxPerSec: 58,
       cheerBubbles: ["Meow", "♥", "★", "~"],
@@ -719,7 +484,8 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     pixelSize: 2,
     palette: BOT_PALETTE,
     frames: {
-      idle: [BOT_IDLE_0, BOT_IDLE_1],
+      idle: [BOT_IDLE_0, BOT_IDLE_1, BOT_IDLE_0,
+        BOT_IDLE_0.map((row) => row === "...KYKYKKYKYK..." ? "...KKYYKKKYYK..." : row)],
       walk: [BOT_WALK_0, BOT_WALK_1],
       run: [BOT_WALK_0, BOT_WALK_1],
       jump: [BOT_JUMP],
@@ -733,6 +499,7 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
+      allowWallClimb: false,
       walkSpeedPxPerSec: 30,
       runSpeedPxPerSec: 60,
       enableRandomEvents: true,
@@ -762,6 +529,7 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
+      allowWallClimb: false,
       walkSpeedPxPerSec: 26,
       runSpeedPxPerSec: 52,
       cheerBubbles: ["~", "♥", "★", "oO", ":3"],
@@ -771,7 +539,7 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
 ];
 
 export const DEFAULT_PIXEL_PET_CONFIG: PixelPetConfig =
-  PIXEL_PET_PRESETS.find((preset) => preset.id === "whale") ?? PIXEL_PET_PRESETS[0];
+  PIXEL_PET_PRESETS.find((preset) => preset.id === "hero") ?? PIXEL_PET_PRESETS[0];
 
 const ACTION_KEYS: PetActionState[] = [
   "idle",
@@ -783,9 +551,36 @@ const ACTION_KEYS: PetActionState[] = [
   "alert",
 ];
 
+const CLIP_KEYS: PetClipId[] = [
+  ...ACTION_KEYS,
+  "fall",
+  "crouch",
+  "land",
+  "turn",
+  "stop",
+  "edgeLook",
+  "wallGrab",
+  "climb",
+  "wallHang",
+  "wallJump",
+];
+
 function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, value));
+}
+
+function parseFrameTimings(value: unknown): PixelPetConfig["frameTimingsMs"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result: NonNullable<PixelPetConfig["frameTimingsMs"]> = {};
+  for (const key of CLIP_KEYS) {
+    const durations = (value as Record<string, unknown>)[key];
+    if (Array.isArray(durations) && durations.length > 0
+      && durations.every((duration) => typeof duration === "number" && Number.isFinite(duration) && duration >= 40 && duration <= 10000)) {
+      result[key] = durations.slice(0, 128);
+    }
+  }
+  return Object.keys(result).length ? result : undefined;
 }
 
 function sanitizeStringArray(value: unknown, fallback: string[]): string[] {
@@ -869,11 +664,29 @@ export function parsePixelPetConfigJson(
     }
   }
 
+  let clips: Partial<Record<PetClipId, string[][]>> | undefined;
+  const rawClips = record.clips;
+  if (rawClips && typeof rawClips === "object" && !Array.isArray(rawClips)) {
+    const clipMap = rawClips as Record<string, unknown>;
+    const parsedClips: Partial<Record<PetClipId, string[][]>> = {};
+    for (const clipKey of CLIP_KEYS) {
+      const candidate = clipMap[clipKey];
+      const valid = Array.isArray(candidate) ? candidate.filter(isValidFrame) : [];
+      if (valid.length > 0) {
+        parsedClips[clipKey] = valid;
+      }
+    }
+    if (Object.keys(parsedClips).length > 0) {
+      clips = parsedClips;
+    }
+  }
+
   const rawBehavior =
     record.behavior && typeof record.behavior === "object" && !Array.isArray(record.behavior)
       ? (record.behavior as Record<string, unknown>)
       : {};
 
+  const hasWallFrames = Boolean(clips?.wallGrab?.length && clips?.climb?.length);
   const behavior: PixelPetBehaviorConfig = {
     walkSpeedPxPerSec: clampNumber(
       rawBehavior.walkSpeedPxPerSec,
@@ -909,6 +722,10 @@ export function parsePixelPetConfigJson(
       typeof rawBehavior.allowPlatformHop === "boolean"
         ? rawBehavior.allowPlatformHop
         : DEFAULT_PET_BEHAVIOR.allowPlatformHop,
+    allowWallClimb:
+      typeof rawBehavior.allowWallClimb === "boolean"
+        ? rawBehavior.allowWallClimb
+        : hasWallFrames,
     reactToCodingMood:
       typeof rawBehavior.reactToCodingMood === "boolean"
         ? rawBehavior.reactToCodingMood
@@ -937,14 +754,44 @@ export function parsePixelPetConfigJson(
         : undefined,
     palette,
     frames,
+    clips,
+    frameTimingsMs: parseFrameTimings(record.frameTimingsMs),
     frameDurationsMs:
       record.frameDurationsMs && typeof record.frameDurationsMs === "object"
-        ? (record.frameDurationsMs as Partial<Record<PetActionState, number>>)
+        ? (record.frameDurationsMs as Partial<Record<PetActionState | PetClipId, number>>)
         : undefined,
     behavior,
   };
 
   return { ok: true, config };
+}
+
+/**
+ * Sync persisted preset configurations with the latest built-in frames and clips,
+ * while preserving user-tuned behavior parameters and custom pet configs.
+ */
+export function upgradePersistedPixelPetConfig(
+  persisted: PixelPetConfig | null | undefined,
+): PixelPetConfig {
+  if (!persisted || typeof persisted !== "object") {
+    return DEFAULT_PIXEL_PET_CONFIG;
+  }
+  const builtIn = PIXEL_PET_PRESETS.find((preset) => preset.id === persisted.id);
+  if (!builtIn) {
+    return persisted;
+  }
+  return {
+    ...builtIn,
+    pixelSize: persisted.pixelSize ?? builtIn.pixelSize,
+    behavior: {
+      ...builtIn.behavior,
+      ...persisted.behavior,
+      allowWallClimb:
+        typeof persisted.behavior?.allowWallClimb === "boolean"
+          ? persisted.behavior.allowWallClimb
+          : builtIn.behavior.allowWallClimb,
+    },
+  };
 }
 
 /**

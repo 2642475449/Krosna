@@ -130,7 +130,7 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         const submergePx =
           (activeConfig.submergeRows ?? 0) * Math.max(1, Math.round(activeConfig.pixelSize || 2));
         const top = groundLineY - spriteHeight + submergePx - sim.y;
-        const frame = getPetSpriteFrame(sim.action, sim.animElapsedMs, activeConfig);
+        const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, activeConfig);
         drawPixelPetFrame(
           ctx,
           frame,

@@ -167,7 +167,7 @@ export function PixelPetTrack() {
           if (sim.encounter) {
             drawPetEncounter(ctx, sim.encounter, groundY, sim.animElapsedMs);
           }
-          const frame = getPetSpriteFrame(sim.action, sim.animElapsedMs, activeConfig);
+          const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, activeConfig);
           drawPixelPetFrame(
             ctx,
             frame,

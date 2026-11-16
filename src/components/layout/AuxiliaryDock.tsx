@@ -1,18 +1,22 @@
 import {
   CloseOutlined,
   CodeOutlined,
+  DownOutlined,
+  ExportOutlined,
   FileOutlined,
   FileSearchOutlined,
   FolderOpenOutlined,
   PlusOutlined,
   RobotOutlined,
 } from "@ant-design/icons";
-import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message } from "antd";
+import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message, type MenuProps } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { MarkdownModeButtons } from "@/components/ui/MarkdownModeButtons";
 import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
+import { AgentIcon } from "@/components/AgentIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import { TaskMonitorPanel } from "@/components/TaskMonitorPopover";
 import { getFileDocument } from "@/lib/fileDocument";
@@ -22,7 +26,7 @@ import {
   type OpenAuxiliaryFileDetail,
 } from "@/lib/auxiliaryDock";
 import { useAppStore } from "@/store";
-import { getFileIconByName } from "@/lib/fileIcon";
+import { getFileIconByName, isMarkdownFile } from "@/lib/fileIcon";
 import {
   clampAuxiliaryDockWidth,
   defaultAuxiliaryDockWidth,
@@ -69,6 +73,7 @@ export default function AuxiliaryDock({
   const openFile = useAuxiliaryDockStore((state) => state.openFile);
   const openTaskMonitor = useAuxiliaryDockStore((state) => state.openTaskMonitor);
   const pinTab = useAuxiliaryDockStore((state) => state.pinTab);
+  const setTabMarkdownViewMode = useAuxiliaryDockStore((state) => state.setTabMarkdownViewMode);
   const closeTab = useAuxiliaryDockStore((state) => state.closeTab);
   const reset = useAuxiliaryDockStore((state) => state.reset);
   const [pendingClose, setPendingClose] = useState<AuxiliaryTab[]>([]);
@@ -78,7 +83,11 @@ export default function AuxiliaryDock({
   const [fileResults, setFileResults] = useState<FileTreeEntry[]>([]);
   const [fileSearching, setFileSearching] = useState(false);
   const [hostWidth, setHostWidth] = useState(0);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const dockRef = useRef<HTMLElement>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const overflowControlRef = useRef<HTMLDivElement>(null);
   const tabListRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
@@ -291,6 +300,117 @@ export default function AuxiliaryDock({
     resetStoredWidth(hostWidth);
   }, [resetStoredWidth, hostWidth]);
 
+  const revealTab = useCallback((tabId: string | null) => {
+    const list = tabListRef.current;
+    const tab = tabId ? tabRefs.current[tabId] : null;
+    if (!list || !tab) return;
+    const viewport = list.getBoundingClientRect();
+    const bounds = tab.getBoundingClientRect();
+    if (bounds.left < viewport.left) list.scrollLeft += bounds.left - viewport.left;
+    else if (bounds.right > viewport.right) list.scrollLeft += bounds.right - viewport.right;
+  }, []);
+
+  useLayoutEffect(() => {
+    const list = tabListRef.current;
+    const bar = tabBarRef.current;
+    if (!list || !bar) {
+      setHasOverflow(false);
+      return;
+    }
+    const update = () => {
+      const tabNodes = list.querySelectorAll<HTMLElement>("[data-tab-id]");
+      const minimumWidth = Array.from(tabNodes).reduce((sum, node) =>
+        sum + (Number.parseFloat(getComputedStyle(node).minWidth) || node.offsetWidth), 0);
+      // 计算不含下拉按钮的可用宽度，避免按钮本身导致临界宽度反复显隐。
+      const availableWidth = list.clientWidth + (overflowControlRef.current?.offsetWidth ?? 0);
+      setHasOverflow(minimumWidth > availableWidth + 1);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [tabs, sessions, hasOverflow, open]);
+
+  useEffect(() => {
+    if (!hasOverflow) setOverflowMenuOpen(false);
+  }, [hasOverflow]);
+
+  useEffect(() => {
+    setOverflowMenuOpen(false);
+  }, [currentProject?.path]);
+
+  useEffect(() => {
+    const list = tabListRef.current;
+    if (!list) return;
+    const revealActiveTab = () => revealTab(activeTabId);
+    revealActiveTab();
+    const observer = new ResizeObserver(revealActiveTab);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [activeTabId, tabIds, revealTab]);
+
+  const overflowItems: MenuProps["items"] = tabs.map((tab) => {
+    const session = tab.kind === "terminal" || tab.kind === "task"
+      ? sessions.find((item) => item.id === tab.resourceId)
+      : null;
+    const title = session
+      ? session.name
+      : tab.kind === "task-monitor"
+        ? t("taskMonitor.title")
+        : tab.title;
+    const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
+    return {
+      key: tab.id,
+      icon: session ? (
+        <AgentIcon agentId={session.agentId ?? "claude"} size={15} />
+      ) : fileVisual ? (
+        <span style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
+      ) : tabIcon(tab.kind),
+      label: (
+        <span className="app-tabbar-overflow-label">
+          <span className="app-tabbar-overflow-title">{title}</span>
+          {session && <AgentSessionStatus session={session} />}
+        </span>
+      ),
+    };
+  });
+
+  const addMenuItems: MenuProps["items"] = [
+    {
+      key: "file",
+      icon: <FolderOpenOutlined />,
+      label: t("auxiliaryDock.file"),
+      onClick: () => setFilePickerOpen(true),
+    },
+    {
+      key: "task",
+      icon: <RobotOutlined />,
+      label: t("auxiliaryDock.sideTask"),
+      onClick: onRequestTask,
+    },
+    {
+      key: "terminal",
+      icon: <CodeOutlined />,
+      label: t("auxiliaryDock.terminal"),
+      onClick: onRequestTerminal,
+    },
+    {
+      key: "task-monitor",
+      icon: <FileSearchOutlined />,
+      label: t("taskMonitor.title"),
+      onClick: () =>
+        openTaskMonitor({
+          title: t("taskMonitor.title"),
+          projectPath: currentProject?.path ?? "",
+        }),
+    },
+  ];
+
+  const isActiveFileTab = activeTab?.kind === "file";
+  const isActiveMarkdownTab = Boolean(isActiveFileTab && isMarkdownFile(activeTab.resourceId));
+  const activeMarkdownViewMode = activeTab?.markdownViewMode ?? "preview";
+
   return (
     <>
       <div
@@ -309,122 +429,211 @@ export default function AuxiliaryDock({
         style={{
           display: open ? "flex" : "none",
           width: effectiveWidth,
-          background: "color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 92%, transparent)",
+          background: "var(--cs-bg-content)",
         }}
       >
         {tabs.length > 0 ? (
           <div
-            ref={tabListRef}
-            className="app-shell-chrome app-glass-tabbar app-tabbar-tabs flex min-h-9 shrink-0 items-end overflow-x-auto"
-            style={{ background: "transparent" }}
+            ref={tabBarRef}
+            className="app-shell-chrome app-glass-tabbar app-tabbar flex items-end shrink-0"
+            style={{ background: "transparent", minHeight: 36 }}
           >
-            {tabs.map((tab) => {
-              const active = tab.id === activeTabId;
-              const session = tab.kind === "terminal" || tab.kind === "task"
-                ? sessions.find((item) => item.id === tab.resourceId)
-                : null;
-              const displayTitle = session
-                ? session.name
-                : tab.kind === "task-monitor"
-                  ? t("taskMonitor.title")
-                  : tab.title;
-              const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
-              return (
-                <Dropdown key={tab.id} trigger={["contextMenu"]} menu={tabMenu(tab)}>
-                  <div
-                    ref={(el) => {
-                      tabRefs.current[tab.id] = el;
-                    }}
-                    role="tab"
-                    tabIndex={active ? 0 : -1}
-                    aria-selected={active}
-                    data-active={active ? "true" : "false"}
-                    className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${active ? "app-glass-tab-active" : ""} group flex max-w-52 shrink-0 cursor-pointer items-center gap-1.5 px-3 text-xs`}
-                    style={{ fontStyle: tab.preview ? "italic" : "normal" }}
-                    title={displayTitle}
-                    onClick={() => activateTab(tab.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        activateTab(tab.id);
-                      }
-                    }}
-                    onDoubleClick={() => pinTab(tab.id)}
-                  >
-                    {session ? (
-                      <AgentActivityIcon
-                        agentId={session.agentId ?? "claude"}
-                        active={session.active}
-                        status={session.status}
-                        size={15}
-                      />
-                    ) : fileVisual ? (
-                      <span className="inline-flex" style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
-                    ) : tabIcon(tab.kind)}
-                    {session && <AgentSessionStatus session={session} visible={open && active} />}
-                    <span className="min-w-0 flex-1 truncate">{displayTitle}</span>
-                    <button
-                      type="button"
-                      className="tab-close-btn ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-[var(--cs-bg-hover)]"
-                      aria-label={t("common.delete")}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        requestClose([tab]);
-                      }}
-                      onDoubleClick={(event) => event.stopPropagation()}
-                    >
-                      <CloseOutlined style={{ fontSize: 11 }} />
-                    </button>
-                  </div>
-                </Dropdown>
-              );
-            })}
-            <TabSelectionIndicator listRef={tabListRef} tabRefs={tabRefs} activeTabId={activeTabId} tabIds={tabIds} />
-            <Dropdown
-              trigger={["click"]}
-              menu={{
-                items: [
-                  {
-                    key: "file",
-                    icon: <FolderOpenOutlined />,
-                    label: t("auxiliaryDock.file"),
-                    onClick: () => setFilePickerOpen(true),
-                  },
-                  {
-                    key: "task",
-                    icon: <RobotOutlined />,
-                    label: t("auxiliaryDock.sideTask"),
-                    onClick: onRequestTask,
-                  },
-                  {
-                    key: "terminal",
-                    icon: <CodeOutlined />,
-                    label: t("auxiliaryDock.terminal"),
-                    onClick: onRequestTerminal,
-                  },
-                  {
-                    key: "task-monitor",
-                    icon: <FileSearchOutlined />,
-                    label: t("taskMonitor.title"),
-                    onClick: () =>
-                      openTaskMonitor({
-                        title: t("taskMonitor.title"),
-                        projectPath: currentProject?.path ?? "",
-                      }),
-                  },
-                ],
+            <div
+              ref={tabListRef}
+              className="app-tabbar-tabs"
+              onWheel={(event) => {
+                const list = event.currentTarget;
+                if (list.scrollWidth <= list.clientWidth || event.deltaX !== 0) return;
+                list.scrollLeft += event.deltaY;
               }}
             >
-              <Tooltip title={t("auxiliaryDock.add")}>
-                <button
-                  type="button"
-                  aria-label={t("auxiliaryDock.add")}
-                  className="app-file-toolbar-button mx-1 my-auto shrink-0"
+              {tabs.map((tab) => {
+                const active = tab.id === activeTabId;
+                const session = tab.kind === "terminal" || tab.kind === "task"
+                  ? sessions.find((item) => item.id === tab.resourceId)
+                  : null;
+                const displayTitle = session
+                  ? session.name
+                  : tab.kind === "task-monitor"
+                    ? t("taskMonitor.title")
+                    : tab.title;
+                const fileVisual = tab.kind === "file" ? getFileIconByName(tab.title) : null;
+                return (
+                  <Dropdown key={tab.id} trigger={["contextMenu"]} menu={tabMenu(tab)}>
+                    <div
+                      data-tab-id={tab.id}
+                      ref={(el) => {
+                        tabRefs.current[tab.id] = el;
+                      }}
+                      className="app-tabbar-tab relative"
+                    >
+                      <div
+                        role="tab"
+                        tabIndex={active ? 0 : -1}
+                        aria-selected={active}
+                        data-active={active ? "true" : "false"}
+                        className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${active ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
+                        onMouseDown={(event) => {
+                          if (event.button === 1) event.preventDefault();
+                        }}
+                        onAuxClick={(event) => {
+                          if (event.button !== 1) return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          requestClose([tab]);
+                        }}
+                        onClick={() => activateTab(tab.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            activateTab(tab.id);
+                          }
+                        }}
+                        onDoubleClick={() => pinTab(tab.id)}
+                      >
+                        {session ? (
+                          <AgentActivityIcon
+                            agentId={session.agentId ?? "claude"}
+                            active={session.active}
+                            status={session.status}
+                            size={15}
+                          />
+                        ) : fileVisual ? (
+                          <span className="text-xs inline-flex" style={{ color: fileVisual.color }}>{fileVisual.icon}</span>
+                        ) : tabIcon(tab.kind)}
+                        {tab.kind === "file" ? (
+                          <Tooltip title={<><div>{displayTitle}</div><div>{tab.resourceId}</div></>} mouseEnterDelay={0.5}>
+                            <span className={`app-tabbar-title text-xs ${tab.preview ? "italic opacity-70" : ""}`}>
+                              {displayTitle}
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={displayTitle} mouseEnterDelay={0.5}>
+                            <span className={`app-tabbar-title text-xs ${tab.preview ? "italic opacity-70" : ""}`}>
+                              {displayTitle}
+                            </span>
+                          </Tooltip>
+                        )}
+                        <span className="app-tabbar-action">
+                          {session && (
+                            <span className="app-tabbar-action-status">
+                              <AgentSessionStatus session={session} visible={open && active} />
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="tab-close-btn flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 hover:bg-[var(--cs-bg-hover)]"
+                            style={{ color: "var(--cs-text-tertiary)" }}
+                            aria-label={t("tabBar.closeTab")}
+                            onPointerDown={(event) => {
+                              if (event.button === 0) event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              requestClose([tab]);
+                            }}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                          >
+                            <CloseOutlined style={{ fontSize: 10 }} />
+                          </button>
+                        </span>
+                      </div>
+                    </div>
+                  </Dropdown>
+                );
+              })}
+              <TabSelectionIndicator listRef={tabListRef} tabRefs={tabRefs} activeTabId={activeTabId} tabIds={tabIds} />
+            </div>
+            <div
+              className="shrink-0 flex items-center justify-center px-1.5 gap-1.5"
+              style={{ minHeight: 36 }}
+            >
+              <Dropdown trigger={["click"]} placement="bottomLeft" menu={{ items: addMenuItems }}>
+                <Tooltip title={t("auxiliaryDock.add")} mouseEnterDelay={0.4}>
+                  <button
+                    type="button"
+                    aria-label={t("auxiliaryDock.add")}
+                    className="app-tabbar-new-button"
+                  >
+                    <PlusOutlined style={{ fontSize: 12, fontWeight: 600 }} />
+                  </button>
+                </Tooltip>
+              </Dropdown>
+            </div>
+            {hasOverflow && (
+              <div ref={overflowControlRef} className="app-tabbar-overflow-control">
+                <Dropdown
+                  trigger={["click"]}
+                  placement="bottomRight"
+                  open={overflowMenuOpen}
+                  onOpenChange={setOverflowMenuOpen}
+                  menu={{
+                    items: overflowItems,
+                    selectable: true,
+                    selectedKeys: activeTabId ? [activeTabId] : [],
+                    className: "app-tabbar-overflow-menu",
+                    onClick: ({ key }) => {
+                      setOverflowMenuOpen(false);
+                      if (!useAuxiliaryDockStore.getState().tabs.some((item) => item.id === key)) return;
+                      activateTab(key);
+                      revealTab(key);
+                    },
+                  }}
                 >
-                  <PlusOutlined style={{ fontSize: 12 }} />
-                </button>
-              </Tooltip>
-            </Dropdown>
+                  <Tooltip title={t("tabBar.allTabs")} mouseEnterDelay={0.4}>
+                    <button
+                      type="button"
+                      aria-label={t("tabBar.allTabs")}
+                      aria-haspopup="menu"
+                      aria-expanded={overflowMenuOpen}
+                      className="app-tabbar-mode-button app-tabbar-overflow-button"
+                    >
+                      <DownOutlined />
+                    </button>
+                  </Tooltip>
+                </Dropdown>
+              </div>
+            )}
+            {isActiveFileTab && activeTab ? (
+              <div
+                className="ml-auto shrink-0 flex items-center gap-0.5 pr-2"
+                style={{ minHeight: 36 }}
+              >
+                {isActiveMarkdownTab ? (
+                  <>
+                    <MarkdownModeButtons
+                      mode={activeMarkdownViewMode}
+                      onChange={(mode) => setTabMarkdownViewMode(activeTab.id, mode)}
+                    />
+                    <span className="mx-1 h-3.5 w-px bg-[var(--cs-border-sidebar)]" aria-hidden="true" />
+                  </>
+                ) : null}
+                <Tooltip title={t("auxiliaryDock.openInWorkspace")} mouseEnterDelay={0.4}>
+                  <button
+                    type="button"
+                    className="app-tabbar-mode-button"
+                    aria-label={t("auxiliaryDock.openInWorkspace")}
+                    onClick={() => {
+                      void moveToWorkspace(activeTab).catch((error) => message.error(String(error)));
+                    }}
+                  >
+                    <ExportOutlined />
+                  </button>
+                </Tooltip>
+                <Tooltip title={t("common.openInAssociatedApp")} mouseEnterDelay={0.4}>
+                  <button
+                    type="button"
+                    className="app-tabbar-mode-button"
+                    aria-label={t("common.openInAssociatedApp")}
+                    onClick={() => {
+                      void openInAssociatedApplication(activeTab.resourceId).catch((error) => message.error(String(error)));
+                    }}
+                  >
+                    <FolderOpenOutlined />
+                  </button>
+                </Tooltip>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -516,7 +725,8 @@ export default function AuxiliaryDock({
                       projectPath={tab.projectPath}
                       path={tab.resourceId}
                       active={active}
-                      onPromoteToWorkspace={() => finishMove(tab)}
+                      markdownViewMode={tab.markdownViewMode ?? "preview"}
+                      onMarkdownViewModeChange={(mode) => setTabMarkdownViewMode(tab.id, mode)}
                     />
                   </Suspense>
                   </ErrorBoundary>

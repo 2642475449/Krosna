@@ -22,6 +22,11 @@
   box-shadow: var(--cs-overlay-shadow);
 }
 
+/* 弹窗打开时容器会程序化聚焦，避免外层 dialog 再额外画出一圈 AntD 焦点框。 */
+[data-theme] .ant-modal-root .ant-modal:focus-visible {
+  outline: none;
+}
+
 /* 保留 AntD 标准正文布局；操作区用负外边距延伸到容器边缘。 */
 [data-theme] .ant-modal:where(:not(.ant-modal-confirm)) .ant-modal-container {
   padding: 20px;

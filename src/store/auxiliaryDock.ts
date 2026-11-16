@@ -11,6 +11,7 @@ export interface AuxiliaryTab {
   projectPath: string;
   resourceId: string;
   preview: boolean;
+  markdownViewMode?: "edit" | "preview";
   createdAt: number;
 }
 
@@ -41,6 +42,7 @@ interface AuxiliaryDockState {
   }) => void;
   openTaskMonitor: (input: { title: string; projectPath?: string }) => void;
   pinTab: (tabId: string) => void;
+  setTabMarkdownViewMode: (tabId: string, mode: "edit" | "preview") => void;
   closeTab: (tabId: string, preferredTabId?: string) => void;
   reset: () => void;
 }
@@ -206,6 +208,11 @@ export const useAuxiliaryDockStore = create<AuxiliaryDockState>()(persist((set) 
   pinTab: (tabId) =>
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, preview: false } : tab)),
+    })),
+  setTabMarkdownViewMode: (tabId, mode) =>
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId && tab.kind === "file" ? { ...tab, markdownViewMode: mode } : tab),
     })),
   closeTab: (tabId, preferredTabId) =>
     set((state) => {

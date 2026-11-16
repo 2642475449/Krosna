@@ -74,7 +74,11 @@ export function TerminalHistoryView({ session, onResume, onReturn }: TerminalHis
         </Button>}
         {onReturn && <Button size="small" onClick={onReturn}>{t("terminal.closeHistory")}</Button>}
       </div>
-      {snapshot ? <div ref={container} className="min-h-0 flex-1 overflow-hidden p-1" aria-label={t("terminal.historyPreview")} /> : (
+      {snapshot ? (
+        <div className="min-h-0 flex-1 overflow-hidden p-1">
+          <div ref={container} className="h-full min-h-0 w-full" aria-label={t("terminal.historyPreview")} />
+        </div>
+      ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center gap-2 p-6 text-sm text-[var(--cs-text-secondary)]" role="status">
           {(!entry || entry.phase === "loading") && <Spin size="small" />}
           <span>{t(!entry || entry.phase === "loading" ? "terminal.historyLoading" : entry.phase === "error" ? "terminal.historyLoadFailed" : "terminal.historyMissing")}</span>

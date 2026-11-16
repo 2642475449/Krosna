@@ -75,9 +75,15 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function auxiliary(path: string, onPromoteToWorkspace = vi.fn()) {
+function auxiliary(
+  path: string,
+  options?: { markdownViewMode?: "edit" | "preview"; onMarkdownViewModeChange?: (mode: "edit" | "preview") => void },
+) {
   return createElement(AuxiliaryFileView, {
-    projectPath, path, active: true, onPromoteToWorkspace,
+    projectPath,
+    path,
+    active: true,
+    ...options,
   });
 }
 
@@ -104,35 +110,31 @@ it("shares one disk read and live edits between the workspace and auxiliary host
   expect(readProjectFile).toHaveBeenCalledTimes(1);
 });
 
-it("places the auxiliary breadcrumb, mode control and actions in one horizontal toolbar", async () => {
+it("omits the redundant document toolbar in auxiliary file view and respects controlled markdown mode", async () => {
   const path = `${projectPath}/report.md`;
-  await act(async () => root.render(auxiliary(path)));
-  const promote = host.querySelector('[aria-label="auxiliaryDock.openInWorkspace"]')!;
-  const toolbar = promote.parentElement!;
-  expect(toolbar.querySelector('[aria-label="auxiliaryDock.pin"]')).toBeNull();
-  expect(toolbar.querySelector("[data-mode-control]")?.parentElement).toBe(toolbar);
-  expect(toolbar.querySelector(`[title="${path}"]`)).not.toBeNull();
-  expect(toolbar.querySelector('[aria-label="auxiliaryDock.openInWorkspace"]')?.parentElement).toBe(toolbar);
-  expect(toolbar.classList.contains("flex")).toBe(true);
-  expect(toolbar.classList.contains("flex-col")).toBe(false);
-  expect(toolbar.classList.contains("flex-wrap")).toBe(false);
-  expect(host.querySelectorAll("[data-mode-control]")).toHaveLength(1);
+  const onModeChange = vi.fn();
+  await act(async () => root.render(auxiliary(path, {
+    markdownViewMode: "preview",
+    onMarkdownViewModeChange: onModeChange,
+  })));
+  expect(host.querySelector("[data-file-document-toolbar]")).toBeNull();
+  expect(host.querySelector("[data-mode-control]")).toBeNull();
+  expect(host.querySelector("[data-preview]")?.textContent).toBe("# Initial shared document");
+
+  await act(async () => root.render(auxiliary(path, {
+    markdownViewMode: "edit",
+    onMarkdownViewModeChange: onModeChange,
+  })));
+  expect(host.querySelector("[data-editor]")?.textContent).toBe("# Initial shared document");
 });
 
-it.each(["pdf", "docx", "bin"])("retains workspace promotion without the auxiliary pin button for %s files", async (extension) => {
+it.each(["pdf", "docx", "bin"])("renders %s auxiliary files cleanly without an inline toolbar", async (extension) => {
   const path = `${projectPath}/document.${extension}`;
-  const onPromote = vi.fn();
-  await act(async () => root.render(auxiliary(path, onPromote)));
-  const pin = host.querySelector<HTMLButtonElement>('[aria-label="auxiliaryDock.pin"]');
-  const promote = host.querySelector<HTMLButtonElement>('[aria-label="auxiliaryDock.openInWorkspace"]');
-  expect(pin).toBeNull();
-  expect(promote).not.toBeNull();
-  expect(host.querySelector('[aria-label="common.openInAssociatedApp"]')).not.toBeNull();
-  await act(async () => promote!.click());
-  expect(app.openFileTab).not.toHaveBeenCalled();
-  expect(onPromote).toHaveBeenCalledOnce();
+  await act(async () => root.render(auxiliary(path)));
+  expect(host.querySelector("[data-file-document-toolbar]")).toBeNull();
   if (extension === "pdf") expect(host.querySelector("[data-pdf]")).not.toBeNull();
   if (extension === "docx") expect(host.querySelector("[data-office]")).not.toBeNull();
+  if (extension === "bin") expect(host.querySelector("[data-empty]")?.textContent).toContain("fileTabs.binaryUnsupported");
 });
 
 

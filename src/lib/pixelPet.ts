@@ -12,6 +12,9 @@ export type PetActionState =
 
 export type PetCodingMood = "idle" | "working" | "completed" | "error";
 
+export type PetClipId = PetActionState | "crouch" | "fall" | "land" | "turn" | "stop"
+  | "edgeLook" | "wallGrab" | "climb" | "wallHang" | "wallJump";
+
 export interface PetPlatform {
   id: string;
   minX: number;
@@ -47,6 +50,11 @@ export interface PetSimulationState {
   actionTimerMs: number;
   idleAccumulatedMs: number;
   animElapsedMs: number;
+  clip: PetClipId;
+  clipElapsedMs: number;
+  transitionMs: number;
+  pendingFacing: 1 | -1 | null;
+  motionElapsedMs: number;
   targetX: number | null;
   paused: boolean;
   bubble: PetBubble | null;
@@ -162,6 +170,11 @@ export function createInitialPetSimulation(
     actionTimerMs: 4200,
     idleAccumulatedMs: 0,
     animElapsedMs: 0,
+    clip: "walk",
+    clipElapsedMs: 0,
+    transitionMs: 0,
+    pendingFacing: null,
+    motionElapsedMs: 0,
     targetX: null,
     paused: false,
     bubble: null,
@@ -231,6 +244,10 @@ export function triggerPetJump(
     ...state,
     vy: state.y === 0 ? jumpVelocity : Math.max(state.vy, jumpVelocity * 0.8),
     action: "jump",
+    clip: state.y === 0 ? "crouch" : "jump",
+    clipElapsedMs: 0,
+    transitionMs: state.y === 0 ? 100 : 0,
+    pendingFacing: null,
     actionTimerMs: 650,
     idleAccumulatedMs: 0,
     paused: false,
@@ -262,6 +279,11 @@ export function hopPetToPlatform(
     y: 10,
     vy: JUMP_VELOCITY_PX_PER_SEC * 0.72,
     action: "jump",
+    clip: "jump",
+    clipElapsedMs: 0,
+    transitionMs: 0,
+    pendingFacing: null,
+    motionElapsedMs: 0,
     actionTimerMs: 900,
     idleAccumulatedMs: 0,
     targetX: null,
@@ -288,7 +310,12 @@ export function setPetWalkTarget(
   return {
     ...state,
     targetX,
-    facing,
+    facing: state.facing,
+    pendingFacing: facing !== state.facing ? facing : null,
+    clip: facing !== state.facing ? "turn" : "walk",
+    clipElapsedMs: 0,
+    transitionMs: facing !== state.facing ? 120 : 0,
+    motionElapsedMs: 0,
     action: Math.abs(targetX - state.x) > 120 ? "run" : "walk",
     actionTimerMs: 5000,
     idleAccumulatedMs: 0,
@@ -304,7 +331,13 @@ export function togglePetPaused(state: PetSimulationState): PetSimulationState {
   return {
     ...state,
     paused: nextPaused,
+    vy: nextPaused && state.y === 0 ? 0 : state.vy,
     action: nextPaused ? "sleep" : "walk",
+    clip: nextPaused ? "sleep" : "walk",
+    clipElapsedMs: 0,
+    transitionMs: 0,
+    pendingFacing: null,
+    motionElapsedMs: 0,
     actionTimerMs: nextPaused ? 60_000 : 3500,
     targetX: null,
     bubble: nextPaused ? { text: "Zzz", remainingMs: 2200 } : { text: "GO!", remainingMs: 1200 },
@@ -315,6 +348,87 @@ export function togglePetPaused(state: PetSimulationState): PetSimulationState {
  * Advance the pet simulation by `dtMs` milliseconds.
  */
 export function stepPetSimulation(
+  prev: PetSimulationState,
+  dtMs: number,
+  boundsWidth: number,
+  mood: PetCodingMood,
+  options?: PetStepOptions,
+): PetSimulationState {
+  const dt = Number.isFinite(dtMs) ? Math.max(0, Math.min(dtMs, 100)) : 0;
+  // 过渡期间保留动作意图，播完后才执行转向、起跳或继续行走。
+  if (prev.transitionMs > 0 && !prev.paused) {
+    const platform = resolveActivePlatform(prev.platformId, boundsWidth, options?.platforms);
+    const maxX = Math.max(platform.minX, platform.maxX - (options?.spriteWidth ?? PET_SPRITE_LOGICAL_SIZE));
+    const held = {
+      ...prev,
+      x: Math.max(platform.minX, Math.min(maxX, prev.x)),
+      groundY: platform.groundY,
+      transitionMs: Math.max(0, prev.transitionMs - dt),
+      clipElapsedMs: prev.clipElapsedMs + dt,
+      animElapsedMs: prev.animElapsedMs + dt,
+      bubble: prev.bubble && prev.bubble.remainingMs > dt
+        ? { ...prev.bubble, remainingMs: prev.bubble.remainingMs - dt } : null,
+      encounter: options?.behavior?.enableRandomEvents === false ? null : prev.encounter,
+    };
+    if (held.transitionMs === 0) {
+      if (prev.clip === "edgeLook") {
+        return { ...held, clip: "turn", clipElapsedMs: 0, transitionMs: 120 };
+      }
+      return {
+        ...held, facing: prev.pendingFacing ?? prev.facing, pendingFacing: null,
+        clip: prev.action, clipElapsedMs: 0, motionElapsedMs: 0,
+      };
+    }
+    return held;
+  }
+
+  // 起步逐渐加速；临近边缘收步，避免匀速撞墙再瞬间反弹。
+  const moving = prev.action === "walk" || prev.action === "run";
+  const platform = resolveActivePlatform(prev.platformId, boundsWidth, options?.platforms);
+  const maxX = Math.max(platform.minX, platform.maxX - (options?.spriteWidth ?? PET_SPRITE_LOGICAL_SIZE));
+  const distance = prev.facing === 1 ? maxX - prev.x : prev.x - platform.minX;
+  const ramp = Math.min(1, 0.25 + prev.motionElapsedMs / 220);
+  const remaining = prev.targetX === null ? distance : Math.abs(prev.targetX - prev.x);
+  const brake = prev.y === 0 ? Math.min(1, Math.max(0.25, remaining / 16)) : 1;
+  const speedScale = moving ? ramp * brake : 1;
+  const next = advancePetBehavior(prev, dt, boundsWidth, mood, {
+    ...options,
+    behavior: {
+      ...options?.behavior,
+      walkSpeedPxPerSec: (options?.behavior?.walkSpeedPxPerSec ?? WALK_SPEED_PX_PER_SEC) * speedScale,
+      runSpeedPxPerSec: (options?.behavior?.runSpeedPxPerSec ?? RUN_SPEED_PX_PER_SEC) * speedScale,
+    },
+  });
+  next.motionElapsedMs = moving && next.action === prev.action ? prev.motionElapsedMs + dt : 0;
+  if (next.clip === "crouch" && next.transitionMs > 0) {
+    // 完成通知等行为内部触发的跳跃也要先蓄力。
+    next.y = 0;
+    next.x = prev.x;
+    return next;
+  }
+  let clip: PetClipId = next.action;
+  let holdMs = 0;
+  if (!next.paused && prev.y > 0 && next.y === 0) {
+    clip = "land";
+    holdMs = 190;
+  } else if (!next.paused && next.y === 0 && next.facing !== prev.facing) {
+    clip = next.x <= platform.minX || next.x >= maxX ? "edgeLook" : "turn";
+    holdMs = clip === "edgeLook" ? 420 : 120;
+    next.pendingFacing = next.facing;
+    next.facing = prev.facing;
+  } else if (!next.paused && next.y > 0 && next.action !== "celebrate") {
+    clip = next.vy > 0 ? "jump" : "fall";
+  } else if (!next.paused && moving && next.action === "idle") {
+    clip = "stop";
+    holdMs = 120;
+  }
+  next.clip = clip;
+  next.transitionMs = holdMs;
+  next.clipElapsedMs = clip === prev.clip ? prev.clipElapsedMs + dt : 0;
+  return next;
+}
+
+function advancePetBehavior(
   prev: PetSimulationState,
   dtMs: number,
   boundsWidth: number,

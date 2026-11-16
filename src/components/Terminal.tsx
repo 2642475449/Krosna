@@ -251,6 +251,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const { t } = useTranslation();
   const runtimeId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
+  const terminalHostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const onExitRef = useRef(onExit);
   const runnerOptionsRef = useRef(runnerOptions);
@@ -934,8 +935,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   useEffect(() => () => cancelImagePreviewDismissal(), [cancelImagePreviewDismissal]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !terminalHostRef.current) return;
     const container = containerRef.current;
+    const terminalHost = terminalHostRef.current;
     let initialRunnerSnapshot = runnerOptionsRef.current
       ? useRunnerOutputStore.getState().entries[sessionId]?.snapshot : undefined;
     const lifetime = new AbortController();
@@ -1002,7 +1004,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       scheduleImagePreviewDismissal,
     );
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
-    term.open(containerRef.current);
+    // FitAddon 读取 parentElement 尺寸，必须挂载到无内边距、无边框的宿主节点。
+    term.open(terminalHost);
     const disposeTextSelection = installTerminalTextSelection(term);
     term.attachCustomWheelEventHandler(createTerminalWheelHandler(() => {
       const screen = term.element?.querySelector<HTMLElement>(".xterm-screen");
@@ -2003,6 +2006,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
           onDragLeave={handleAgentFileDragLeave}
           onDrop={handleAgentFileDrop}
         >
+          <div ref={terminalHostRef} className="h-full min-h-0 w-full" />
           {imagePreview ? (
             <div
               className="xterm-hover app-overlay-surface pointer-events-none absolute z-20 overflow-hidden p-1"

@@ -1,4 +1,4 @@
-import type { PetActionState, PetEncounterEntity } from "./pixelPet";
+import type { PetActionState, PetClipId, PetEncounterEntity } from "./pixelPet";
 import {
   DEFAULT_PIXEL_PET_CONFIG,
   type PixelPetConfig,
@@ -33,20 +33,38 @@ export function getPetRenderedDimensions(config: PixelPetConfig): { width: numbe
  * Select the current pixel frame for a pet action and elapsed time from config.
  */
 export function getPetSpriteFrame(
-  action: PetActionState,
+  action: PetClipId,
   animElapsedMs: number,
   config: PixelPetConfig = DEFAULT_PIXEL_PET_CONFIG,
 ): PixelSpriteFrame {
-  const frames = config.frames[action] ?? config.frames.idle ?? config.frames.walk;
+  const fallback: PetActionState = action === "fall" || action === "wallJump" ? "jump"
+    : action === "climb" ? "walk" : "idle";
+  const frames = config.clips?.[action]?.length ? config.clips[action]!
+    : config.frames[action as PetActionState] ?? config.frames[fallback] ?? config.frames.idle;
   if (!frames || frames.length === 0) {
     return DEFAULT_PIXEL_PET_CONFIG.frames.idle[0];
   }
   if (frames.length <= 1) {
     return frames[0];
   }
-  const duration = config.frameDurationsMs?.[action] ?? DEFAULT_FRAME_DURATION_MS[action];
-  const safeDuration = Math.max(40, duration);
-  const index = Math.floor(Math.max(0, animElapsedMs) / safeDuration) % frames.length;
+  const duration = config.frameDurationsMs?.[action]
+    ?? DEFAULT_FRAME_DURATION_MS[action as PetActionState] ?? 120;
+  const safeDuration = Number.isFinite(duration) ? Math.max(40, duration) : 120;
+  const elapsed = Number.isFinite(animElapsedMs) ? Math.max(0, animElapsedMs) : 0;
+  const weights = action === "idle" ? [3.5, 0.6, 2.2, 0.3]
+    : action === "land" ? [0.65, 1.35] : action === "celebrate" ? [1.4, 0.6, 0.7, 1.3] : [1];
+  const durations = frames.map((_, i) => {
+    const timing = config.frameTimingsMs?.[action]?.[i];
+    return typeof timing === "number" && Number.isFinite(timing) && timing >= 40
+      ? timing : safeDuration * weights[i % weights.length];
+  });
+  const total = durations.reduce((sum, value) => sum + value, 0);
+  const once = ["crouch", "land", "turn", "stop", "edgeLook", "jump", "fall"].includes(action);
+  let cursor = once ? Math.min(elapsed, total - 0.001) : elapsed % total;
+  let index = 0;
+  while (index < frames.length - 1 && cursor >= durations[index]) {
+    cursor -= durations[index++];
+  }
   return frames[index] ?? frames[0];
 }
 
