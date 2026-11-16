@@ -424,7 +424,7 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     },
     clips: HERO_FRAMES,
     frameTimingsMs: {
-      idle: [1800, 180, 1100, 100, 260, 160],
+      idle: [1400, 240],
       land: [65, 125],
       celebrate: [260, 100, 120, 280],
     },
