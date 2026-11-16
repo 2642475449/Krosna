@@ -4,6 +4,7 @@ import type { Session } from "@/types";
 import type { AttentionItem } from "@/lib/attention";
 import { createAppStore } from "./index";
 import { createProjectScopedStorage } from "@/lib/projectScopedStorage";
+import { DEFAULT_PIXEL_PET_CONFIG } from "@/lib/pixelPetConfig";
 
 const NOW = 2_000_000_000_000;
 const PROJECT = "D:/workspace/demo";
@@ -42,6 +43,33 @@ function attention(kind: AttentionItem["kind"], id: string): AttentionItem {
 }
 
 describe("store persistence v5", () => {
+  it("restores a linked character without replacing its edited built-in frames or persisting file errors", () => {
+    let saved: string | null = null;
+    const storage: StateStorage = {
+      getItem: () => saved,
+      setItem: (_name, value) => { saved = value; },
+      removeItem: () => { saved = null; },
+    };
+    const store = createAppStore(storage);
+    store.getState().setPixelPetFilePath("D:/pets/hero.json");
+    store.setState({
+      pixelPetConfig: { ...DEFAULT_PIXEL_PET_CONFIG, name: "Edited Hero" },
+      pixelPetFileError: "transient write",
+      pixelPetFileSnapshot: { content: "large file snapshot", encoding: "utf-8" },
+    });
+    const persisted = JSON.parse(saved!).state;
+    expect(persisted.pixelPetFilePath).toBe("D:/pets/hero.json");
+    expect(persisted.pixelPetFileError).toBeUndefined();
+    expect(persisted.pixelPetFileSnapshot).toBeUndefined();
+    const restored = createAppStore(storage);
+    expect(restored.getState().pixelPetConfig.name).toBe("Edited Hero");
+    expect(restored.getState().pixelPetFilePath).toBe("D:/pets/hero.json");
+    expect(restored.getState().pixelPetFileError).toBeNull();
+    expect(restored.getState().pixelPetFileSnapshot).toBeNull();
+    restored.getState().resetPixelPetConfig();
+    expect(restored.getState().pixelPetFilePath).toBeNull();
+  });
+
   it("keeps a new session when another window writes stale settings", () => {
     let saved: string | null = null;
     const sharedStorage = createProjectScopedStorage({

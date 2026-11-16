@@ -359,6 +359,10 @@ export interface AppState
   sidebarGitGraphCollapsed: boolean;
   pixelPetVisible: boolean;
   pixelPetConfig: PixelPetConfig;
+  pixelPetFilePath: string | null;
+  pixelPetFileRevision: number;
+  pixelPetFileSnapshot: import("@/lib/pixelPetFile").PixelPetFileSnapshot | null;
+  pixelPetFileError: string | null;
   gitChangeCount: number;
   gitAheadCount: number;
   gitBehindCount: number;
@@ -462,6 +466,7 @@ export interface AppState
   togglePixelPetVisible: () => void;
   setPixelPetVisible: (visible: boolean) => void;
   setPixelPetConfig: (config: PixelPetConfig) => void;
+  setPixelPetFilePath: (path: string | null) => void;
   resetPixelPetConfig: () => void;
   toggleGitGraphCollapsed: () => void;
   setGitChangeCount: (count: number) => void;

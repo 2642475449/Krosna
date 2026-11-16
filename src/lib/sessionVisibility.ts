@@ -1,3 +1,5 @@
+import { isWorkspaceSettingsVisible } from "./workspaceSettings";
+
 interface VisibilityTab {
   kind: string;
   resourceId: string;
@@ -36,6 +38,7 @@ export function isSessionVisibleInWorkspace(
   sessionId: string,
   snapshot: WorkspaceVisibilitySnapshot
 ): boolean {
+  if (isWorkspaceSettingsVisible(snapshot)) return false;
   const visiblePaneIds: string[] = [];
   collectVisiblePaneIds(snapshot.layout.root, visiblePaneIds);
 

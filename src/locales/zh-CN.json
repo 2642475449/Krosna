@@ -339,7 +339,8 @@
     "unknown": "未知",
     "on": "开",
     "off": "关",
-    "close": "关闭"
+    "close": "关闭",
+    "back": "返回"
   },
   "editorContextMenu": {
     "undo": "撤销",
@@ -1797,7 +1798,7 @@
         "hero": "红帽小勇者",
         "cat": "像素小橘猫",
         "bot": "班德",
-        "whale": "像素小鲸鱼"
+        "daimao": "呆猫"
       },
       "pixelSize": "像素倍率",
       "pixelSizeDesc": "整数倍像素缩放，始终保持锐利像素边缘。",
@@ -1813,13 +1814,26 @@
       "enableRandomEvents": "随机趣味彩蛋",
       "enableRandomEventsDesc": "隔一段时间随机出现小史莱姆、小幽灵或流星，宠物会主动跑去互动或消灭它们。",
       "triggerEncounterTest": "召唤彩蛋",
-      "jsonSection": "JSON 配置与 AI 生成",
-      "jsonSectionDesc": "可直接编辑像素矩阵（frames）、调色盘（palette）和动作逻辑（behavior），或复制提示词让 AI 生成全新角色。",
+      "jsonSection": "JSON 配置与 AI 创作",
+      "jsonSectionDesc": "导出或加载角色 JSON，让 AI 新建或改造角色；关联文件保存后自动校验并刷新预览。也可直接编辑下方 JSON。",
       "applyJson": "应用 JSON 配置",
-      "copyAiPrompt": "复制 AI 生成提示词",
+      "copyAiPrompt": "复制 AI 创作提示词",
       "loadDefaultJson": "载入默认模板",
       "jsonApplied": "像素宠物配置已更新",
-      "aiPromptCopied": "已复制 AI 生成提示词到剪贴板"
+      "aiPromptCopied": "已复制 AI 创作提示词到剪贴板",
+      "exportFile": "导出并关联文件",
+      "loadFile": "加载角色文件",
+      "unlinkFile": "解除文件关联",
+      "fileWatching": "已关联文件，保存后约 1 秒自动刷新；关闭设置后仍生效。",
+      "fileInvalid": "文件读取或校验失败，已保留上一次正常角色；修正后会自动恢复。",
+      "fileExported": "已导出角色及格式说明，并开启自动刷新",
+      "fileLoaded": "已加载角色文件，并开启自动刷新",
+      "fileOperationFailed": "角色文件操作失败：{{error}}",
+      "fileNotReady": "文件尚未成功读取，请等待自动加载后再保存。",
+      "exportBeforeAi": "首次复制 AI 提示词会先让你选择角色文件的保存位置，并附带格式说明。",
+      "draftPreserved": "文件已更新，预览已刷新。你的 JSON 草稿已保留；保存时会检查文件冲突。",
+      "reloadDraft": "载入最新配置",
+      "saveFile": "保存文件并应用"
     },
     "shortcuts": {
       "toggleBottomRunner": "切换底部脚本运行器",

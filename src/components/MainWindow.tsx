@@ -11,11 +11,13 @@ import AppLayout from "./layout/AppLayout";
 import { BackgroundCloseController } from "./BackgroundCloseController";
 import { startWorkspaceRecoverySync } from "@/store/slices/workspaceRecovery";
 import { TerminalHistoryDrawer } from "./TerminalHistoryDrawer";
+import { usePixelPetFileSync } from "@/hooks/usePixelPetFileSync";
 
 /** 主窗口专用入口；语音窗口不加载工作区组件和项目后台任务。 */
 export default function MainWindow({ persistentSettingsReady }: { persistentSettingsReady: boolean }) {
   const projectPath = useAppStore((state) => state.currentProject?.path ?? null);
   useRecentProjectSync();
+  usePixelPetFileSync(persistentSettingsReady);
 
   useEffect(() => {
     if (!persistentSettingsReady) return;

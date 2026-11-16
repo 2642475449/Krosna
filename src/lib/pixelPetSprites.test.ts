@@ -45,6 +45,8 @@ it("validates per-frame timing and preserves valid timing through JSON", () => {
 
 it("accelerates gradually without leaving bounds, including during a resize", () => {
   let sim = createInitialPetSimulation(400);
+  sim.action = "walk";
+  sim.clip = "walk";
   const start = sim.x;
   sim = stepPetSimulation(sim, 50, 400, "idle");
   const firstStep = sim.x - start;

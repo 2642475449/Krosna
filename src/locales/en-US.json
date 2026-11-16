@@ -339,7 +339,8 @@
     "unknown": "Unknown",
     "on": "On",
     "off": "Off",
-    "close": "Close"
+    "close": "Close",
+    "back": "Back"
   },
   "editorContextMenu": {
     "undo": "Undo",
@@ -1797,7 +1798,7 @@
         "hero": "Red Cap Hero",
         "cat": "Pixel Ginger Cat",
         "bot": "Bender",
-        "whale": "Pixel Cute Whale"
+        "daimao": "Daimao"
       },
       "pixelSize": "Pixel Scale",
       "pixelSizeDesc": "Integer pixel scaling to keep edges strictly pixelated.",
@@ -1813,13 +1814,26 @@
       "enableRandomEvents": "Random mini encounters",
       "enableRandomEventsDesc": "Occasionally spawns a pixel slime, ghost, or falling star for the pet to chase and clear.",
       "triggerEncounterTest": "Spawn easter egg",
-      "jsonSection": "JSON Config & AI Generator",
-      "jsonSectionDesc": "Edit pixel grids (frames), palette, and behavior directly, or copy the AI prompt to generate new pixel pets.",
+      "jsonSection": "JSON Configuration & AI Creation",
+      "jsonSectionDesc": "Export or load a character JSON file for AI creation or editing. Linked files are validated and previewed automatically after saving. You can also edit JSON below.",
       "applyJson": "Apply JSON Config",
-      "copyAiPrompt": "Copy AI Prompt",
+      "copyAiPrompt": "Copy AI Creation Prompt",
       "loadDefaultJson": "Load Default JSON",
       "jsonApplied": "Pixel pet configuration applied",
-      "aiPromptCopied": "AI generation prompt copied to clipboard"
+      "aiPromptCopied": "AI creation prompt copied to clipboard",
+      "exportFile": "Export & Link File",
+      "loadFile": "Load Character File",
+      "unlinkFile": "Unlink File",
+      "fileWatching": "File linked. Saved changes refresh in about 1 second, even with settings closed.",
+      "fileInvalid": "Unable to read or validate the file. Keeping the last valid character; updates resume when the file is fixed.",
+      "fileExported": "Character and format guide exported; auto-refresh enabled",
+      "fileLoaded": "Character file loaded; auto-refresh enabled",
+      "fileOperationFailed": "Character file operation failed: {{error}}",
+      "fileNotReady": "The file has not loaded successfully yet. Wait for it to load before saving.",
+      "exportBeforeAi": "Copying the AI prompt for the first time asks where to save the character file and includes a format guide.",
+      "draftPreserved": "The file and preview have updated. Your JSON draft is preserved; saving checks for file conflicts.",
+      "reloadDraft": "Load Latest Configuration",
+      "saveFile": "Save File & Apply"
     },
     "shortcuts": {
       "toggleBottomRunner": "Toggle Bottom Script Runner",

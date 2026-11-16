@@ -34,6 +34,12 @@ describe("isSessionVisibleInWorkspace", () => {
     expect(isSessionVisibleInWorkspace("session-hidden", splitSnapshot())).toBe(false);
   });
 
+  it("does not treat split sessions as visible while workspace settings covers them", () => {
+    const snapshot = { ...splitSnapshot(), activeSessionId: "__settings__" };
+    expect(isSessionVisibleInWorkspace("session-left", snapshot)).toBe(false);
+    expect(isSessionVisibleInWorkspace("session-right", snapshot)).toBe(false);
+  });
+
   it("falls back to activeSessionId while workspace entities are unavailable", () => {
     const snapshot = splitSnapshot();
     snapshot.panesById = {

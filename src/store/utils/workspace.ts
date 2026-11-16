@@ -1,6 +1,7 @@
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import type { Session } from "@/types";
 import i18n from "@/i18n";
+import { isSettingsTab } from "@/lib/workspaceSettings";
 import type {
   PaneState,
   ProjectWorkspace,
@@ -224,6 +225,17 @@ export function normalizeWorkspace(workspace: ProjectWorkspace, sessions: Sessio
     !nextWorkspace.tabsById[nextWorkspace.focusedTabId]
   ) {
     nextWorkspace.focusedTabId = getActivePane(nextWorkspace).activeTabId;
+  }
+
+  // Leaving the workspace-wide settings page restores any covered pane's last
+  // content tab, including when navigation focuses a different split pane.
+  if (!isSettingsTab(getActivePane(nextWorkspace).activeTabId, nextWorkspace.tabsById)) {
+    for (const pane of Object.values(nextWorkspace.panesById)) {
+      if (!isSettingsTab(pane.activeTabId, nextWorkspace.tabsById)) continue;
+      pane.activeTabId = [...pane.history].reverse().find((id) =>
+        pane.tabIds.includes(id) && !isSettingsTab(id, nextWorkspace.tabsById),
+      ) ?? pane.tabIds.find((id) => !isSettingsTab(id, nextWorkspace.tabsById)) ?? null;
+    }
   }
 
   return nextWorkspace;

@@ -1,4 +1,5 @@
 import type { PetActionState, PetClipId } from "./pixelPet";
+import { DAIMAO_FRAMES, DAIMAO_PALETTE } from "./pixelPetDaimaoFrames";
 import { HERO_FRAMES, HERO_PALETTE } from "./pixelPetHeroFrames";
 
 export type PixelSpriteFrame = readonly string[];
@@ -314,99 +315,6 @@ const BOT_SLEEP = [
   "................",
 ];
 
-const WHALE_PALETTE: Record<string, string> = {
-  A: "#bae6fd",
-  B: "#38bdf8",
-  b: "#0ea5e9",
-  L: "#ffffff",
-  E: "#0f172a",
-  P: "#fda4af",
-};
-
-const WHALE_IDLE_0 = [
-  "......................",
-  "......................",
-  ".......AABBBBAA.......",
-  ".....ABBBBBBBBBBA.....",
-  "....ABBBBBBBBBBEWB....",
-  ".A..BBBBBBBBBBBBPB....",
-  "bB.ABBBBBBBBBBBBBB....",
-  ".bABBBBBLLLLLLLLLA....",
-  "..ABBBBLLLLLLLLLA.....",
-  "...AAbLLLLLLLLLA......",
-  ".....AAAAAAAAA........",
-];
-
-const WHALE_IDLE_1 = [
-  ".........A.A..........",
-  "..........A...........",
-  ".......AABBBBAA.......",
-  ".....ABBBBBBBBBBA.....",
-  "....ABBBBBBBBBBEWB....",
-  ".A..BBBBBBBBBBBBPB....",
-  "bB.ABBBBBBBBBBBBBB....",
-  ".bABBBBBLLLLLLLLLA....",
-  "..ABBBBLLLLLLLLLA.....",
-  "...AAbLLLLLLLLLA......",
-  ".....AAAAAAAAA........",
-];
-
-const WHALE_SWIM_0 = [
-  ".........A.A..........",
-  "..........A...........",
-  ".......AABBBBAA.......",
-  ".....ABBBBBBBBBBA.....",
-  "....ABBBBBBBBBBEWB....",
-  ".A..BBBBBBBBBBBBPB....",
-  "bB.ABBBBBBBBBBBBBB....",
-  ".bABBBBBLLLLLLLLLA....",
-  "..ABBBBLLLLLLLLLA.....",
-  "...AAbLLLLLLLLLA......",
-  ".....AAAAAAAAA........",
-];
-
-const WHALE_SWIM_1 = [
-  "........A...A.........",
-  ".........A.A..........",
-  ".......AABBBBAA.......",
-  ".....ABBBBBBBBBBA.....",
-  "....ABBBBBBBBBBEWB....",
-  "....BBBBBBBBBBBBPB....",
-  ".A.ABBBBBBBBBBBBBB....",
-  "bBABBBBBLLLLLLLLLA....",
-  "..ABBBBLLLLLLLLLA.....",
-  "...AAbLLLLLLLLLA......",
-  ".....AAAAAAAAA........",
-];
-
-const WHALE_JUMP = [
-  "........A...A.........",
-  ".......A.A.A.A........",
-  ".......AABBBBAA.......",
-  ".....ABBBBBBBBBBA.....",
-  "....ABBBBBBBBBBEWB....",
-  ".A..BBBBBBBBBBBBPB....",
-  "bB.ABBBBBBBBBBBBBB....",
-  ".bABBBBBLLLLLLLLLA....",
-  "..ABBBBLLLLLLLLLA.....",
-  "...AAbLLLLLLLLLA......",
-  ".....AAAAAAAAA........",
-];
-
-const WHALE_SLEEP = [
-  "......................",
-  "......................",
-  ".......AABBBBAA.......",
-  ".....ABBBBBBBBBBA.....",
-  "....ABBBBBBBBBbbbB....",
-  ".A..BBBBBBBBBBBBPB....",
-  "bB.ABBBBBBBBBBBBBB....",
-  ".bABBBBBLLLLLLLLLA....",
-  "..ABBBBLLLLLLLLLA.....",
-  "...AAbLLLLLLLLLA......",
-  ".....AAAAAAAAA........",
-];
-
 export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
   {
     id: "hero",
@@ -424,12 +332,12 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     },
     clips: HERO_FRAMES,
     frameTimingsMs: {
-      idle: [1400, 240],
+      idle: [460, 420],
       land: [65, 125],
       celebrate: [260, 100, 120, 280],
     },
     frameDurationsMs: {
-      idle: 520,
+      idle: 440,
       walk: 145,
       run: 95,
       jump: 200,
@@ -508,32 +416,47 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
     },
   },
   {
-    id: "whale",
-    name: "Pixel AA Cream Whale",
+    id: "daimao",
+    name: "Daimao",
     pixelSize: 2,
-    submergeRows: 2,
-    palette: { ...WHALE_PALETTE, W: "#ffffff" },
+    palette: DAIMAO_PALETTE,
     frames: {
-      idle: [WHALE_IDLE_0, WHALE_IDLE_1],
-      walk: [WHALE_SWIM_0, WHALE_SWIM_1],
-      run: [WHALE_SWIM_0, WHALE_SWIM_1],
-      jump: [WHALE_JUMP],
-      celebrate: [WHALE_JUMP],
-      sleep: [WHALE_SLEEP],
-      alert: [WHALE_JUMP],
+      idle: DAIMAO_FRAMES.idle,
+      walk: DAIMAO_FRAMES.walk,
+      run: DAIMAO_FRAMES.run,
+      jump: DAIMAO_FRAMES.jump,
+      sleep: DAIMAO_FRAMES.sleep,
+      celebrate: DAIMAO_FRAMES.celebrate,
+      alert: DAIMAO_FRAMES.alert,
+    },
+    clips: DAIMAO_FRAMES,
+    frameTimingsMs: {
+      idle: [460, 420],
+      land: [70, 120],
+      celebrate: [220, 180, 200, 220],
     },
     frameDurationsMs: {
-      idle: 700,
-      walk: 280,
-      run: 140,
+      idle: 440,
+      walk: 145,
+      run: 95,
+      jump: 200,
+      fall: 160,
+      crouch: 90,
+      land: 95,
+      turn: 110,
+      stop: 120,
+      edgeLook: 300,
+      sleep: 650,
+      celebrate: 200,
+      alert: 220,
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
       allowWallClimb: false,
       walkSpeedPxPerSec: 26,
-      runSpeedPxPerSec: 52,
-      cheerBubbles: ["~", "♥", "★", "oO", ":3"],
-      workBubbles: ["oO", "~~~", "</>", "💧"],
+      runSpeedPxPerSec: 54,
+      cheerBubbles: ["Woof!", "♥", "★", ":3"],
+      workBubbles: ["...", "</>", "🐾"],
     },
   },
 ];
@@ -797,14 +720,14 @@ export function upgradePersistedPixelPetConfig(
 /**
  * Generate a prompt template users can give to any AI to design new pixel pets & behavior JSON.
  */
-export function buildPixelPetAiPrompt(baseConfig: PixelPetConfig): string {
+export function buildPixelPetAiPrompt(baseConfig: PixelPetConfig, filePath?: string): string {
   return [
-    "Design a new 16x16 pixel-art pet configuration in pure JSON for Krosna.",
-    "Rules:",
-    "1. Keep it strictly pixel art using ASCII character grids in `frames` (16 rows of 16 characters, `.` = transparent).",
-    "2. Define every non-dot character in `palette` as a hex color.",
-    "3. Tune `behavior` (`walkSpeedPxPerSec`, `runSpeedPxPerSec`, `jumpVelocityPxPerSec`, `sleepAfterIdleMs`, `enableRandomEvents`, `cheerBubbles`, `workBubbles`) to match the character's personality. Set `enableRandomEvents: true` only when the character should occasionally encounter and chase mini pixel events (slime, ghost, falling star).",
-    "4. Return ONLY valid JSON matching this schema:",
-    JSON.stringify(baseConfig, null, 2),
-  ].join("\n\n");
+    "请帮我创作 Krosna 像素角色：可以改造当前角色，也可以设计全新角色。",
+    filePath ? `角色配置文件：${JSON.stringify(filePath)}` : "请读取我附上的角色 JSON 文件。",
+    filePath ? `格式说明文件：${JSON.stringify(`${filePath}.guide.md`)}` : "请同时阅读附上的格式说明。",
+    `当前角色名称：${JSON.stringify(baseConfig.name)}。先读取文件，再根据我的要求修改 palette、frames、clips 和 behavior。`,
+    "直接保存纯 JSON，保留未要求修改的内容；Krosna 会自动校验并刷新预览。若另存为新文件，请告诉我路径，我会在设置中加载它。",
+    "如果无法访问本机文件，请让我附上配置和格式说明，并返回完整 JSON 文件。",
+    "我的要求：［在这里描述新角色或修改内容］",
+  ].join("\n");
 }

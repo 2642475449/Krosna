@@ -1,4 +1,19 @@
 /* 设置页的排版与层级；颜色全部沿用四套主题。 */
+.app-settings-topbar { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 14px; flex-shrink: 0; border-bottom: 1px solid var(--cs-border-card); }
+.app-settings-topbar__left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.app-settings-topbar__back { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border: 1px solid var(--cs-border-card); border-radius: 7px; background: var(--cs-bg-card); color: var(--cs-text-primary); font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
+.app-settings-topbar__back:hover { background: var(--cs-bg-hover); border-color: var(--cs-border); }
+.app-settings-topbar__back:active { background: var(--cs-bg-active); }
+.app-settings-topbar__back:focus { outline: none; }
+.app-settings-topbar__back:focus-visible { outline: 2px solid var(--cs-focus-ring); outline-offset: 2px; }
+.app-settings-topbar__back-icon { font-size: 12px; color: var(--cs-text-secondary); transition: transform 140ms ease, color 140ms ease; }
+.app-settings-topbar__back:hover .app-settings-topbar__back-icon { color: var(--cs-text-primary); transform: translateX(-1px); }
+.app-settings-topbar__divider { width: 1px; height: 14px; background: var(--cs-border-card); flex-shrink: 0; }
+.app-settings-topbar__title { font-size: 13px; font-weight: 600; color: var(--cs-text-primary); letter-spacing: -0.01em; }
+.app-settings-topbar__close { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--cs-text-secondary); font-size: 13px; cursor: pointer; transition: background-color 140ms ease, color 140ms ease; }
+.app-settings-topbar__close:hover { background: var(--cs-bg-hover); color: var(--cs-text-primary); }
+.app-settings-topbar__close:focus { outline: none; }
+.app-settings-topbar__close:focus-visible { outline: 2px solid var(--cs-focus-ring); outline-offset: 2px; }
 .app-settings { container: settings / inline-size; display: flex; height: 100%; min-height: 0; color: var(--cs-text-primary); background: var(--cs-bg-card-solid); }
 .app-settings-nav { width: 56px; flex-shrink: 0; overflow-y: auto; padding: 20px 8px; background: var(--cs-bg-app); border-right: 1px solid var(--cs-border-sidebar); }
 .app-settings > .app-settings-nav { border: 0; border-right: 1px solid var(--cs-border-sidebar); }
@@ -1178,4 +1193,4 @@
   .app-settings-page-header__title { font-size: 20px; }
   .app-settings-page-header__decoration { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .app-settings-nav__item { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .app-settings-nav__item, .app-settings-topbar__back, .app-settings-topbar__back-icon, .app-settings-topbar__close { transition: none; } }

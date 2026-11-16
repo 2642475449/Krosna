@@ -751,6 +751,10 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       sidebarGitGraphCollapsed: true,
       pixelPetVisible: true,
       pixelPetConfig: DEFAULT_PIXEL_PET_CONFIG,
+      pixelPetFilePath: null,
+      pixelPetFileRevision: 0,
+      pixelPetFileSnapshot: null,
+      pixelPetFileError: null,
       gitChangeCount: 0,
       gitAheadCount: 0,
       gitBehindCount: 0,
@@ -1469,7 +1473,9 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
 
       setPixelPetConfig: (config) => set({ pixelPetConfig: config }),
 
-      resetPixelPetConfig: () => set({ pixelPetConfig: DEFAULT_PIXEL_PET_CONFIG }),
+      setPixelPetFilePath: (path) => set((state) => ({ pixelPetFilePath: path, pixelPetFileRevision: state.pixelPetFileRevision + 1, pixelPetFileSnapshot: null, pixelPetFileError: null })),
+
+      resetPixelPetConfig: () => set((state) => ({ pixelPetConfig: DEFAULT_PIXEL_PET_CONFIG, pixelPetFilePath: null, pixelPetFileRevision: state.pixelPetFileRevision + 1, pixelPetFileSnapshot: null, pixelPetFileError: null })),
 
       toggleGitGraphCollapsed: () =>
         set((state) => ({ sidebarGitGraphCollapsed: !state.sidebarGitGraphCollapsed })),
@@ -2027,6 +2033,7 @@ function createPersistOptions(storage?: StateStorage) {
         sidebarGitGraphCollapsed: state.sidebarGitGraphCollapsed,
         pixelPetVisible: state.pixelPetVisible,
         pixelPetConfig: state.pixelPetConfig,
+        pixelPetFilePath: state.pixelPetFilePath,
         voicePolishEnabled: state.voicePolishEnabled,
         asrLanguage: state.asrLanguage,
         voicePolishProvider: state.voicePolishProvider,
@@ -2078,13 +2085,14 @@ function createPersistOptions(storage?: StateStorage) {
         state.attentionDiagnostics = { hooks: {} };
         state.unreadTotal = 0;
         state.activeSidebarSection = "sessions";
-        if (
+        if (!state.pixelPetFilePath && (
           !state.pixelPetConfig
           || (state.pixelPetConfig.id === "whale" && state.pixelPetConfig.submergeRows == null)
           || state.pixelPetConfig.id === "hero"
-        ) {
+        )) {
           state.pixelPetConfig = DEFAULT_PIXEL_PET_CONFIG;
         } else if (
+          !state.pixelPetFilePath &&
           state.pixelPetConfig.id === "bot"
           && state.pixelPetConfig.palette?.K !== "#1e293b"
         ) {

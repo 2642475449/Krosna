@@ -339,7 +339,8 @@
     "unknown": "不明",
     "on": "オン",
     "off": "オフ",
-    "close": "閉じる"
+    "close": "閉じる",
+    "back": "戻る"
   },
   "editorContextMenu": {
     "undo": "元に戻す",
@@ -1797,7 +1798,7 @@
         "hero": "赤帽子の勇者",
         "cat": "ドット茶トラ猫",
         "bot": "ベンダー",
-        "whale": "ドットクジラちゃん"
+        "daimao": "ダイマオ"
       },
       "pixelSize": "ピクセル倍率",
       "pixelSizeDesc": "整数倍スケーリングでドット絵の輪郭をくっきり保ちます。",
@@ -1813,13 +1814,26 @@
       "enableRandomEvents": "ランダムミニイベント",
       "enableRandomEventsDesc": "ときどきスライム・おばけ・流れ星が現れ、ペットが追いかけて反応します。",
       "triggerEncounterTest": "イベント発生",
-      "jsonSection": "JSON 設定 & AI 生成プロンプト",
-      "jsonSectionDesc": "ドット絵グリッド（frames）・パレット・動作ロジックを直接編集するか、AI 用プロンプトをコピーできます。",
+      "jsonSection": "JSON 設定と AI 制作",
+      "jsonSectionDesc": "キャラクター JSON を書き出し・読み込み、AI で新規作成や編集ができます。関連付けたファイルは保存後に検証され、プレビューが自動更新されます。下の JSON も直接編集できます。",
       "applyJson": "JSON 設定を適用",
-      "copyAiPrompt": "AI 用プロンプトをコピー",
+      "copyAiPrompt": "AI 制作プロンプトをコピー",
       "loadDefaultJson": "デフォルト JSON を読込",
       "jsonApplied": "ピクセルペット設定を更新しました",
-      "aiPromptCopied": "AI 生成プロンプトをクリップボードにコピーしました"
+      "aiPromptCopied": "AI 制作プロンプトをコピーしました",
+      "exportFile": "書き出して関連付け",
+      "loadFile": "キャラクターファイルを読み込む",
+      "unlinkFile": "ファイルの関連付けを解除",
+      "fileWatching": "ファイルを関連付けました。保存後約 1 秒で自動更新します。設定を閉じても有効です。",
+      "fileInvalid": "ファイルの読み込み・検証に失敗しました。直前の正常なキャラクターを維持し、修正後に自動で再開します。",
+      "fileExported": "キャラクターと形式ガイドを書き出し、自動更新を有効にしました",
+      "fileLoaded": "キャラクターファイルを読み込み、自動更新を有効にしました",
+      "fileOperationFailed": "キャラクターファイルの操作に失敗しました：{{error}}",
+      "fileNotReady": "ファイルの読み込みが完了していません。正常に読み込まれてから保存してください。",
+      "exportBeforeAi": "AI プロンプトの初回コピー時に保存先を選択します。形式ガイドも書き出されます。",
+      "draftPreserved": "ファイルとプレビューが更新されました。JSON の下書きは保持しています。保存時に競合を確認します。",
+      "reloadDraft": "最新の設定を読み込む",
+      "saveFile": "ファイルを保存して適用"
     },
     "shortcuts": {
       "toggleBottomRunner": "下部スクリプトランナーの表示切替",

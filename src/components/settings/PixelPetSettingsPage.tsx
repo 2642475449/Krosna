@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CopyOutlined, ReloadOutlined, CheckOutlined } from "@ant-design/icons";
-import { Alert, Button, Input, Radio, Slider, Switch, message } from "antd";
+import { Alert, Button, Input, Radio, Switch, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { SettingsPageHeader } from "@/components/settings/SettingsPageHeader";
 import { SettingsSection } from "./SettingsSection";
@@ -9,14 +9,11 @@ import { useAppStore } from "@/store";
 import {
   buildPixelPetAiPrompt,
   DEFAULT_PIXEL_PET_CONFIG,
-  parsePixelPetConfigJson,
   PIXEL_PET_PRESETS,
-  type PixelPetBehaviorConfig,
   type PixelPetConfig,
 } from "@/lib/pixelPetConfig";
 import {
   createInitialPetSimulation,
-  spawnPetEncounter,
   stepPetSimulation,
   triggerPetJump,
   type PetSimulationState,
@@ -28,6 +25,10 @@ import {
   getPetRenderedDimensions,
   getPetSpriteFrame,
 } from "@/lib/pixelPetSprites";
+
+import { readProjectFile, selectPixelPetExportPath, selectPixelPetJsonFile, writeProjectFile } from "@/lib/api";
+import { parsePixelPetFile, pixelPetFileLocation, type PixelPetFileSnapshot } from "@/lib/pixelPetFile";
+import { ensurePixelPetFileGuide, exportPixelPetFile } from "@/lib/pixelPetFileIO";
 
 function PixelPresetThumbnail({ config }: { config: PixelPetConfig }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -182,20 +183,6 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
       >
         {t("settings.pixelPet.previewHint")}
       </span>
-      <Button
-        size="small"
-        type="default"
-        className="absolute bottom-2 right-2.5 h-6 px-2 text-[11px]"
-        onClick={(e) => {
-          e.stopPropagation();
-          simRef.current = spawnPetEncounter(
-            simRef.current,
-            widthRef.current,
-          );
-        }}
-      >
-        {t("settings.pixelPet.triggerEncounterTest")}
-      </Button>
     </div>
   );
 }
@@ -208,58 +195,142 @@ export function PixelPetSettingsPage() {
   const setPixelPetConfig = useAppStore((state) => state.setPixelPetConfig);
   const resetPixelPetConfig = useAppStore((state) => state.resetPixelPetConfig);
 
+  const filePath = useAppStore((state) => state.pixelPetFilePath);
+  const fileError = useAppStore((state) => state.pixelPetFileError);
+  const setFilePath = useAppStore((state) => state.setPixelPetFilePath);
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(pixelPetConfig, null, 2));
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [draftChangedExternally, setDraftChangedExternally] = useState(false);
+  const dirtyRef = useRef(false);
+  const baseJsonRef = useRef(jsonDraft);
+  const baseSnapshotRef = useRef<PixelPetFileSnapshot | null>(null);
+  const operationRef = useRef(0);
+  const busyRef = useRef(false);
+
+  useEffect(() => () => { operationRef.current++; }, []);
+
+  const resetDraft = (config: PixelPetConfig, snapshot: PixelPetFileSnapshot | null) => {
+    const json = JSON.stringify(config, null, 2);
+    dirtyRef.current = false;
+    baseJsonRef.current = json;
+    baseSnapshotRef.current = snapshot;
+    setJsonDraft(json);
+    setJsonError(null);
+    setDraftChangedExternally(false);
+  };
 
   useEffect(() => {
-    setJsonDraft(JSON.stringify(pixelPetConfig, null, 2));
-    setJsonError(null);
-  }, [pixelPetConfig]);
+    const incoming = JSON.stringify(pixelPetConfig, null, 2);
+    const snapshot = useAppStore.getState().pixelPetFileSnapshot;
+    if (dirtyRef.current) {
+      if (incoming !== baseJsonRef.current || snapshot?.content !== baseSnapshotRef.current?.content) setDraftChangedExternally(true);
+      return;
+    }
+    resetDraft(pixelPetConfig, snapshot);
+  }, [pixelPetConfig, filePath]);
 
-  const updateBehavior = <K extends keyof PixelPetBehaviorConfig>(
-    key: K,
-    value: PixelPetBehaviorConfig[K],
-  ) => {
-    setPixelPetConfig({
-      ...pixelPetConfig,
-      behavior: {
-        ...pixelPetConfig.behavior,
-        [key]: value,
-      },
-    });
+  const runOperation = async (task: (isCurrent: () => boolean) => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    const token = ++operationRef.current;
+    const revision = useAppStore.getState().pixelPetFileRevision;
+    const isCurrent = () => token === operationRef.current && useAppStore.getState().pixelPetFileRevision === revision;
+    try { await task(isCurrent); }
+    catch (error) {
+      if (token === operationRef.current) message.error(t("settings.pixelPet.fileOperationFailed", { error: String(error) }));
+    } finally {
+      busyRef.current = false;
+      if (token === operationRef.current) setBusy(false);
+    }
+  };
+
+  const linkFile = (path: string, config: PixelPetConfig, snapshot: PixelPetFileSnapshot) => {
+    setFilePath(path);
+    useAppStore.setState({ pixelPetConfig: config, pixelPetFileSnapshot: snapshot });
+    resetDraft(config, snapshot);
   };
 
   const handleSelectPreset = (preset: PixelPetConfig) => {
-    setPixelPetConfig({
-      ...preset,
-      pixelSize: pixelPetConfig.pixelSize,
-      behavior: {
-        ...preset.behavior,
-        allowPlatformHop: pixelPetConfig.behavior.allowPlatformHop,
-        reactToCodingMood: pixelPetConfig.behavior.reactToCodingMood,
-      },
-    });
+    const config = { ...preset, pixelSize: pixelPetConfig.pixelSize };
+    setFilePath(null);
+    setPixelPetConfig(config);
+    resetDraft(config, null);
   };
 
-  const handleApplyJson = () => {
-    const result = parsePixelPetConfigJson(jsonDraft);
-    if (!result.ok) {
-      setJsonError(result.error);
-      return;
+  const handleApplyJson = () => runOperation(async (isCurrent) => {
+    let config: PixelPetConfig;
+    try { config = parsePixelPetFile(jsonDraft); }
+    catch (error) { setJsonError(String(error)); return; }
+    let snapshot: PixelPetFileSnapshot | null = null;
+    if (filePath) {
+      if (!baseSnapshotRef.current) throw new Error(t("settings.pixelPet.fileNotReady"));
+      const { directory } = pixelPetFileLocation(filePath);
+      await writeProjectFile(directory, filePath, jsonDraft, "utf-8", baseSnapshotRef.current);
+      snapshot = { content: jsonDraft, encoding: "utf-8" };
     }
-    setJsonError(null);
-    setPixelPetConfig(result.config);
+    if (!isCurrent()) return;
+    useAppStore.setState({ pixelPetConfig: config, pixelPetFileSnapshot: snapshot, pixelPetFileError: null });
+    resetDraft(config, snapshot);
     message.success(t("settings.pixelPet.jsonApplied"));
+  });
+
+  const handlePixelSize = (pixelSize: number) => runOperation(async (isCurrent) => {
+    const config = { ...pixelPetConfig, pixelSize };
+    let snapshot = useAppStore.getState().pixelPetFileSnapshot;
+    if (filePath) {
+      if (!snapshot) throw new Error(t("settings.pixelPet.fileNotReady"));
+      const { directory } = pixelPetFileLocation(filePath);
+      const content = JSON.stringify(config, null, 2);
+      await writeProjectFile(directory, filePath, content, "utf-8", snapshot);
+      snapshot = { content, encoding: "utf-8" };
+    }
+    if (isCurrent()) useAppStore.setState({ pixelPetConfig: config, pixelPetFileSnapshot: snapshot });
+  });
+
+  const exportAndLink = async (isCurrent: () => boolean) => {
+    const config = parsePixelPetFile(jsonDraft);
+    const safeId = config.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const selected = await selectPixelPetExportPath(`${safeId}-custom.json`);
+    if (!selected || !isCurrent()) return null;
+    const path = /\.json$/i.test(selected) ? selected : `${selected}.json`;
+    const content = JSON.stringify(config, null, 2);
+    const snapshot = await exportPixelPetFile(path, content);
+    if (!isCurrent()) return null;
+    linkFile(path, config, snapshot);
+    return { path, config };
   };
 
-  const handleCopyAiPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(buildPixelPetAiPrompt(pixelPetConfig));
-      message.success(t("settings.pixelPet.aiPromptCopied"));
-    } catch {
-      message.error(t("common.copyFailed"));
+  const handleExport = () => runOperation(async (isCurrent) => {
+    if (await exportAndLink(isCurrent)) message.success(t("settings.pixelPet.fileExported"));
+  });
+
+  const handleLoad = () => runOperation(async (isCurrent) => {
+    const path = await selectPixelPetJsonFile();
+    if (!path || !isCurrent()) return;
+    const { directory } = pixelPetFileLocation(path);
+    const snapshot = await readProjectFile(directory, path);
+    const config = parsePixelPetFile(snapshot.content);
+    if (!isCurrent()) return;
+    linkFile(path, config, snapshot);
+    message.success(t("settings.pixelPet.fileLoaded"));
+  });
+
+  const handleCopyAiPrompt = () => runOperation(async (isCurrent) => {
+    let path = filePath;
+    let config = pixelPetConfig;
+    if (!path) {
+      const exported = await exportAndLink(isCurrent);
+      if (!exported) return;
+      ({ path, config } = exported);
+    } else {
+      await ensurePixelPetFileGuide(path);
+      if (!isCurrent()) return;
     }
-  };
+    await navigator.clipboard.writeText(buildPixelPetAiPrompt(config, path));
+    message.success(t("settings.pixelPet.aiPromptCopied"));
+  });
 
   return (
     <div className="space-y-6">
@@ -269,8 +340,10 @@ export function PixelPetSettingsPage() {
         actions={
           <Button
             icon={<ReloadOutlined />}
+            disabled={busy}
             onClick={() => {
               resetPixelPetConfig();
+              resetDraft(DEFAULT_PIXEL_PET_CONFIG, null);
               message.success(t("settings.pixelPet.resetDone"));
             }}
           >
@@ -305,6 +378,7 @@ export function PixelPetSettingsPage() {
                 <button
                   key={preset.id}
                   type="button"
+                  disabled={busy}
                   onClick={() => handleSelectPreset(preset)}
                   className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors"
                   style={{
@@ -342,101 +416,14 @@ export function PixelPetSettingsPage() {
           <Radio.Group
             optionType="button"
             buttonStyle="solid"
+            disabled={busy}
             value={pixelPetConfig.pixelSize}
-            onChange={(e) => setPixelPetConfig({ ...pixelPetConfig, pixelSize: e.target.value })}
+            onChange={(e) => void handlePixelSize(e.target.value)}
           >
             <Radio.Button value={1}>1x</Radio.Button>
             <Radio.Button value={2}>2x</Radio.Button>
             <Radio.Button value={3}>3x</Radio.Button>
           </Radio.Group>
-        </SettingRow>
-      </SettingsSection>
-
-      <SettingsSection title={t("settings.pixelPet.behaviorSection")}>
-        <SettingRow
-          label={t("settings.pixelPet.walkSpeed")}
-          description={`${pixelPetConfig.behavior.walkSpeedPxPerSec} px/s`}
-        >
-          <div className="w-48">
-            <Slider
-              min={10}
-              max={90}
-              value={pixelPetConfig.behavior.walkSpeedPxPerSec}
-              onChange={(v) => updateBehavior("walkSpeedPxPerSec", v)}
-            />
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.pixelPet.runSpeed")}
-          description={`${pixelPetConfig.behavior.runSpeedPxPerSec} px/s`}
-        >
-          <div className="w-48">
-            <Slider
-              min={20}
-              max={150}
-              value={pixelPetConfig.behavior.runSpeedPxPerSec}
-              onChange={(v) => updateBehavior("runSpeedPxPerSec", v)}
-            />
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.pixelPet.jumpVelocity")}
-          description={`${pixelPetConfig.behavior.jumpVelocityPxPerSec} px/s`}
-        >
-          <div className="w-48">
-            <Slider
-              min={90}
-              max={300}
-              value={pixelPetConfig.behavior.jumpVelocityPxPerSec}
-              onChange={(v) => updateBehavior("jumpVelocityPxPerSec", v)}
-            />
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.pixelPet.sleepAfterIdle")}
-          description={`${Math.round(pixelPetConfig.behavior.sleepAfterIdleMs / 1000)}s`}
-        >
-          <div className="w-48">
-            <Slider
-              min={3}
-              max={30}
-              value={Math.round(pixelPetConfig.behavior.sleepAfterIdleMs / 1000)}
-              onChange={(v) => updateBehavior("sleepAfterIdleMs", v * 1000)}
-            />
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.pixelPet.allowPlatformHop")}
-          description={t("settings.pixelPet.allowPlatformHopDesc")}
-        >
-          <Switch
-            checked={pixelPetConfig.behavior.allowPlatformHop}
-            onChange={(checked) => updateBehavior("allowPlatformHop", checked)}
-          />
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.pixelPet.reactToCodingMood")}
-          description={t("settings.pixelPet.reactToCodingMoodDesc")}
-        >
-          <Switch
-            checked={pixelPetConfig.behavior.reactToCodingMood}
-            onChange={(checked) => updateBehavior("reactToCodingMood", checked)}
-          />
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.pixelPet.enableRandomEvents")}
-          description={t("settings.pixelPet.enableRandomEventsDesc")}
-        >
-          <Switch
-            checked={pixelPetConfig.behavior.enableRandomEvents}
-            onChange={(checked) => updateBehavior("enableRandomEvents", checked)}
-          />
         </SettingRow>
       </SettingsSection>
 
@@ -449,18 +436,28 @@ export function PixelPetSettingsPage() {
             <Button
               type="primary"
               icon={<CheckOutlined />}
-              onClick={handleApplyJson}
+              loading={busy}
+              onClick={() => void handleApplyJson()}
             >
-              {t("settings.pixelPet.applyJson")}
+              {t(filePath ? "settings.pixelPet.saveFile" : "settings.pixelPet.applyJson")}
             </Button>
             <Button
               icon={<CopyOutlined />}
+              disabled={busy}
               onClick={() => void handleCopyAiPrompt()}
             >
               {t("settings.pixelPet.copyAiPrompt")}
             </Button>
+            <Button disabled={busy} onClick={() => void handleExport()}>
+              {t("settings.pixelPet.exportFile")}
+            </Button>
+            <Button disabled={busy} onClick={() => void handleLoad()}>
+              {t("settings.pixelPet.loadFile")}
+            </Button>
             <Button
+              disabled={busy}
               onClick={() => {
+                dirtyRef.current = true;
                 setJsonDraft(JSON.stringify(DEFAULT_PIXEL_PET_CONFIG, null, 2));
                 setJsonError(null);
               }}
@@ -468,10 +465,23 @@ export function PixelPetSettingsPage() {
               {t("settings.pixelPet.loadDefaultJson")}
             </Button>
           </div>
+          {filePath ? (
+            <div className="space-y-2">
+              <div className="break-all text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{filePath}</div>
+              <Alert type={fileError ? "warning" : "success"} showIcon message={t(fileError ? "settings.pixelPet.fileInvalid" : "settings.pixelPet.fileWatching")} description={fileError || undefined} />
+              <Button size="small" disabled={busy} onClick={() => { setFilePath(null); resetDraft(pixelPetConfig, null); }}>{t("settings.pixelPet.unlinkFile")}</Button>
+            </div>
+          ) : <div className="text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>{t("settings.pixelPet.exportBeforeAi")}</div>}
+          {draftChangedExternally ? <Alert type="warning" showIcon message={t("settings.pixelPet.draftPreserved")} action={<Button size="small" disabled={busy} onClick={() => resetDraft(pixelPetConfig, useAppStore.getState().pixelPetFileSnapshot)}>{t("settings.pixelPet.reloadDraft")}</Button>} /> : null}
           {jsonError ? <Alert type="error" showIcon message={jsonError} /> : null}
           <Input.TextArea
             value={jsonDraft}
-            onChange={(e) => setJsonDraft(e.target.value)}
+            disabled={busy}
+            onChange={(e) => {
+              dirtyRef.current = e.target.value !== baseJsonRef.current;
+              setJsonDraft(e.target.value);
+              setJsonError(null);
+            }}
             rows={12}
             spellCheck={false}
             className="font-mono text-[12px]"

@@ -166,11 +166,11 @@ export function createInitialPetSimulation(
     platformId: platform.id,
     groundY: platform.groundY,
     platformStayMs: 18_000,
-    action: "walk",
-    actionTimerMs: 4200,
+    action: "idle",
+    actionTimerMs: 6000,
     idleAccumulatedMs: 0,
     animElapsedMs: 0,
-    clip: "walk",
+    clip: "idle",
     clipElapsedMs: 0,
     transitionMs: 0,
     pendingFacing: null,
@@ -316,7 +316,7 @@ export function setPetWalkTarget(
     clipElapsedMs: 0,
     transitionMs: facing !== state.facing ? 120 : 0,
     motionElapsedMs: 0,
-    action: Math.abs(targetX - state.x) > 120 ? "run" : "walk",
+    action: "walk",
     actionTimerMs: 5000,
     idleAccumulatedMs: 0,
     paused: false,
@@ -484,7 +484,7 @@ function advancePetBehavior(
     next.lastMood = effectiveMood;
     if (!next.paused) {
       if (effectiveMood === "working") {
-        next.action = "run";
+        next.action = "walk";
         next.actionTimerMs = 3200;
         next.idleAccumulatedMs = 0;
         next.bubble = {
@@ -513,7 +513,7 @@ function advancePetBehavior(
       next.y = 0;
       next.vy = 0;
       if (next.action === "jump" || next.action === "celebrate") {
-        next.action = next.paused ? "sleep" : effectiveMood === "working" ? "run" : "walk";
+        next.action = next.paused ? "sleep" : "walk";
         next.actionTimerMs = 3000;
       }
     }
@@ -538,7 +538,7 @@ function advancePetBehavior(
     const dir: 1 | -1 = delta >= 0 ? 1 : -1;
     const speed = Math.abs(delta) > 90 ? runSpeed : walkSpeed;
     next.facing = dir;
-    next.action = speed === runSpeed ? "run" : "walk";
+    next.action = "walk";
     next.x = Math.max(minX, Math.min(maxX, next.x + dir * speed * dtSec));
     return next;
   }
@@ -588,7 +588,7 @@ function advancePetBehavior(
 
       const dir: 1 | -1 = dist >= 0 ? 1 : -1;
       next.facing = dir;
-      next.action = "run";
+      next.action = "walk";
       next.x = Math.max(minX, Math.min(maxX, next.x + dir * runSpeed * dtSec));
       next.encounter = enc;
       return next;
@@ -640,8 +640,7 @@ function advancePetBehavior(
 
   if (next.actionTimerMs <= 0 && next.y === 0) {
     if (effectiveMood === "working") {
-      const shouldRun = random() < 0.65;
-      next.action = shouldRun ? "run" : "walk";
+      next.action = "walk";
       next.actionTimerMs = 2400 + Math.floor(random() * 2600);
       if (random() < 0.25) {
         next.facing = next.facing === 1 ? -1 : 1;
@@ -653,32 +652,38 @@ function advancePetBehavior(
         };
       }
     } else if (next.action === "walk" || next.action === "run" || next.action === "alert") {
-      if (random() < 0.55) {
+      if (random() < 0.78) {
         next.action = "idle";
-        next.actionTimerMs = 1500 + Math.floor(random() * 2200);
+        next.actionTimerMs = 5500 + Math.floor(random() * 4500);
       } else {
         if (random() < 0.35) {
           next.facing = next.facing === 1 ? -1 : 1;
         }
         next.action = "walk";
-        next.actionTimerMs = 2800 + Math.floor(random() * 3400);
+        next.actionTimerMs = 2200 + Math.floor(random() * 2000);
       }
     } else if (next.action === "idle") {
-      if (next.idleAccumulatedMs >= sleepAfterIdleMs && random() < 0.6) {
+      if (next.idleAccumulatedMs >= sleepAfterIdleMs && random() < 0.65) {
         next.action = "sleep";
-        next.actionTimerMs = 5000 + Math.floor(random() * 4000);
+        next.actionTimerMs = 6000 + Math.floor(random() * 4500);
         next.bubble = { text: "Zzz", remainingMs: 2200 };
+      } else if (random() < 0.45) {
+        if (random() < 0.35) {
+          next.facing = next.facing === 1 ? -1 : 1;
+        }
+        next.action = "idle";
+        next.actionTimerMs = 4500 + Math.floor(random() * 3500);
       } else {
         if (random() < 0.4) {
           next.facing = next.facing === 1 ? -1 : 1;
         }
         next.action = "walk";
-        next.actionTimerMs = 3000 + Math.floor(random() * 3800);
+        next.actionTimerMs = 2400 + Math.floor(random() * 2200);
       }
     } else if (next.action === "sleep") {
-      next.action = "walk";
+      next.action = "idle";
       next.idleAccumulatedMs = 0;
-      next.actionTimerMs = 3200 + Math.floor(random() * 3200);
+      next.actionTimerMs = 4500 + Math.floor(random() * 3000);
     }
   }
 

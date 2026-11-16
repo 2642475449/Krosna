@@ -6,7 +6,7 @@ import {
 } from "./pixelPetConfig";
 
 const DEFAULT_FRAME_DURATION_MS: Record<PetActionState, number> = {
-  idle: 520,
+  idle: 440,
   walk: 145,
   run: 95,
   jump: 200,
@@ -37,29 +37,30 @@ export function getPetSpriteFrame(
   animElapsedMs: number,
   config: PixelPetConfig = DEFAULT_PIXEL_PET_CONFIG,
 ): PixelSpriteFrame {
-  const fallback: PetActionState = action === "fall" || action === "wallJump" ? "jump"
-    : action === "climb" ? "walk" : "idle";
-  const frames = config.clips?.[action]?.length ? config.clips[action]!
-    : config.frames[action as PetActionState] ?? config.frames[fallback] ?? config.frames.idle;
+  const normalizedAction: PetClipId = action === "run" ? "walk" : action;
+  const fallback: PetActionState = normalizedAction === "fall" || normalizedAction === "wallJump" ? "jump"
+    : normalizedAction === "climb" ? "walk" : "idle";
+  const frames = config.clips?.[normalizedAction]?.length ? config.clips[normalizedAction]!
+    : config.frames[normalizedAction as PetActionState] ?? config.frames[fallback] ?? config.frames.idle;
   if (!frames || frames.length === 0) {
     return DEFAULT_PIXEL_PET_CONFIG.frames.idle[0];
   }
   if (frames.length <= 1) {
     return frames[0];
   }
-  const duration = config.frameDurationsMs?.[action]
-    ?? DEFAULT_FRAME_DURATION_MS[action as PetActionState] ?? 120;
+  const duration = config.frameDurationsMs?.[normalizedAction]
+    ?? DEFAULT_FRAME_DURATION_MS[normalizedAction as PetActionState] ?? 120;
   const safeDuration = Number.isFinite(duration) ? Math.max(40, duration) : 120;
   const elapsed = Number.isFinite(animElapsedMs) ? Math.max(0, animElapsedMs) : 0;
-  const weights = action === "idle" ? [3.5, 0.6, 2.2, 0.3]
-    : action === "land" ? [0.65, 1.35] : action === "celebrate" ? [1.4, 0.6, 0.7, 1.3] : [1];
+  const weights = normalizedAction === "idle" ? [1.15, 0.85, 1.15, 0.85]
+    : normalizedAction === "land" ? [0.65, 1.35] : normalizedAction === "celebrate" ? [1.4, 0.6, 0.7, 1.3] : [1];
   const durations = frames.map((_, i) => {
-    const timing = config.frameTimingsMs?.[action]?.[i];
+    const timing = config.frameTimingsMs?.[normalizedAction]?.[i];
     return typeof timing === "number" && Number.isFinite(timing) && timing >= 40
       ? timing : safeDuration * weights[i % weights.length];
   });
   const total = durations.reduce((sum, value) => sum + value, 0);
-  const once = ["crouch", "land", "turn", "stop", "edgeLook", "jump", "fall"].includes(action);
+  const once = ["crouch", "land", "turn", "stop", "edgeLook", "jump", "fall"].includes(normalizedAction);
   let cursor = once ? Math.min(elapsed, total - 0.001) : elapsed % total;
   let index = 0;
   while (index < frames.length - 1 && cursor >= durations[index]) {

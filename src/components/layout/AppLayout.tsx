@@ -15,7 +15,8 @@ import AuxiliaryDock from "./AuxiliaryDock";
 import TabBar from "@/components/TabBar";
 import HomePage from "@/pages/home";
 import { WorkflowIllustration } from "@/components/ui/WorkflowIllustration";
-import { SettingsPanelSkeleton } from "@/components/settings/SettingsPanelSkeleton";
+import { WorkspaceSettingsView } from "./WorkspaceSettingsView";
+import { isWorkspaceSettingsVisible } from "@/lib/workspaceSettings";
 import { TerminalHistoryView } from "@/components/TerminalHistoryView";
 import { initializeRecoverableWindowContext } from "@/store/slices/workspaceRecovery";
 import { useWorkspaceSessionRestore } from "@/hooks/useWorkspaceSessionRestore";
@@ -106,7 +107,6 @@ const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
 const STATUS_AGENT_IDS = getAgentIdsWithCapability("statusEvents");
 const MIN_SPLIT_PANE_SIZE = 320;
 
-const SettingsPanel = lazy(() => import("@/components/SettingsPanel"));
 const ScheduledTasksPanel = lazy(() => import("@/components/ScheduledTasksPanel"));
 const SkillMarketplacePage = lazy(() => import("@/components/settings/SkillMarketplacePage"));
 const FileTabView = lazy(() => import("@/components/FileTabView"));
@@ -193,6 +193,7 @@ const INITIAL_WORKER_VOICE_STATE: WorkerVoiceStatePayload = {
 };
 
 function WorkspacePane({ paneId }: { paneId: string }) {
+  const settingsVisible = useAppStore(isWorkspaceSettingsVisible);
   const pane = useAppStore((state) => state.panesById[paneId]);
   const tabsById = useAppStore((state) => state.tabsById);
   const sessions = useAppStore((state) => state.sessions);
@@ -236,6 +237,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
             {pane.tabIds.map((tabId) => {
               const tab = tabsById[tabId];
               const isSettings = tabId === SETTINGS_ID || tab?.kind === "settings";
+              if (isSettings) return null;
               const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
               const isSkillMarket = tab?.kind === "skill-market";
               const isFile = tab?.kind === "file";
@@ -252,22 +254,20 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                   data-active={tabId === pane.activeTabId ? "true" : "false"}
                 >
                   <ErrorBoundary key={`${tab?.kind}:${tab?.resourceId}`} scope={`tab:${tabId}`} onClose={() => closeTab(tabId)}>
-                  <Suspense fallback={isSettings ? <SettingsPanelSkeleton /> : <WorkspaceContentFallback />}>
-                    {isSettings ? (
-                      <SettingsPanel />
-                    ) : isScheduledTasks ? (
+                  <Suspense fallback={<WorkspaceContentFallback />}>
+                    {isScheduledTasks ? (
                       <ScheduledTasksPanel />
                     ) : isSkillMarket ? (
-                      <SkillMarketplacePage isActive={tabId === pane.activeTabId} />
+                      <SkillMarketplacePage isActive={!settingsVisible && tabId === pane.activeTabId} />
                     ) : isFile && currentProject ? (
                       <FileTabView
                         tabId={tabId}
                         projectPath={currentProject.path}
                         path={tab.resourceId}
-                        isActive={tabId === pane.activeTabId}
+                        isActive={!settingsVisible && tabId === pane.activeTabId}
                       />
                     ) : isDiff ? (
-                      <GitDiffTabView tabId={tabId} isActive={tabId === pane.activeTabId} />
+                      <GitDiffTabView tabId={tabId} isActive={!settingsVisible && tabId === pane.activeTabId} />
                     // 重启期间保留终端与输出监听，避免新进程启动时丢失输出。
                     ) : session && (session.active || session.status === "starting" || terminalExitCodes[tabId] !== undefined) ? (
                       <Terminal
@@ -584,10 +584,7 @@ function AppLayout() {
     .sort()
     .join("\u0000");
   const workspaceLayoutKey = JSON.stringify(workspaceLayout.root);
-  const settingsVisible = Object.values(panesById).some((pane) => {
-    const activeTabId = pane.activeTabId;
-    return activeTabId === SETTINGS_ID || tabsById[activeTabId ?? ""]?.kind === "settings";
-  });
+  const settingsVisible = useAppStore(isWorkspaceSettingsVisible);
   const restoreAttemptedLastProjectPathRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1854,6 +1851,7 @@ function AppLayout() {
           section={activeSidebarSection}
         />
         <Content className="app-main-content flex flex-col" data-sidebar-attached={!sidebarCollapsed ? "true" : undefined}>
+          <WorkspaceSettingsView>
           <div className="app-main-stage flex min-h-0 flex-1 flex-row">
             <div className="app-main-stage-body relative min-h-0 min-w-0 flex-1">
               <div className="h-full min-h-0">
@@ -1893,6 +1891,7 @@ function AppLayout() {
             />
           </div>
           {windowMode === "project" && currentProject ? <BottomRunnerPanel /> : null}
+          </WorkspaceSettingsView>
         </Content>
       </Layout>
       <PixelPetTrack />

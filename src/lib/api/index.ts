@@ -35,7 +35,7 @@ export { resolveTerminalLink } from "./terminalLinks";
 export type { TerminalLinkResolution, TerminalLinkTarget } from "./terminalLinks";
 import { getAsrLanguageContext, type AsrLanguage } from "@/lib/asrLanguage";
 import type { MimoAuthMode } from "@/lib/mimoAsr";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
@@ -937,6 +937,15 @@ export async function readProjectFile(
     projectPath,
     path,
   });
+}
+
+export async function selectPixelPetJsonFile(): Promise<string | null> {
+  const path = await openDialog({ multiple: false, filters: [{ name: "JSON", extensions: ["json"] }] });
+  return typeof path === "string" ? path : null;
+}
+
+export function selectPixelPetExportPath(defaultPath: string): Promise<string | null> {
+  return saveDialog({ defaultPath, filters: [{ name: "JSON", extensions: ["json"] }] });
 }
 
 export async function writeProjectFile(

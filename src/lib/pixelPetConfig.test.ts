@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPixelPetAiPrompt,
-  DEFAULT_PIXEL_PET_CONFIG,
   parsePixelPetConfigJson,
   PIXEL_PET_PRESETS,
 } from "./pixelPetConfig";
@@ -52,10 +51,17 @@ describe("pixelPetConfig", () => {
     ).toBe(false);
   });
 
-  it("builds an AI prompt containing the schema", () => {
-    const prompt = buildPixelPetAiPrompt(DEFAULT_PIXEL_PET_CONFIG);
-    expect(prompt).toContain("16x16 pixel-art");
-    expect(prompt).toContain('"palette"');
-    expect(prompt).toContain('"behavior"');
+  it("references the files without embedding any preset's full animation data", () => {
+    for (const preset of PIXEL_PET_PRESETS) {
+      const prompt = buildPixelPetAiPrompt(preset, "D:/我的角色/pet.json");
+      expect(prompt).toContain("D:/我的角色/pet.json");
+      expect(prompt).toContain("pet.json.guide.md");
+      expect(prompt).toContain("全新角色");
+      expect(prompt).toContain("改造当前角色");
+      expect(prompt).not.toContain(preset.frames.idle[0].join("\n"));
+      expect(prompt).not.toContain('"frames":');
+      expect(prompt).not.toContain("16x16");
+      expect(prompt.length).toBeLessThan(1000);
+    }
   });
 });
