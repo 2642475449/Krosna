@@ -6,6 +6,8 @@ import { useAppStore } from "@/store";
 import i18n from "@/i18n";
 import { usePixelPetFileSync } from "@/hooks/usePixelPetFileSync";
 import { PixelPetSettingsPage } from "./PixelPetSettingsPage";
+import { PIXEL_PET_PRESETS, type PixelPetConfig } from "@/lib/pixelPetConfig";
+import * as sprites from "@/lib/pixelPetSprites";
 
 const mocks = vi.hoisted(() => ({
   read: vi.fn(), write: vi.fn(), choose: vi.fn(), save: vi.fn(), export: vi.fn(), guide: vi.fn(),
@@ -155,4 +157,58 @@ it("rejects a previous file's pending read after a new file is linked", async ()
   expect(useAppStore.getState().pixelPetConfig.name).toBe("second");
   await act(async () => resolve(snapshot("late first")));
   expect(useAppStore.getState().pixelPetConfig.name).toBe("second");
+});
+
+it("fits thumbnails and resizes the live stage on character/scale changes while keeping boosted jumps inside", async () => {
+  await act(async () => root.render(null));
+  let nextFrame!: FrameRequestCallback;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { nextFrame = callback; return 1; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const ctx = { clearRect: vi.fn(), fillRect: vi.fn(), setTransform: vi.fn() } as unknown as CanvasRenderingContext2D;
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx);
+  const draw = vi.spyOn(sprites, "drawPixelPetFrame").mockImplementation(() => {});
+  vi.spyOn(sprites, "drawPixelBubble").mockImplementation(() => {});
+  vi.spyOn(sprites, "drawPetEncounter").mockImplementation(() => {});
+  const daimao = PIXEL_PET_PRESETS.find((preset) => preset.id === "daimao")!;
+  useAppStore.setState({ pixelPetConfig: daimao });
+  await act(async () => root.render(createElement(Content)));
+
+  const canvases = [...host.querySelectorAll("canvas")];
+  expect(canvases).toHaveLength(PIXEL_PET_PRESETS.length + 1);
+  for (const [ctxArg, frame, x, y, , scale] of draw.mock.calls) {
+    expect(ctxArg).toBe(ctx);
+    expect(x).toBeGreaterThanOrEqual(2);
+    expect(y).toBeGreaterThanOrEqual(2);
+    expect(x + frame[0].length * scale!).toBeLessThanOrEqual(42);
+    expect(y + frame.length * scale!).toBeLessThanOrEqual(42);
+  }
+
+  const stage = canvases[0];
+  const initialHeight = stage.height;
+  const large: PixelPetConfig = {
+    ...daimao, id: "large", pixelSize: 4, submergeRows: 12,
+    clips: { jump: [Array(32).fill("B".repeat(32))] },
+  };
+  await act(async () => useAppStore.setState({ pixelPetConfig: large }));
+  let now = performance.now();
+  await act(async () => nextFrame(now += 50));
+  expect(stage.height).toBeGreaterThan(initialHeight);
+  draw.mockClear();
+  for (let i = 0; i < 40; i++) {
+    await act(async () => { stage.parentElement!.click(); nextFrame(now += 50); });
+  }
+  for (const [, frame, x, y, , scale, , waterline] of draw.mock.calls) {
+    expect(frame).toHaveLength(32);
+    expect(x).toBeGreaterThanOrEqual(0);
+    expect(x + frame[0].length * scale!).toBeLessThanOrEqual(stage.width);
+    expect(y).toBeGreaterThanOrEqual(24);
+    expect(y + frame.length * scale!).toBeLessThanOrEqual(stage.height - 14);
+    expect(waterline).toBeUndefined();
+  }
+  expect(draw.mock.calls.some((call) => call[3] === 24)).toBe(true);
+
+  await act(async () => useAppStore.setState({ pixelPetConfig: { ...large, pixelSize: 1 } }));
+  await act(async () => nextFrame(now += 50));
+  expect(stage.height).toBeLessThan(initialHeight + 88);
+  expect(draw.mock.lastCall![5]).toBe(1);
 });

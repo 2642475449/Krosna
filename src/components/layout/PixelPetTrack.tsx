@@ -20,7 +20,7 @@ import {
   getPetSpriteFrame,
 } from "@/lib/pixelPetSprites";
 
-function collectPetPlatforms(
+export function collectPetPlatforms(
   viewportWidth: number,
   viewportHeight: number,
   spriteHeight: number,
@@ -43,12 +43,19 @@ function collectPetPlatforms(
   const titleBlankEl = document.querySelector<HTMLElement>('[data-pet-surface="titlebar-blank"]');
   if (titleBlankEl) {
     const rect = titleBlankEl.getBoundingClientRect();
-    if (rect.width >= 96 && rect.bottom >= spriteHeight) {
+    // The visible workspace edge sits below the titlebar, after its layout
+    // padding. Follow that edge instead of leaving the pet above the gap.
+    const workspaceEl = document.querySelector<HTMLElement>('[data-pet-surface="workspace"]');
+    const workspaceRect = workspaceEl?.getBoundingClientRect();
+    const groundY = workspaceEl && workspaceRect && workspaceRect.width > 0
+      ? workspaceRect.top + (parseFloat(getComputedStyle(workspaceEl).paddingTop) || 0)
+      : rect.bottom;
+    if (rect.width >= 96 && groundY >= spriteHeight) {
       platforms.push({
         id: "titlebar-blank",
         minX: Math.round(rect.left + 8),
         maxX: Math.round(rect.right - 8),
-        groundY: Math.round(rect.bottom),
+        groundY: Math.round(groundY),
       });
     }
   }

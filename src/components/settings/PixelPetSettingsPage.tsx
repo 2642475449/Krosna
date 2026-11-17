@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CopyOutlined, ReloadOutlined, CheckOutlined } from "@ant-design/icons";
 import { Alert, Button, Input, Radio, Switch, message } from "antd";
 import { useTranslation } from "react-i18next";
@@ -22,9 +22,13 @@ import {
   drawPetEncounter,
   drawPixelBubble,
   drawPixelPetFrame,
-  getPetRenderedDimensions,
   getPetSpriteFrame,
 } from "@/lib/pixelPetSprites";
+import {
+  getPixelPetPreviewStageLayout,
+  getPixelPetThumbnailLayout,
+  preparePixelPetPreview,
+} from "@/lib/pixelPetPreview";
 
 import { readProjectFile, selectPixelPetExportPath, selectPixelPetJsonFile, writeProjectFile } from "@/lib/api";
 import { parsePixelPetFile, pixelPetFileLocation, type PixelPetFileSnapshot } from "@/lib/pixelPetFile";
@@ -32,6 +36,8 @@ import { ensurePixelPetFileGuide, exportPixelPetFile } from "@/lib/pixelPetFileI
 
 function PixelPresetThumbnail({ config }: { config: PixelPetConfig }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const preview = useMemo(() => preparePixelPetPreview(config), [config]);
+  const layout = useMemo(() => getPixelPetThumbnailLayout(preview), [preview]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,25 +45,20 @@ function PixelPresetThumbnail({ config }: { config: PixelPetConfig }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, 44, 32);
-    const frame = config.frames.idle[0] ?? config.frames.walk[0];
+    ctx.clearRect(0, 0, layout.width, layout.height);
+    const frame = preview.frames.idle[0] ?? preview.frames.walk[0];
     if (frame) {
-      const cols = frame[0]?.length ?? 16;
-      const rows = frame.length;
-      const pixelSize = cols > 20 || rows > 20 ? 1 : 2;
-      const offsetX = Math.max(0, Math.floor((44 - cols * pixelSize) / 2));
-      const offsetY = Math.max(0, Math.floor((32 - rows * pixelSize) / 2));
-      drawPixelPetFrame(ctx, frame, offsetX, offsetY, 1, pixelSize, config.palette);
+      drawPixelPetFrame(ctx, frame, layout.x, layout.y, 1, layout.pixelSize, preview.palette);
     }
-  }, [config]);
+  }, [preview, layout]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={44}
-      height={32}
-      className="h-8 w-11 shrink-0"
-      style={{ imageRendering: "pixelated" }}
+      width={layout.width}
+      height={layout.height}
+      className="shrink-0"
+      style={{ imageRendering: "pixelated", width: layout.width, height: layout.height }}
     />
   );
 }
@@ -66,8 +67,9 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const configRef = useRef(config);
-  configRef.current = config;
+  const preview = useMemo(() => preparePixelPetPreview(config), [config]);
+  const configRef = useRef(preview);
+  configRef.current = preview;
   const simRef = useRef<PetSimulationState>(createInitialPetSimulation(420));
   const widthRef = useRef(420);
 
@@ -76,15 +78,19 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    const stageHeight = 76;
+    let layout = getPixelPetPreviewStageLayout(configRef.current, widthRef.current);
+    let lastConfig = configRef.current;
     const syncSize = () => {
       const width = Math.max(200, Math.floor(container.getBoundingClientRect().width));
       const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
       widthRef.current = width;
+      lastConfig = configRef.current;
+      layout = getPixelPetPreviewStageLayout(lastConfig, width);
       canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(stageHeight * dpr);
+      canvas.height = Math.floor(layout.height * dpr);
       canvas.style.width = `${width}px`;
-      canvas.style.height = `${stageHeight}px`;
+      canvas.style.height = `${layout.height}px`;
+      container.style.height = `${layout.height + 2}px`;
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -103,7 +109,8 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
       const dtMs = now - lastTs;
       lastTs = now;
       const activeConfig = configRef.current;
-      const { width: spriteWidth, height: spriteHeight } = getPetRenderedDimensions(activeConfig);
+      if (lastConfig !== activeConfig) syncSize();
+      const { spriteWidth, spriteHeight, pixelSize, groundY, topPadding } = layout;
 
       simRef.current = stepPetSimulation(
         simRef.current,
@@ -118,9 +125,9 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
 
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        ctx.clearRect(0, 0, widthRef.current, stageHeight);
+        ctx.clearRect(0, 0, widthRef.current, layout.height);
         // Subtle ground line
-        const groundLineY = stageHeight - 14;
+        const groundLineY = groundY;
         ctx.fillStyle = "rgba(128, 128, 128, 0.25)";
         ctx.fillRect(12, groundLineY, widthRef.current - 24, 1);
 
@@ -128,22 +135,22 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         if (sim.encounter) {
           drawPetEncounter(ctx, sim.encounter, groundLineY, sim.animElapsedMs);
         }
-        const submergePx =
-          (activeConfig.submergeRows ?? 0) * Math.max(1, Math.round(activeConfig.pixelSize || 2));
-        const top = groundLineY - spriteHeight + submergePx - sim.y;
+        // Repeated clicks can boost a jump beyond its nominal arc. Keep the
+        // complete sprite inside the preview even then, and after a resize.
+        const top = Math.max(topPadding, groundLineY - spriteHeight - sim.y);
+        const left = Math.max(0, Math.min(widthRef.current - spriteWidth, sim.x));
         const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, activeConfig);
         drawPixelPetFrame(
           ctx,
           frame,
-          sim.x,
+          left,
           top,
           sim.facing,
-          activeConfig.pixelSize,
+          pixelSize,
           activeConfig.palette,
-          submergePx > 0 ? groundLineY : undefined,
         );
         if (sim.bubble) {
-          drawPixelBubble(ctx, sim.bubble.text, sim.x + spriteWidth / 2, top);
+          drawPixelBubble(ctx, sim.bubble.text, left + spriteWidth / 2, top);
         }
       }
 
@@ -170,8 +177,9 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         );
       }}
       title={t("settings.pixelPet.previewHint")}
-      className="relative h-[76px] w-full cursor-pointer overflow-hidden rounded-lg border"
+      className="relative w-full cursor-pointer overflow-hidden rounded-lg border"
       style={{
+        minHeight: 76,
         borderColor: "var(--cs-border-sidebar)",
         background: "color-mix(in srgb, var(--cs-bg-card) 75%, transparent)",
       }}

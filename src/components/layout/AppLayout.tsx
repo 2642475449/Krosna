@@ -1881,7 +1881,7 @@ function AppLayout() {
           collapsed={sidebarCollapsed}
           section={activeSidebarSection}
         />
-        <Content className="app-main-content flex flex-col" data-sidebar-attached={!sidebarCollapsed ? "true" : undefined}>
+        <Content className="app-main-content flex flex-col" data-pet-surface="workspace" data-sidebar-attached={!sidebarCollapsed ? "true" : undefined}>
           <WorkspaceSettingsView>
           <div
             className="flex min-h-0 flex-1 flex-col"
