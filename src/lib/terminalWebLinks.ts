@@ -17,7 +17,9 @@ export function parseTerminalFileUrl(uri: string): string | null {
     // 查询和片段不属于文件路径；文件名内的 ?/# 必须使用百分号编码。
     if (url.protocol !== "file:" || url.username || url.password || url.port || uri.includes("?") || uri.includes("#")) return null;
     const pathname = decodeURIComponent(url.pathname);
-    if (/[\u0000-\u001f\u007f]/.test(pathname)) return null;
+    // U+FFFD 可能来自丢失的路径字节，不能把疑似残缺的 OSC 8 目标当作真实文件打开。
+    // 解码后检查也覆盖百分号编码和 URL 构造器替换的孤立代理项。
+    if (/[\u0000-\u001f\u007f\ufffd]/.test(pathname) || uri.includes("\ufffd")) return null;
     if (url.hostname) return `//${url.hostname}${pathname}`;
     return /^\/[a-zA-Z]:\//.test(pathname) ? pathname.slice(1) : pathname;
   } catch {

@@ -100,6 +100,7 @@ import { isSessionVisibleInAuxiliaryDock } from "@/store/auxiliaryDock";
 import { ApplicationUpdateController } from "@/components/updater/ApplicationUpdateController";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import { startScheduledTaskSync } from "@/store/slices/scheduledTasks";
+import { useRemoteWorkspaceStore } from "@/store/slices/remoteWorkspace";
 
 const { Content } = Layout;
 const SETTINGS_ID = "__settings__";
@@ -112,7 +113,8 @@ const SkillMarketplacePage = lazy(() => import("@/components/settings/SkillMarke
 const FileTabView = lazy(() => import("@/components/FileTabView"));
 const GitDiffTabView = lazy(() => import("@/components/GitDiffTabView"));
 const Terminal = lazy(() => import("@/components/Terminal"));
-const RemoteWorkspacePanel = lazy(() => import("@/components/remote/RemoteWorkspacePanel").then((module) => ({ default: module.RemoteWorkspacePanel })));
+const RemoteWorkbenchMain = lazy(() => import("@/components/remote/RemoteWorkbenchMain").then((module) => ({ default: module.RemoteWorkbenchMain })));
+const RemoteWorkspaceModals = lazy(() => import("@/components/remote/RemoteWorkspaceModals").then((module) => ({ default: module.RemoteWorkspaceModals })));
 
 function WorkspaceContentFallback() {
   return (
@@ -585,6 +587,13 @@ function AppLayout() {
     .join("\u0000");
   const workspaceLayoutKey = JSON.stringify(workspaceLayout.root);
   const settingsVisible = useAppStore(isWorkspaceSettingsVisible);
+  const remoteWorkspaceVisible = useRemoteWorkspaceStore((state) => state.visible);
+  const remoteActive = remoteWorkspaceVisible && !settingsVisible;
+  const [remoteMounted, setRemoteMounted] = useState(remoteWorkspaceVisible);
+  const showRemoteWorkbench = remoteMounted || remoteWorkspaceVisible;
+  useEffect(() => {
+    if (remoteWorkspaceVisible) setRemoteMounted(true);
+  }, [remoteWorkspaceVisible]);
   const restoreAttemptedLastProjectPathRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1113,19 +1122,41 @@ function AppLayout() {
   }, [voiceShortcut, shortcutRecordingAction]);
 
   useKeyboardShortcuts({
-    onNewSession: handleNewSession,
+    onNewSession: () => {
+      if (remoteActive) {
+        const remote = useRemoteWorkspaceStore.getState();
+        const hasConnected = remote.hosts.some((item) => remote.connections[item.id]?.state === "connected");
+        if (hasConnected) {
+          remote.setNewSessionModalOpen(true);
+        } else if (remote.selectedHostId) {
+          remote.openHostOverview(remote.selectedHostId);
+        } else {
+          remote.setError("editor", null);
+          remote.setHostEditor(null);
+        }
+        return;
+      }
+      handleNewSession();
+    },
     onToggleSidebar: handleToggleSidebar,
     onRequestCloseRunnerTab: () => {
-      if (!currentProject) return;
+      if (remoteActive || !currentProject) return;
       const runner = useBottomRunnerStore.getState();
       const tab = runner.tabsByProject[currentProject.path]?.find((item) => item.id === runner.activeTabIdByProject[currentProject.path]);
       if (tab) void closeRunnerTab(tab).catch(console.error);
     },
     onToggleBottomRunner: () => {
-      if (windowMode === "project" && currentProject) useBottomRunnerStore.getState().toggleOpen();
+      if (!remoteActive && windowMode === "project" && currentProject) useBottomRunnerStore.getState().toggleOpen();
     },
     onGlobalTextSearch: handleOpenGlobalTextSearch,
     onRequestCloseTab: (tabId) => {
+      if (remoteActive) {
+        const remote = useRemoteWorkspaceStore.getState();
+        if (remote.activeTab) {
+          remote.closeRemoteTab(remote.activeTab.hostId, remote.activeTab.sessionId);
+        }
+        return;
+      }
       void handleRequestCloseTab(tabId);
     },
     onSelectAllExplorer: handleSelectAllExplorer,
@@ -1852,6 +1883,11 @@ function AppLayout() {
         />
         <Content className="app-main-content flex flex-col" data-sidebar-attached={!sidebarCollapsed ? "true" : undefined}>
           <WorkspaceSettingsView>
+          <div
+            className="flex min-h-0 flex-1 flex-col"
+            data-local-workbench
+            style={{ display: remoteWorkspaceVisible ? "none" : undefined }}
+          >
           <div className="app-main-stage flex min-h-0 flex-1 flex-row">
             <div className="app-main-stage-body relative min-h-0 min-w-0 flex-1">
               <div className="h-full min-h-0">
@@ -1883,7 +1919,7 @@ function AppLayout() {
               />
             ) : null}
             <VoiceTrigger
-              visible={voiceTriggerVisible && !settingsVisible}
+              visible={voiceTriggerVisible && !settingsVisible && !remoteWorkspaceVisible}
               onClick={handleVoiceTrigger}
               onHide={handleHideVoiceTrigger}
               shortcutLabel={voiceShortcut}
@@ -1891,6 +1927,20 @@ function AppLayout() {
             />
           </div>
           {windowMode === "project" && currentProject ? <BottomRunnerPanel /> : null}
+          </div>
+          {showRemoteWorkbench ? (
+            <div
+              className="flex min-h-0 flex-1 flex-col"
+              data-remote-workbench
+              style={{ display: remoteWorkspaceVisible ? undefined : "none" }}
+            >
+              <ErrorBoundary scope="workspace:remote" onClose={() => useRemoteWorkspaceStore.getState().setVisible(false)}>
+                <Suspense fallback={<WorkspaceContentFallback />}>
+                  <RemoteWorkbenchMain visible={remoteActive} />
+                </Suspense>
+              </ErrorBoundary>
+            </div>
+          ) : null}
           </WorkspaceSettingsView>
         </Content>
       </Layout>
@@ -1915,7 +1965,7 @@ function AppLayout() {
           )
         }
       />
-      <Suspense fallback={null}><RemoteWorkspacePanel /></Suspense>
+      <Suspense fallback={null}><RemoteWorkspaceModals /></Suspense>
       <GlobalTextSearchDialog
         open={globalTextSearchState.open}
         initialScopePath={globalTextSearchState.scopePath}

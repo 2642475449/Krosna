@@ -3193,6 +3193,8 @@
   },
   "remote": {
     "title": "リモートワークスペース",
+    "overview": "ホスト概要",
+    "backToLocal": "ローカルへ戻る",
     "connect": "接続",
     "disconnect": "切断",
     "cancelConnection": "接続をキャンセル",
@@ -3232,7 +3234,9 @@
     },
     "authentication": {
       "title": "接続と SSH 認証",
-      "help": "以下のターミナルでホストのフィンガープリント確認や、パスワード・鍵のパスフレーズ入力を行ってください。パスワードは接続設定に保存されません。",
+      "help": "以下のターミナルでホストのフィンガープリント確認や、パスワード・鍵のパスフレーズ入力（直接入力と Ctrl+V 貼り付けに対応）を行ってください。パスワードは接続設定に保存されません。",
+      "quickInputPlaceholder": "ここにパスワードや yes を入力・貼り付けし、Enter で送信することもできます",
+      "send": "送信",
       "install": "初回接続時にリモートユーザーのディレクトリへ Krosna ヘルパーを配置します。準備の出力やエラーはここに表示されます。"
     },
     "environment": {
@@ -3261,6 +3265,12 @@
     },
     "sessions": {
       "title": "リモートセッション",
+      "newTitle": "新しいリモートセッション",
+      "hostLabel": "対象ホスト",
+      "connectHostFirst": "リモートセッションを開始する前に Linux ホストへ接続してください。",
+      "openTab": "ターミナルタブを開く",
+      "closeTabHint": "タブを閉じる（リモートタスクは継続）",
+      "reattachHint": "セッションをクリックするとタブでターミナルを開くか再接続します。",
       "directory": "リモートの作業ディレクトリ",
       "directoryPlaceholder": "リモートのパス（例: ~/projects/my-app）",
       "agent": "エージェント",

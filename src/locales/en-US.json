@@ -3193,6 +3193,8 @@
   },
   "remote": {
     "title": "Remote workspace",
+    "overview": "Host overview",
+    "backToLocal": "Local workspace",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "cancelConnection": "Cancel connection",
@@ -3232,7 +3234,9 @@
     },
     "authentication": {
       "title": "Connection and SSH authentication",
-      "help": "Use the terminal below to verify the host fingerprint or enter your password or key passphrase. Passwords are not saved in connection settings.",
+      "help": "Use the terminal below to verify the host fingerprint or enter your password or key passphrase (typing and Ctrl+V paste are supported). Passwords are not saved in connection settings.",
+      "quickInputPlaceholder": "Or type/paste password / yes here and press Enter to send",
+      "send": "Send",
       "install": "The first connection deploys the Krosna helper into the remote user's directory. Setup output and errors appear here."
     },
     "environment": {
@@ -3261,6 +3265,12 @@
     },
     "sessions": {
       "title": "Remote sessions",
+      "newTitle": "New remote session",
+      "hostLabel": "Target host",
+      "connectHostFirst": "Connect a Linux host before starting a remote session.",
+      "openTab": "Open terminal tab",
+      "closeTabHint": "Close tab (keep remote task running)",
+      "reattachHint": "Click any session to open or reattach its terminal in a tab.",
       "directory": "Remote working directory",
       "directoryPlaceholder": "Remote directory, for example ~/projects/my-app",
       "agent": "Agent",

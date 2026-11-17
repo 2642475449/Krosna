@@ -2,8 +2,8 @@ export type RemoteAgentId = "codex" | "claude" | "shell";
 
 export const REMOTE_AGENT_SETUP = {
   codex: {
-    url: "https://learn.chatgpt.com/docs/cli",
-    install: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    url: "https://developers.openai.com/codex/cli",
+    install: "npm install -g @openai/codex",
     login: "codex login --device-auth",
   },
   claude: {
@@ -12,6 +12,22 @@ export const REMOTE_AGENT_SETUP = {
     login: "claude auth login",
   },
 } as const;
+
+export interface RemoteSessionTab {
+  hostId: string;
+  sessionId: string;
+}
+
+export function remoteTabKey(hostId: string, sessionId: string): string {
+  return `${hostId}:${sessionId}`;
+}
+
+export function isSameRemoteTab(
+  a: RemoteSessionTab | null | undefined,
+  b: RemoteSessionTab | null | undefined,
+): boolean {
+  return !!a && !!b && a.hostId === b.hostId && a.sessionId === b.sessionId;
+}
 
 export interface RemoteHost {
   id: string;

@@ -107,6 +107,27 @@ describe("terminal web links", () => {
     expect(leave).toHaveBeenCalledOnce();
   });
 
+  it("rejects corrupted Chinese OSC 8 targets before opening or previewing files", () => {
+    const activate = vi.fn();
+    const hover = vi.fn();
+    const handler = createTerminalWebLinkHandler(vi.fn(), vi.fn(), vi.fn(), { activate, hover });
+    for (const uri of [
+      "file:///E:/project/file/05_伦理审查\ufffd",
+      "file:///E:/project/file/05_伦理审查%EF%BF%BD",
+      "file:///E:/project/file/05_伦理审查\ud800",
+    ]) {
+      expect(parseTerminalFileUrl(uri)).toBeNull();
+      handler.activate(leftClick, uri);
+      handler.hover(leftClick, uri);
+    }
+    expect(activate).not.toHaveBeenCalled();
+    expect(hover).not.toHaveBeenCalled();
+
+    const path = "E:/project/file/05_伦理审查服务/伦理-验收材料-终/4.应用系统测试方案.docx";
+    handler.activate(leftClick, `file:///${path}`);
+    expect(activate).toHaveBeenCalledExactlyOnceWith(path, leftClick);
+  });
+
   it("keeps web links working when local file handling is enabled", () => {
     const webActivate = vi.fn();
     const webHover = vi.fn();

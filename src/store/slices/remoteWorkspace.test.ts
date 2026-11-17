@@ -299,3 +299,51 @@ test("a saved host is not overwritten by an older initial database read", async 
   await loading;
   expect(useRemoteWorkspaceStore.getState().hosts).toHaveLength(2);
 });
+
+test("opening and closing remote tabs preserves remote sessions and switches cleanly", () => {
+  const first = session({ id: "s1", title: "Codex 1" });
+  const second = session({ id: "s2", title: "Claude 2", agentId: "claude" });
+  useRemoteWorkspaceStore.setState({
+    connections: { [host.id]: connected(host.id) },
+    sessionsByHost: { [host.id]: [first, second] },
+  });
+  const store = useRemoteWorkspaceStore.getState();
+  store.openRemoteTab(host.id, "s1");
+  store.openRemoteTab(host.id, "s2");
+  expect(useRemoteWorkspaceStore.getState().openTabs).toEqual([
+    { hostId: host.id, sessionId: "s1" },
+    { hostId: host.id, sessionId: "s2" },
+  ]);
+  expect(useRemoteWorkspaceStore.getState().activeTab).toEqual({ hostId: host.id, sessionId: "s2" });
+
+  store.openHostOverview();
+  expect(useRemoteWorkspaceStore.getState().activeTab).toBeNull();
+
+  store.openRemoteTab(host.id, "s2");
+  store.closeRemoteTab(host.id, "s2");
+  expect(useRemoteWorkspaceStore.getState().openTabs).toEqual([{ hostId: host.id, sessionId: "s1" }]);
+  expect(useRemoteWorkspaceStore.getState().activeTab).toEqual({ hostId: host.id, sessionId: "s1" });
+  expect(useRemoteWorkspaceStore.getState().sessionsByHost[host.id]).toHaveLength(2);
+  expect(api.remoteRequest).not.toHaveBeenCalled();
+
+  store.closeRemoteTab(host.id, "s1");
+  expect(useRemoteWorkspaceStore.getState().openTabs).toEqual([]);
+  expect(useRemoteWorkspaceStore.getState().activeTab).toBeNull();
+});
+
+test("selecting a connected host with open tabs focuses its active tab, while disconnected host shows overview", () => {
+  const otherHost: RemoteHost = { id: "other-host", name: "Other", target: "other@linux" };
+  useRemoteWorkspaceStore.setState({
+    hosts: [host, otherHost],
+    selectedHostId: host.id,
+    connections: { [host.id]: connected(host.id) },
+    openTabs: [{ hostId: host.id, sessionId: "s1" }],
+    activeTab: { hostId: host.id, sessionId: "s1" },
+    selectedSessionByHost: { [host.id]: "s1" },
+  });
+  useRemoteWorkspaceStore.getState().setSelectedHost(otherHost.id);
+  expect(useRemoteWorkspaceStore.getState().activeTab).toBeNull();
+
+  useRemoteWorkspaceStore.getState().setSelectedHost(host.id);
+  expect(useRemoteWorkspaceStore.getState().activeTab).toEqual({ hostId: host.id, sessionId: "s1" });
+});

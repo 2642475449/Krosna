@@ -17,7 +17,7 @@ import type { TerminalCompletionNotificationSlice } from "./slices/terminalCompl
 import type { TerminalCompletionRuntimeSlice } from "./slices/terminalCompletionRuntime";
 import type { VoicePolishSlice } from "./slices/voicePolish";
 import type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
-import type { RemoteAgentId, RemoteConnection, RemoteHost, RemoteHostDraft, RemoteInspection, RemoteSession } from "@/lib/remote";
+import type { RemoteAgentId, RemoteConnection, RemoteHost, RemoteHostDraft, RemoteInspection, RemoteSession, RemoteSessionTab } from "@/lib/remote";
 import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
 
 export interface GitConflictDraft {
@@ -604,6 +604,11 @@ export interface RemoteWorkspaceState {
   inspections: Record<string, RemoteInspection>;
   sessionsByHost: Record<string, RemoteSession[]>;
   selectedSessionByHost: Record<string, string>;
+  openTabs: RemoteSessionTab[];
+  activeTab: RemoteSessionTab | null;
+  hostsCollapsed: boolean;
+  sessionsCollapsed: boolean;
+  newSessionModalOpen: boolean;
   errors: Record<string, string | null>;
   pendingActions: Record<string, boolean>;
   reconnectAttempts: Record<string, number>;
@@ -616,6 +621,12 @@ export interface RemoteWorkspaceState {
   setVisible: (visible: boolean) => void;
   setSelectedHost: (hostId: string) => void;
   setSelectedSession: (hostId: string, sessionId: string) => void;
+  openRemoteTab: (hostId: string, sessionId: string) => void;
+  closeRemoteTab: (hostId: string, sessionId: string) => void;
+  openHostOverview: (hostId?: string) => void;
+  toggleHostsCollapsed: () => void;
+  toggleSessionsCollapsed: () => void;
+  setNewSessionModalOpen: (open: boolean) => void;
   setHostEditor: (host: RemoteHost | null | false) => void;
   setHostDraft: (patch: Partial<RemoteHostDraft>) => void;
   setLaunchDirectory: (cwd: string) => void;

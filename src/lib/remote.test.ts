@@ -5,9 +5,11 @@ import {
   EMPTY_REMOTE_HOST_DRAFT,
   isRemoteConnectionBusy,
   isRemoteHost,
+  isSameRemoteTab,
   reconcileRemoteRead,
   remoteHostDraft,
   remoteErrorText,
+  remoteTabKey,
   validateRemoteHostDraft,
   type RemoteConnection,
   type RemoteHostDraft,
@@ -150,5 +152,12 @@ describe("remote workspace helpers", () => {
     expect(remoteErrorText("server has running sessions; stop them explicitly first")).toBe("remote.errors.serverHasSessions");
     expect(remoteErrorText(new Error("Detailed custom diagnostic"))).toBe("Detailed custom diagnostic");
     expect(remoteErrorText(42)).toBe("42");
+  });
+
+  it("formats and compares remote session tab keys", () => {
+    expect(remoteTabKey("host-1", "session-1")).toBe("host-1:session-1");
+    expect(isSameRemoteTab({ hostId: "host-1", sessionId: "session-1" }, { hostId: "host-1", sessionId: "session-1" })).toBe(true);
+    expect(isSameRemoteTab({ hostId: "host-1", sessionId: "session-1" }, { hostId: "host-2", sessionId: "session-1" })).toBe(false);
+    expect(isSameRemoteTab(null, { hostId: "host-1", sessionId: "session-1" })).toBe(false);
   });
 });

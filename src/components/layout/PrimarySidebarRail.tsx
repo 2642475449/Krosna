@@ -12,6 +12,7 @@ import { useAppStore, type Language, type SidebarSection, type ThemeCategory } f
 import { checkForApplicationUpdate } from "@/lib/applicationUpdater";
 import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
 import { useRemoteWorkspaceStore } from "@/store/slices/remoteWorkspace";
+import { isSettingsTab, isWorkspaceSettingsVisible } from "@/lib/workspaceSettings";
 import i18n, { toI18nLanguage } from "@/i18n";
 
 interface RailButtonProps {
@@ -406,6 +407,10 @@ function PrimarySidebarRail() {
   const quickSettingsMenuId = useId();
   const checkingForUpdate = useApplicationUpdateStore((state) => state.phase === "checking");
   const remoteWorkspaceVisible = useRemoteWorkspaceStore((state) => state.visible);
+  const settingsVisible = useAppStore(isWorkspaceSettingsVisible);
+  const settingsTabId = useAppStore((s) => Object.keys(s.tabsById).find((id) => isSettingsTab(id, s.tabsById)));
+  const closeTab = useAppStore((s) => s.closeTab);
+  const remoteActive = remoteWorkspaceVisible && !settingsVisible;
 
   const handleQuickSettingsOpenChange = useCallback((open: boolean) => {
     if (open) {
@@ -464,6 +469,15 @@ function PrimarySidebarRail() {
 
   const handleActivate = useCallback(
     (section: SidebarSection) => {
+      if (settingsVisible && settingsTabId) {
+        closeTab(settingsTabId);
+      }
+      if (remoteWorkspaceVisible) {
+        useRemoteWorkspaceStore.getState().setVisible(false);
+        setActiveSidebarSection(section);
+        setSidebarCollapsed(false);
+        return;
+      }
       if (section === activeSidebarSection) {
         setSidebarCollapsed(!sidebarCollapsed);
         return;
@@ -472,8 +486,28 @@ function PrimarySidebarRail() {
       setActiveSidebarSection(section);
       setSidebarCollapsed(false);
     },
-    [activeSidebarSection, setActiveSidebarSection, setSidebarCollapsed, sidebarCollapsed]
+    [
+      activeSidebarSection,
+      closeTab,
+      remoteWorkspaceVisible,
+      setActiveSidebarSection,
+      setSidebarCollapsed,
+      settingsTabId,
+      settingsVisible,
+      sidebarCollapsed,
+    ]
   );
+
+  const handleToggleRemote = useCallback(() => {
+    const nextVisible = !remoteActive;
+    useRemoteWorkspaceStore.getState().setVisible(nextVisible);
+    if (nextVisible) {
+      setSidebarCollapsed(false);
+      if (settingsVisible && settingsTabId) {
+        closeTab(settingsTabId);
+      }
+    }
+  }, [closeTab, remoteActive, setSidebarCollapsed, settingsTabId, settingsVisible]);
 
   const gitTooltip = (
     <div className="flex flex-col gap-1 text-xs leading-5">
@@ -489,14 +523,14 @@ function PrimarySidebarRail() {
     >
       <div className="flex flex-col items-center gap-1.5">
         <RailButton
-          active={activeSidebarSection === "sessions"}
+          active={!remoteActive && activeSidebarSection === "sessions"}
           title={t("sidebar.sessionsSection")}
           onClick={() => handleActivate("sessions")}
         >
           <WorkbenchGlyph kind="terminal" />
         </RailButton>
         <RailButton
-          active={activeSidebarSection === "project"}
+          active={!remoteActive && activeSidebarSection === "project"}
           title={t("common.file")}
           onClick={() => handleActivate("project")}
         >
@@ -504,7 +538,7 @@ function PrimarySidebarRail() {
         </RailButton>
         <div className="relative">
           <RailButton
-            active={activeSidebarSection === "git"}
+            active={!remoteActive && activeSidebarSection === "git"}
             title={gitTooltip}
             label={t("sidebar.gitSection", "Git")}
             onClick={() => handleActivate("git")}
@@ -528,9 +562,9 @@ function PrimarySidebarRail() {
       </div>
       <div className="flex flex-col items-center gap-1.5">
         <RailButton
-          active={remoteWorkspaceVisible}
+          active={remoteActive}
           title={t("remote.title")}
-          onClick={() => useRemoteWorkspaceStore.getState().setVisible(!remoteWorkspaceVisible)}
+          onClick={handleToggleRemote}
         >
           <CloudServerOutlined className="text-[18px]" />
         </RailButton>

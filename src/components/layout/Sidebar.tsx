@@ -4,8 +4,8 @@ import { getAppShortcut } from "@/lib/appShortcuts";
 import { formatShortcutDisplay } from "@/lib/shortcut";
 import { retrySessionTitle } from "@/store/slices/sessionTitleSlice";
 import { getNativeSessionTitle } from "@/lib/sessionTitles";
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Layout, message, Modal, Input, Tooltip } from "antd";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Layout, message, Modal, Input, Spin, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
   PlusOutlined,
@@ -40,6 +40,12 @@ import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import { useGitRefreshController } from "@/hooks/useGitRefreshController";
 import { useGitFileWatcher } from "@/hooks/useGitFileWatcher";
 import { GIT_REFRESH_EVENT, publishGitStatusSnapshot } from "@/lib/gitStatusEvents";
+import { isWorkspaceSettingsVisible } from "@/lib/workspaceSettings";
+import { useRemoteWorkspaceStore } from "@/store/slices/remoteWorkspace";
+
+const RemoteSidebarPanel = lazy(() =>
+  import("@/components/remote/RemoteSidebarPanel").then((module) => ({ default: module.RemoteSidebarPanel })),
+);
 
 const { Sider } = Layout;
 const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
@@ -83,6 +89,9 @@ function Sidebar({ collapsed, section }: SidebarProps) {
   const toggleStaleSessionsCollapsed = useAppStore((s) => s.toggleStaleSessionsCollapsed);
   const projectAttentionItems = useAppStore((s) => s.projectAttentionItems);
   const resolveAttentionForSession = useAppStore((s) => s.resolveAttentionForSession);
+  const remoteWorkspaceVisible = useRemoteWorkspaceStore((s) => s.visible);
+  const settingsVisible = useAppStore(isWorkspaceSettingsVisible);
+  const remoteActive = remoteWorkspaceVisible && !settingsVisible;
 
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [renamingSession, setRenamingSession] = useState<{ id: string; name: string } | null>(null);
@@ -469,6 +478,12 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         }}
       >
         <div className="app-sidebar-surface flex min-h-0 flex-1 flex-col">
+          {remoteActive ? (
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center"><Spin size="small" /></div>}>
+              <RemoteSidebarPanel />
+            </Suspense>
+          ) : (
+            <>
           {section === "sessions" && (
             <div
               className="px-3 pt-2.5 pb-2"
@@ -554,6 +569,8 @@ function Sidebar({ collapsed, section }: SidebarProps) {
               />
             )}
           </div>
+            </>
+          )}
         </div>
       </Sider>
       {!collapsed && (

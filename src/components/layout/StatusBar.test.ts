@@ -1,6 +1,7 @@
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, test, vi } from "vitest";
+import { DEFAULT_PIXEL_PET_CONFIG, type PixelPetConfig } from "@/lib/pixelPetConfig";
 
 const fixture = vi.hoisted(() => ({
   sessions: [
@@ -12,6 +13,7 @@ const fixture = vi.hoisted(() => ({
   ],
   activeSessionId: "codex-1", defaultAgentId: "codex", gitCloneTasks: [],
   focusedTabId: null, tabsById: {}, currentProject: null,
+  pixelPetConfig: null as PixelPetConfig | null,
 }));
 vi.mock("@/store", () => ({ useAppStore: (select: (state: typeof fixture) => unknown) => select(fixture) }));
 vi.mock("@/hooks/useProjectLauncher", () => ({ useProjectLauncher: () => ({ openProject: vi.fn() }) }));
@@ -22,8 +24,22 @@ vi.mock("./FileStatusBar", () => ({ FileStatusPath: () => null, FileStatusDetail
 import StatusBar, { AntigravityUsageStatus } from "./StatusBar";
 
 beforeEach(() => {
+  fixture.pixelPetConfig = DEFAULT_PIXEL_PET_CONFIG;
   fixture.activeSessionId = "codex-1";
   for (const session of fixture.sessions) session.active = session.agentId !== "qoder";
+});
+
+test("pet toggle reflects the selected pet frame and palette", () => {
+  fixture.pixelPetConfig = {
+    ...DEFAULT_PIXEL_PET_CONFIG,
+    palette: { X: "#123456" },
+    frames: { ...DEFAULT_PIXEL_PET_CONFIG.frames, idle: [["X.", ".X"]] },
+    clips: undefined,
+  };
+  const markup = renderToStaticMarkup(createElement(StatusBar));
+  expect(markup).toContain('viewBox="0 0 2 2"');
+  expect(markup.match(/fill="#123456"/g)).toHaveLength(2);
+  expect(markup).not.toContain('fill="#38bdf8"');
 });
 
 test.each(["codex", "claude", "antigravity", "qoder", "opencode"])("status bar only displays the selected %s session's quota", (agentId) => {

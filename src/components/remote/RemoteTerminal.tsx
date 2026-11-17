@@ -7,6 +7,7 @@ import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
+import { attachRemoteTerminalClipboard } from "@/lib/remoteTerminalClipboard";
 import { decodeRemoteOutput, reconcileRemoteRead, remoteErrorText, type RemoteSession } from "@/lib/remote";
 import {
   getRemoteConnectionGeneration, readRemoteSession, resizeRemoteSession, sendRemoteAuthentication, useRemoteWorkspaceStore, writeRemoteSession,
@@ -87,6 +88,9 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     const onCompositionEnd = () => output.compositionEnd();
     container.addEventListener("compositionstart", onCompositionStart);
     container.addEventListener("compositionend", onCompositionEnd);
+    const detachClipboard = attachRemoteTerminalClipboard(term, container, (error) => {
+      useRemoteWorkspaceStore.getState().setError(hostId, remoteErrorText(error));
+    });
     const read = async () => {
       const state = useRemoteWorkspaceStore.getState();
       let delay = 150;
@@ -122,6 +126,7 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
       onData.dispose();
       container.removeEventListener("compositionstart", onCompositionStart);
       container.removeEventListener("compositionend", onCompositionEnd);
+      detachClipboard();
       output.dispose();
       term.dispose();
       termRef.current = null;
@@ -139,7 +144,12 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     term.options.fontSize = fontSize;
     term.options.cursorBlink = cursorBlink;
     term.options.disableStdin = connection?.state !== "connected" || session.processState !== "running";
-    if (active) { fitRef.current?.(); term.focus(); }
+    if (!active) return;
+    const frame = window.requestAnimationFrame(() => {
+      fitRef.current?.();
+      term.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [active, connection?.state, cursorBlink, fontSize, session.processState, theme]);
 
   return <div ref={containerRef} className="app-remote-terminal" data-remote-session={session.id} />;
@@ -154,7 +164,8 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
   const theme = useAppStore((state) => state.activeTheme());
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     const colors = getTerminalTheme(useAppStore.getState().activeTheme());
     const term = new XTerm({
       rows: 8, cols: 100, fontSize: 13, theme: colors.theme, minimumContrastRatio: colors.minimumContrastRatio,
@@ -163,7 +174,7 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
     initializePtyTextLayout(term);
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.open(containerRef.current);
+    term.open(container);
     termRef.current = term;
     const fitTerminal = () => { if (containerRef.current && containerRef.current.clientWidth > 16) fit.fit(); };
     fitRef.current = fitTerminal;
@@ -178,23 +189,39 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
         useRemoteWorkspaceStore.getState().setError(hostId, remoteErrorText(error));
       });
     });
+    const detachClipboard = attachRemoteTerminalClipboard(term, container, (error) => {
+      useRemoteWorkspaceStore.getState().setError(hostId, remoteErrorText(error));
+    });
     const observer = new ResizeObserver(fitTerminal);
-    observer.observe(containerRef.current);
+    observer.observe(container);
     fitTerminal();
-    return () => { observer.disconnect(); input.dispose(); term.dispose(); termRef.current = null; fitRef.current = null; };
+    return () => {
+      detachClipboard();
+      observer.disconnect();
+      input.dispose();
+      term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+    };
   }, [hostId]);
 
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    if (active) fitRef.current?.();
     const content = connection?.authOutput ?? "";
     if (content.startsWith(previousOutput.current)) term.write(content.slice(previousOutput.current.length));
     else { term.reset(); term.write(content); }
     previousOutput.current = content;
-    term.options.disableStdin = connection?.state !== "authenticating" && connection?.state !== "connecting";
+    term.options.disableStdin = connection?.state !== "authenticating";
     term.options.theme = getTerminalTheme(theme).theme;
-    if (active) term.focus();
+    if (!active) return;
+    const frame = window.requestAnimationFrame(() => {
+      fitRef.current?.();
+      if (connection?.state === "authenticating" && !document.activeElement?.closest(".app-remote-auth-reply")) {
+        term.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [active, connection?.authOutput, connection?.authRevision, connection?.state, theme]);
 
   return <div className="app-remote-auth-frame"><div ref={containerRef} className="app-remote-auth-terminal" /></div>;

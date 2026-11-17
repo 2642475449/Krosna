@@ -5,10 +5,11 @@ import {
   listRemoteHosts, remoteAuthInput, remoteRequest, saveRemoteHost,
 } from "@/lib/api";
 import {
-  canWriteRemoteSession, isRemoteConnectionBusy, isRemoteHost, remoteErrorText, remoteHostDraft, validateRemoteHostDraft,
-  type RemoteHost, type RemoteInspection, type RemoteSession, type RemoteSessionRead,
+  canWriteRemoteSession, isRemoteConnectionBusy, isRemoteHost, isSameRemoteTab, remoteErrorText, remoteHostDraft, validateRemoteHostDraft,
+  type RemoteHost, type RemoteInspection, type RemoteSession, type RemoteSessionRead, type RemoteSessionTab,
 } from "@/lib/remote";
 import type { RemoteWorkspaceState } from "@/store/types";
+import type { RemoteAgentId } from "@/lib/remote";
 
 function publicHost(host: RemoteHost): RemoteHost {
   return { id: host.id, name: host.name, target: host.target,
@@ -34,16 +35,73 @@ const hostMirrorStorage = {
   },
 };
 
+function openTabPatch(
+  state: RemoteWorkspaceState,
+  hostId: string,
+  sessionId: string,
+): Partial<RemoteWorkspaceState> {
+  const tab: RemoteSessionTab = { hostId, sessionId };
+  const exists = state.openTabs.some((item) => isSameRemoteTab(item, tab));
+  return {
+    selectedHostId: hostId,
+    selectedSessionByHost: { ...state.selectedSessionByHost, [hostId]: sessionId },
+    openTabs: exists ? state.openTabs : [...state.openTabs, tab],
+    activeTab: tab,
+  };
+}
+
+function closeTabsMatching(
+  state: RemoteWorkspaceState,
+  predicate: (tab: RemoteSessionTab) => boolean,
+): Partial<RemoteWorkspaceState> {
+  const index = state.openTabs.findIndex(predicate);
+  if (index === -1) return {};
+  const remaining = state.openTabs.filter((item) => !predicate(item));
+  let activeTab = state.activeTab;
+  if (activeTab && predicate(activeTab)) {
+    const preferredHostId = activeTab.hostId;
+    const sameHost = remaining.find((item) => item.hostId === preferredHostId);
+    activeTab = sameHost ?? remaining[Math.min(index, remaining.length - 1)] ?? null;
+  }
+  return { openTabs: remaining, activeTab };
+}
+
 export const useRemoteWorkspaceStore = create<RemoteWorkspaceState>()(persist((set) => ({
   visible: false, initialized: false, loading: false, hosts: [], selectedHostId: null,
   connections: {}, inspections: {}, sessionsByHost: {}, selectedSessionByHost: {},
+  openTabs: [], activeTab: null, hostsCollapsed: false, sessionsCollapsed: false, newSessionModalOpen: false,
   errors: {}, pendingActions: {}, reconnectAttempts: {}, editorOpen: false, hostDraft: remoteHostDraft(),
   cwd: "~", agentId: "codex", pendingStop: null, pendingServerAction: null,
   setVisible: (visible) => set({ visible }),
-  setSelectedHost: (selectedHostId) => set({ selectedHostId, pendingStop: null, pendingServerAction: null }),
-  setSelectedSession: (hostId, sessionId) => set((state) => ({
-    selectedSessionByHost: { ...state.selectedSessionByHost, [hostId]: sessionId },
+  setSelectedHost: (selectedHostId) => set((state) => {
+    const connected = state.connections[selectedHostId]?.state === "connected";
+    const hostTabs = state.openTabs.filter((item) => item.hostId === selectedHostId);
+    const preferredSessionId = state.selectedSessionByHost[selectedHostId];
+    const nextTab = connected && hostTabs.length > 0
+      ? (hostTabs.find((item) => item.sessionId === preferredSessionId) ?? hostTabs[hostTabs.length - 1])
+      : null;
+    return {
+      selectedHostId,
+      activeTab: nextTab,
+      pendingStop: null,
+      pendingServerAction: null,
+    };
+  }),
+  setSelectedSession: (hostId, sessionId) => set((state) => openTabPatch(state, hostId, sessionId)),
+  openRemoteTab: (hostId, sessionId) => set((state) => openTabPatch(state, hostId, sessionId)),
+  closeRemoteTab: (hostId, sessionId) => set((state) => closeTabsMatching(
+    state,
+    (tab) => tab.hostId === hostId && tab.sessionId === sessionId,
+  )),
+  openHostOverview: (hostId) => set((state) => ({
+    selectedHostId: hostId ?? state.selectedHostId,
+    activeTab: null,
+    pendingStop: null,
+    pendingServerAction: null,
   })),
+  toggleHostsCollapsed: () => set((state) => ({ hostsCollapsed: !state.hostsCollapsed })),
+  toggleSessionsCollapsed: () => set((state) => ({ sessionsCollapsed: !state.sessionsCollapsed })),
+  setNewSessionModalOpen: (newSessionModalOpen) => set({ newSessionModalOpen }),
   setHostEditor: (host) => set({ editorOpen: host !== false, hostDraft: remoteHostDraft(host || undefined) }),
   setHostDraft: (patch) => set((state) => ({ hostDraft: { ...state.hostDraft, ...patch } })),
   setLaunchDirectory: (cwd) => set({ cwd }),
@@ -190,7 +248,12 @@ export async function removeRemoteHost(hostId: string): Promise<void> {
     advanceEpoch(hostId);
     useRemoteWorkspaceStore.setState((current) => {
       const hosts = current.hosts.filter((host) => host.id !== hostId);
-      return { hosts, initialized: true, selectedHostId: current.selectedHostId === hostId ? hosts[0]?.id ?? null : current.selectedHostId };
+      return {
+        hosts,
+        initialized: true,
+        selectedHostId: current.selectedHostId === hostId ? hosts[0]?.id ?? null : current.selectedHostId,
+        ...closeTabsMatching(current, (tab) => tab.hostId === hostId),
+      };
     });
   } finally { setPending(`${hostId}:delete`, false); }
 }
@@ -281,6 +344,7 @@ export async function refreshRemoteRuntime(hostId: string, forceInspection = tru
         inspections: { ...state.inspections, [hostId]: inspection },
         sessionsByHost: { ...state.sessionsByHost, [hostId]: mergedSessions },
         selectedSessionByHost: { ...state.selectedSessionByHost, [hostId]: sessions.some((session) => session.id === selected) ? selected : sessions[sessions.length - 1]?.id ?? "" },
+        ...closeTabsMatching(state, (tab) => tab.hostId === hostId && !sessions.some((session) => session.id === tab.sessionId)),
       };
     });
   }).finally(() => { if (runtimeRequests.get(hostId) === request) runtimeRequests.delete(hostId); });
@@ -288,11 +352,11 @@ export async function refreshRemoteRuntime(hostId: string, forceInspection = tru
   return request;
 }
 
-export function startRemoteSession(hostId: string, overrideAgent?: "shell"): Promise<RemoteSession> {
+export function startRemoteSession(hostId: string, overrideAgent?: RemoteAgentId, overrideCwd?: string): Promise<RemoteSession> {
   const state = useRemoteWorkspaceStore.getState();
   try { requireConnected(hostId); } catch (error) { return Promise.reject(error); }
   const agentId = overrideAgent ?? state.agentId;
-  const cwd = overrideAgent === "shell" ? "~" : state.cwd.trim() || "~";
+  const cwd = overrideCwd !== undefined ? (overrideCwd.trim() || "~") : (overrideAgent === "shell" ? "~" : state.cwd.trim() || "~");
   const key = JSON.stringify({ agentId, cwd });
   let launch = launchRequests.get(hostId);
   if (launch?.promise) return launch.promise;
@@ -310,6 +374,7 @@ export function startRemoteSession(hostId: string, overrideAgent?: "shell"): Pro
     if (epoch(hostId) === requestEpoch) {
       useRemoteWorkspaceStore.getState().setSessionSnapshot(hostId, session);
       useRemoteWorkspaceStore.getState().setSelectedSession(hostId, session.id);
+      useRemoteWorkspaceStore.getState().setNewSessionModalOpen(false);
     }
     if (launchRequests.get(hostId) === pending) launchRequests.delete(hostId);
     return session;
@@ -344,6 +409,7 @@ export async function forgetRemoteSession(hostId: string, session: RemoteSession
         sessionsByHost: { ...state.sessionsByHost, [hostId]: remaining },
         selectedSessionByHost: { ...state.selectedSessionByHost, [hostId]: state.selectedSessionByHost[hostId] === session.id ? remaining[remaining.length - 1]?.id ?? "" : state.selectedSessionByHost[hostId] },
         pendingStop: null,
+        ...closeTabsMatching(state, (tab) => tab.hostId === hostId && tab.sessionId === session.id),
       };
     });
     await refreshRemoteRuntime(hostId, false).catch((error: unknown) => {

@@ -6,6 +6,7 @@ import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
+import { getPetSpriteFrame } from "@/lib/pixelPetSprites";
 import { FileStatusDetails, FileStatusPath } from "./FileStatusBar";
 import { QuotaUsageRing } from "./QuotaUsageRing";
 import { QuotaUsageStatus } from "./QuotaUsageStatus";
@@ -43,6 +44,8 @@ function StatusBar() {
   const fileTab = focusedTab?.kind === "file" ? focusedTab : null;
   const gitCloneTasks = useAppStore((state) => state.gitCloneTasks);
   const pixelPetVisible = useAppStore((state) => state.pixelPetVisible);
+  const pixelPetConfig = useAppStore((state) => state.pixelPetConfig);
+  const pixelPetFrame = useMemo(() => getPetSpriteFrame("idle", 0, pixelPetConfig), [pixelPetConfig]);
   const togglePixelPetVisible = useAppStore((state) => state.togglePixelPetVisible);
   const upsertGitCloneTask = useAppStore((state) => state.upsertGitCloneTask);
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
@@ -614,15 +617,19 @@ function StatusBar() {
               color: pixelPetVisible ? "var(--cs-primary)" : "var(--cs-text-tertiary)",
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <rect x="4" y="1" width="1" height="1" fill="#bae6fd" />
-              <rect x="6" y="1" width="1" height="1" fill="#bae6fd" />
-              <rect x="5" y="2" width="1" height="1" fill="#bae6fd" />
-              <rect x="3" y="4" width="6" height="4" fill="#38bdf8" />
-              <rect x="2" y="5" width="8" height="3" fill="#38bdf8" />
-              <rect x="1" y="5" width="1" height="2" fill="#0ea5e9" />
-              <rect x="8" y="5" width="1" height="1" fill="#0f172a" />
-              <rect x="4" y="8" width="5" height="2" fill="#ffffff" />
+            <svg
+              width="18"
+              height="18"
+              viewBox={`0 0 ${pixelPetFrame[0]?.length ?? 16} ${pixelPetFrame.length}`}
+              fill="none"
+              shapeRendering="crispEdges"
+              aria-hidden="true"
+            >
+              {pixelPetFrame.flatMap((row, y) => Array.from(row, (pixel, x) => (
+                pixel !== "." && pixelPetConfig.palette[pixel]
+                  ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={pixelPetConfig.palette[pixel]} />
+                  : null
+              )))}
             </svg>
           </button>
         </Tooltip>
