@@ -288,7 +288,7 @@ const DAIMAO_TURN: string[] = mirrorFrame(DAIMAO_STAND);
 export const DAIMAO_FRAMES: Record<PetActionState, string[][]> & Partial<Record<PetClipId, string[][]>> = {
   idle: [DAIMAO_STAND, DAIMAO_BOB_DOWN].map(mirrorFrame),
   walk: [DAIMAO_WALK_LEFT, DAIMAO_STAND, DAIMAO_WALK_RIGHT, DAIMAO_STAND].map(mirrorFrame),
-  run: [DAIMAO_WALK_LEFT, DAIMAO_STAND, DAIMAO_WALK_RIGHT, DAIMAO_STAND].map(mirrorFrame),
+  run: [DAIMAO_WALK_LEFT, DAIMAO_JUMP, DAIMAO_WALK_RIGHT, DAIMAO_BOB_DOWN].map(mirrorFrame),
   jump: [DAIMAO_JUMP].map(mirrorFrame),
   fall: [DAIMAO_FALL].map(mirrorFrame),
   crouch: [DAIMAO_BOB_DOWN].map(mirrorFrame),
@@ -296,7 +296,10 @@ export const DAIMAO_FRAMES: Record<PetActionState, string[][]> & Partial<Record<
   turn: [DAIMAO_TURN].map(mirrorFrame),
   stop: [DAIMAO_BOB_DOWN, DAIMAO_STAND].map(mirrorFrame),
   edgeLook: [DAIMAO_ALERT].map(mirrorFrame),
+  doze: [DAIMAO_BOB_DOWN, DAIMAO_SLEEP_0].map(mirrorFrame),
+  wake: [DAIMAO_SLEEP_0, DAIMAO_ALERT, DAIMAO_STAND].map(mirrorFrame),
   sleep: [DAIMAO_SLEEP_0, DAIMAO_SLEEP_1].map(mirrorFrame),
   celebrate: [DAIMAO_CELEBRATE_0_LEFT, DAIMAO_CELEBRATE_1_LEFT, DAIMAO_CELEBRATE_0_LEFT, DAIMAO_CELEBRATE_1_LEFT].map(mirrorFrame),
+  easterEgg: [DAIMAO_CELEBRATE_0, DAIMAO_CELEBRATE_1, DAIMAO_CELEBRATE_0_LEFT, DAIMAO_CELEBRATE_1_LEFT].map(mirrorFrame),
   alert: [DAIMAO_ALERT].map(mirrorFrame),
 };

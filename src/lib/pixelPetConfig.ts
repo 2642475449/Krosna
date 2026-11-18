@@ -14,8 +14,13 @@ export interface PixelPetBehaviorConfig {
   allowWallClimb: boolean;
   reactToCodingMood: boolean;
   enableRandomEvents: boolean;
-  cheerBubbles: string[];
-  workBubbles: string[];
+}
+
+export interface PixelPetCapabilities {
+  run: boolean;
+  wallClimb: boolean;
+  easterEgg: boolean;
+  sleepTransition: boolean;
 }
 
 export interface PixelPetConfig {
@@ -40,9 +45,7 @@ export const DEFAULT_PET_BEHAVIOR: PixelPetBehaviorConfig = {
   allowPlatformHop: true,
   allowWallClimb: true,
   reactToCodingMood: true,
-  enableRandomEvents: false,
-  cheerBubbles: ["!", "+1", "★", "GO!", ":)"],
-  workBubbles: ["</>", "...", "RUN", "⚡"],
+  enableRandomEvents: true,
 };
 
 const CAT_PALETTE: Record<string, string> = {
@@ -315,6 +318,122 @@ const BOT_SLEEP = [
   "................",
 ];
 
+const CAT_EASTER_EGG_0 = [
+  "................",
+  "................",
+  "................",
+  ".........O...O..",
+  "........OPO.OPO.",
+  "........OOOOOOO.",
+  "..O.....OOEOOEO.",
+  ".OO....OOOOOOOP.",
+  ".OO...oOOOOOOCC.",
+  "..OO.OOOOoOOO...",
+  "..OOOOOOOOOOO.PP",
+  "..OOOOCCCCCOOPWP",
+  "...OO.OO.OO..PPP",
+  "...OO.OO.OO.OO..",
+  "...WW.WW.WW.WW..",
+  "................",
+];
+
+const CAT_EASTER_EGG_1 = [
+  "................",
+  "................",
+  ".........O...O..",
+  "........OPO.OPO.",
+  "........OOOOOOO.",
+  "O.......OOEOOEO.",
+  "OO.....OOOOOOOP.",
+  ".OO...oOOOOOOCC.",
+  "..OO.OOOOoOOO...",
+  "..OOOOOOOOOOOPP.",
+  "..OOOOCCCCCOOPWP",
+  ".OO.OO....OO.PP.",
+  "WW..WW....WW..WW",
+  "................",
+  "................",
+  "................",
+];
+
+const CAT_CLIMB_0 = [
+  "................",
+  "..........O...O.",
+  ".........OPO.OPO",
+  ".........OOOOOOO",
+  "...O.....OOEOOEO",
+  "..OO....OOOOOOOP",
+  "..OO...oOOOOOOCC",
+  "...OO.OOOOoOOO..",
+  "...OOOOOOOOOOOWW",
+  "...OOOOCCCCCOOWW",
+  "....OOOOOOOOO...",
+  "....OO.OO..OO...",
+  "....WW.WW..WW...",
+  "................",
+  "................",
+  "................",
+];
+
+const CAT_CLIMB_1 = [
+  "..........O...O.",
+  ".........OPO.OPO",
+  ".........OOOOOOO",
+  "..O......OOEOOEO",
+  ".OO.....OOOOOOOP",
+  ".OO....oOOOOOOCC",
+  "..OO..OOOOoOOO..",
+  "...OOOOOOOOOOO..",
+  "...OOOOCCCCCOOWW",
+  "....OOOOOOOOO.WW",
+  ".....OO.OO.OO...",
+  ".....WW.WW.WW...",
+  "................",
+  "................",
+  "................",
+  "................",
+];
+
+const BOT_EASTER_EGG_0 = [
+  "...Y...HH...Y...",
+  "....Y..BB..Y....",
+  ".....HHBBBB.....",
+  "....HBBBBBBB....",
+  "....BBBBBBBB....",
+  "...KYYYKKYYYK...",
+  "...KKKKYYKKKK...",
+  "...KKKKKKKKKK...",
+  "....BBBBBBBB....",
+  "....KYYYYYYK....",
+  "....KYKYKYKK....",
+  "..ss.BBBBBB.ss..",
+  ".ss..BBBBBB..ss.",
+  ".....BBBBBB.....",
+  "....BB....BB....",
+  "...sss....sss...",
+  "................",
+];
+
+const BOT_EASTER_EGG_1 = [
+  "..Y....HH....Y..",
+  "...Y...BB...Y...",
+  ".....HHBBBB.....",
+  "....HBBBBBBB....",
+  "....BBBBBBBB....",
+  "...KYYYKKYYYK...",
+  "...KYKYKKYKYK...",
+  "...KKKKKKKKKK...",
+  "....BBBBBBBB....",
+  "....KYYYYYYK....",
+  "....KKYYYYKK....",
+  ".ss..BBBBBB..ss.",
+  "..ss.BBBBBB.ss..",
+  ".....BBBBBB.....",
+  ".....BB..BB.....",
+  "....sss..sss....",
+  "................",
+];
+
 export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
   {
     id: "hero",
@@ -347,15 +466,18 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       turn: 110,
       stop: 120,
       edgeLook: 320,
+      doze: 180,
+      wake: 160,
       sleep: 650,
       celebrate: 190,
+      easterEgg: 240,
       alert: 220,
       wallGrab: 100,
       climb: 140,
       wallHang: 480,
       wallJump: 110,
     },
-    behavior: { ...DEFAULT_PET_BEHAVIOR, allowWallClimb: true },
+    behavior: { ...DEFAULT_PET_BEHAVIOR, allowWallClimb: true, enableRandomEvents: true },
   },
   {
     id: "cat",
@@ -366,24 +488,39 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       idle: [CAT_IDLE_0, CAT_IDLE_1, CAT_IDLE_0,
         CAT_IDLE_1.map((row) => row.replaceAll("E", "o"))],
       walk: [CAT_WALK_0, CAT_WALK_1, CAT_WALK_2, CAT_WALK_1],
-      run: [CAT_WALK_0, CAT_WALK_2],
+      run: [CAT_WALK_0, CAT_JUMP, CAT_WALK_2, CAT_WALK_1],
       jump: [CAT_JUMP],
-      celebrate: [CAT_JUMP],
+      celebrate: [CAT_JUMP, CAT_IDLE_0],
       sleep: [CAT_SLEEP],
       alert: [CAT_IDLE_0],
+    },
+    clips: {
+      doze: [CAT_IDLE_1.map((row) => row.replaceAll("E", "o")), CAT_SLEEP],
+      wake: [CAT_SLEEP, CAT_IDLE_1, CAT_IDLE_0],
+      wallGrab: [CAT_CLIMB_0],
+      climb: [CAT_CLIMB_0, CAT_CLIMB_1],
+      wallHang: [CAT_CLIMB_0, CAT_CLIMB_1],
+      wallJump: [CAT_JUMP],
+      easterEgg: [CAT_EASTER_EGG_0, CAT_EASTER_EGG_1, CAT_EASTER_EGG_0, CAT_JUMP],
     },
     frameDurationsMs: {
       idle: 550,
       walk: 145,
       run: 95,
+      doze: 180,
+      wake: 160,
+      wallGrab: 110,
+      climb: 140,
+      wallHang: 420,
+      wallJump: 120,
+      easterEgg: 240,
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
-      allowWallClimb: false,
+      allowWallClimb: true,
+      enableRandomEvents: true,
       walkSpeedPxPerSec: 24,
       runSpeedPxPerSec: 58,
-      cheerBubbles: ["Meow", "♥", "★", "~"],
-      workBubbles: ["purr", "</>", "🐾"],
     },
   },
   {
@@ -395,15 +532,23 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       idle: [BOT_IDLE_0, BOT_IDLE_1, BOT_IDLE_0,
         BOT_IDLE_0.map((row) => row === "...KYKYKKYKYK..." ? "...KKYYKKKYYK..." : row)],
       walk: [BOT_WALK_0, BOT_WALK_1],
-      run: [BOT_WALK_0, BOT_WALK_1],
+      run: [BOT_WALK_0, BOT_JUMP, BOT_WALK_1],
       jump: [BOT_JUMP],
-      celebrate: [BOT_JUMP],
+      celebrate: [BOT_JUMP, BOT_EASTER_EGG_0],
       sleep: [BOT_SLEEP],
       alert: [BOT_JUMP],
+    },
+    clips: {
+      doze: [BOT_IDLE_1, BOT_SLEEP],
+      wake: [BOT_SLEEP, BOT_IDLE_0],
+      easterEgg: [BOT_EASTER_EGG_0, BOT_EASTER_EGG_1, BOT_EASTER_EGG_0, BOT_EASTER_EGG_1],
     },
     frameDurationsMs: {
       walk: 155,
       run: 95,
+      doze: 180,
+      wake: 160,
+      easterEgg: 220,
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
@@ -411,8 +556,6 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       walkSpeedPxPerSec: 30,
       runSpeedPxPerSec: 60,
       enableRandomEvents: true,
-      cheerBubbles: ["BITE", "40%", "HA!", "COOL"],
-      workBubbles: ["BEER", "101", "⚡"],
     },
   },
   {
@@ -446,17 +589,19 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       turn: 110,
       stop: 120,
       edgeLook: 300,
+      doze: 180,
+      wake: 160,
       sleep: 650,
       celebrate: 200,
+      easterEgg: 230,
       alert: 220,
     },
     behavior: {
       ...DEFAULT_PET_BEHAVIOR,
       allowWallClimb: false,
+      enableRandomEvents: true,
       walkSpeedPxPerSec: 26,
       runSpeedPxPerSec: 54,
-      cheerBubbles: ["Woof!", "♥", "★", ":3"],
-      workBubbles: ["...", "</>", "🐾"],
     },
   },
 ];
@@ -482,11 +627,32 @@ const CLIP_KEYS: PetClipId[] = [
   "turn",
   "stop",
   "edgeLook",
+  "doze",
+  "wake",
   "wallGrab",
   "climb",
   "wallHang",
   "wallJump",
+  "easterEgg",
 ];
+
+export function getPetCapabilities(config: PixelPetConfig): PixelPetCapabilities {
+  const hasWallFrames = Boolean(config.clips?.wallGrab?.length && config.clips?.climb?.length);
+  const hasEasterEggFrames = Boolean(config.clips?.easterEgg?.length);
+  const hasCustomRun = Boolean(
+    config.clips?.run?.length
+    || (
+      config.frames.run?.length
+      && JSON.stringify(config.frames.run) !== JSON.stringify(config.frames.walk)
+    ),
+  );
+  return {
+    run: hasCustomRun,
+    wallClimb: Boolean(config.behavior.allowWallClimb && hasWallFrames),
+    easterEgg: Boolean(config.behavior.enableRandomEvents && hasEasterEggFrames),
+    sleepTransition: Boolean(config.clips?.doze?.length || config.clips?.wake?.length),
+  };
+}
 
 function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
@@ -504,14 +670,6 @@ function parseFrameTimings(value: unknown): PixelPetConfig["frameTimingsMs"] {
     }
   }
   return Object.keys(result).length ? result : undefined;
-}
-
-function sanitizeStringArray(value: unknown, fallback: string[]): string[] {
-  if (!Array.isArray(value)) return [...fallback];
-  const filtered = value
-    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    .map((item) => item.trim().slice(0, 12));
-  return filtered.length > 0 ? filtered : [...fallback];
 }
 
 function isValidFrame(frame: unknown): frame is string[] {
@@ -610,6 +768,7 @@ export function parsePixelPetConfigJson(
       : {};
 
   const hasWallFrames = Boolean(clips?.wallGrab?.length && clips?.climb?.length);
+  const hasEasterEggFrames = Boolean(clips?.easterEgg?.length);
   const behavior: PixelPetBehaviorConfig = {
     walkSpeedPxPerSec: clampNumber(
       rawBehavior.walkSpeedPxPerSec,
@@ -656,9 +815,7 @@ export function parsePixelPetConfigJson(
     enableRandomEvents:
       typeof rawBehavior.enableRandomEvents === "boolean"
         ? rawBehavior.enableRandomEvents
-        : DEFAULT_PET_BEHAVIOR.enableRandomEvents,
-    cheerBubbles: sanitizeStringArray(rawBehavior.cheerBubbles, DEFAULT_PET_BEHAVIOR.cheerBubbles),
-    workBubbles: sanitizeStringArray(rawBehavior.workBubbles, DEFAULT_PET_BEHAVIOR.workBubbles),
+        : hasEasterEggFrames,
   };
 
   const config: PixelPetConfig = {
@@ -707,12 +864,21 @@ export function upgradePersistedPixelPetConfig(
     ...builtIn,
     pixelSize: persisted.pixelSize ?? builtIn.pixelSize,
     behavior: {
-      ...builtIn.behavior,
-      ...persisted.behavior,
+      walkSpeedPxPerSec: persisted.behavior?.walkSpeedPxPerSec ?? builtIn.behavior.walkSpeedPxPerSec,
+      runSpeedPxPerSec: persisted.behavior?.runSpeedPxPerSec ?? builtIn.behavior.runSpeedPxPerSec,
+      jumpVelocityPxPerSec: persisted.behavior?.jumpVelocityPxPerSec ?? builtIn.behavior.jumpVelocityPxPerSec,
+      gravityPxPerSec2: persisted.behavior?.gravityPxPerSec2 ?? builtIn.behavior.gravityPxPerSec2,
+      sleepAfterIdleMs: persisted.behavior?.sleepAfterIdleMs ?? builtIn.behavior.sleepAfterIdleMs,
+      allowPlatformHop: persisted.behavior?.allowPlatformHop ?? builtIn.behavior.allowPlatformHop,
       allowWallClimb:
         typeof persisted.behavior?.allowWallClimb === "boolean"
           ? persisted.behavior.allowWallClimb
           : builtIn.behavior.allowWallClimb,
+      reactToCodingMood: persisted.behavior?.reactToCodingMood ?? builtIn.behavior.reactToCodingMood,
+      enableRandomEvents:
+        typeof persisted.behavior?.enableRandomEvents === "boolean"
+          ? persisted.behavior.enableRandomEvents
+          : builtIn.behavior.enableRandomEvents,
     },
   };
 }
@@ -725,8 +891,8 @@ export function buildPixelPetAiPrompt(baseConfig: PixelPetConfig, filePath?: str
     "请帮我创作 Krosna 像素角色：可以改造当前角色，也可以设计全新角色。",
     filePath ? `角色配置文件：${JSON.stringify(filePath)}` : "请读取我附上的角色 JSON 文件。",
     filePath ? `格式说明文件：${JSON.stringify(`${filePath}.guide.md`)}` : "请同时阅读附上的格式说明。",
-    `当前角色名称：${JSON.stringify(baseConfig.name)}。先读取文件，再根据我的要求修改 palette、frames、clips 和 behavior。`,
-    "直接保存纯 JSON，保留未要求修改的内容；Krosna 会自动校验并刷新预览。若另存为新文件，请告诉我路径，我会在设置中加载它。",
+    `当前角色名称：${JSON.stringify(baseConfig.name)}。先读取文件，再根据我的要求修改 palette、frames、clips（含专属彩蛋 easterEgg、打盹/醒来/爬墙等可选动作）和 behavior。`,
+    "角色纯靠像素动作表达，不设文字气泡。直接保存纯 JSON，保留未要求修改的内容；Krosna 会自动校验并刷新预览。若另存为新文件，请告诉我路径，我会在设置中加载它。",
     "如果无法访问本机文件，请让我附上配置和格式说明，并返回完整 JSON 文件。",
     "我的要求：［在这里描述新角色或修改内容］",
   ].join("\n");

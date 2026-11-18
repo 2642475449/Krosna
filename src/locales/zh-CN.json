@@ -1811,10 +1811,24 @@
       "allowPlatformHop": "跨区域穿梭",
       "allowPlatformHopDesc": "允许小人在底部状态栏分割线与顶部栏空白区之间自动跳换。",
       "reactToCodingMood": "联动 AI 会话状态",
-      "reactToCodingMoodDesc": "AI 运行中时加速奔跑，完成时跳跃欢呼，出错时弹出提示。",
+      "reactToCodingMoodDesc": "AI 运行中时加速奔跑，完成时跳跃欢呼，出错时警觉提醒。",
       "enableRandomEvents": "随机趣味彩蛋",
-      "enableRandomEventsDesc": "隔一段时间随机出现小史莱姆、小幽灵或流星，宠物会主动跑去互动或消灭它们。",
-      "triggerEncounterTest": "召唤彩蛋",
+      "enableRandomEventsDesc": "巡逻或发呆时偶发展示角色专属彩蛋动作。",
+      "audition": {
+        "jump": "跳跃",
+        "run": "奔跑",
+        "rest": "打盹",
+        "wake": "醒来",
+        "celebrate": "欢呼",
+        "alert": "提醒",
+        "easterEgg": "彩蛋"
+      },
+      "capabilities": {
+        "run": "奔跑",
+        "sleepTransition": "打盹/醒来",
+        "wallClimb": "攀墙",
+        "easterEgg": "专属彩蛋"
+      },
       "jsonSection": "JSON 配置与 AI 创作",
       "jsonSectionDesc": "导出或加载角色 JSON，让 AI 新建或改造角色；关联文件保存后自动校验并刷新预览。也可直接编辑下方 JSON。",
       "applyJson": "应用 JSON 配置",
@@ -3085,6 +3099,12 @@
     }
   },
   "sounds": {
+    "resolve": "落定（完成）",
+    "resolveDesc": "上行解决到主音，稳定落地",
+    "query": "轻问（等待）",
+    "queryDesc": "同一高音轻敲两下，悬而未决",
+    "fault": "低落（异常）",
+    "faultDesc": "低音区下行，暗而不刺耳",
     "default": "经典完成音",
     "defaultDesc": "熟悉的双音完成提示",
     "waiting": "渐升等待音",

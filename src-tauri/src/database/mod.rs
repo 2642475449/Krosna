@@ -64,9 +64,9 @@ pub struct NotificationSoundMapRecord {
 impl Default for NotificationSoundMapRecord {
     fn default() -> Self {
         Self {
-            task_complete: "default".into(),
-            error: "alert".into(),
-            waiting: "waiting".into(),
+            task_complete: "resolve".into(),
+            error: "fault".into(),
+            waiting: "query".into(),
         }
     }
 }

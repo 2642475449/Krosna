@@ -12,9 +12,8 @@ import {
   type PetPlatform,
   type PetSimulationState,
 } from "@/lib/pixelPet";
+import { getPetCapabilities } from "@/lib/pixelPetConfig";
 import {
-  drawPetEncounter,
-  drawPixelBubble,
   drawPixelPetFrame,
   getPetRenderedDimensions,
   getPetSpriteFrame,
@@ -152,6 +151,7 @@ export function PixelPetTrack() {
           {
             platforms: platformsRef.current,
             behavior: activeConfig.behavior,
+            capabilities: getPetCapabilities(activeConfig),
             spriteWidth,
           },
         );
@@ -160,7 +160,7 @@ export function PixelPetTrack() {
         const groundY = sim.groundY > 0 ? sim.groundY : height - 28;
         const submergePx =
           (activeConfig.submergeRows ?? 0) * Math.max(1, Math.round(activeConfig.pixelSize || 2));
-        const spriteTop = groundY - spriteHeight + submergePx - sim.y;
+        const spriteTop = groundY - spriteHeight + (sim.climb ? 0 : submergePx) - sim.y;
 
         if (hitboxRef.current) {
           hitboxRef.current.style.width = `${spriteWidth}px`;
@@ -171,9 +171,6 @@ export function PixelPetTrack() {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           ctx.clearRect(0, 0, width, height);
-          if (sim.encounter) {
-            drawPetEncounter(ctx, sim.encounter, groundY, sim.animElapsedMs);
-          }
           const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, activeConfig);
           drawPixelPetFrame(
             ctx,
@@ -183,17 +180,8 @@ export function PixelPetTrack() {
             sim.facing,
             activeConfig.pixelSize,
             activeConfig.palette,
-            submergePx > 0 ? groundY : undefined,
+            !sim.climb && submergePx > 0 ? groundY : undefined,
           );
-
-          if (sim.bubble) {
-            drawPixelBubble(
-              ctx,
-              sim.bubble.text,
-              sim.x + spriteWidth / 2,
-              spriteTop,
-            );
-          }
         }
       }
 
@@ -216,8 +204,6 @@ export function PixelPetTrack() {
   const handlePetClick = () => {
     simRef.current = triggerPetJump(
       simRef.current,
-      undefined,
-      Math.random,
       configRef.current.behavior,
     );
   };
@@ -230,8 +216,6 @@ export function PixelPetTrack() {
     } else {
       simRef.current = triggerPetJump(
         simRef.current,
-        "★",
-        Math.random,
         configRef.current.behavior,
       );
     }

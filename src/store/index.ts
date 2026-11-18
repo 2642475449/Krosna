@@ -222,7 +222,11 @@ function projectInfoFromPath(path: string): ProjectInfo {
 }
 
 function normalizeNotificationSoundValue(value: string | null | undefined): NotificationSoundType {
-  return value === "waiting" ||
+  return value === "resolve" ||
+    value === "query" ||
+    value === "fault" ||
+    value === "default" ||
+    value === "waiting" ||
     value === "alert" ||
     value === "chime" ||
     value === "bell" ||
@@ -779,9 +783,9 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
       notificationEnabled: true,
       notificationSoundEnabled: true,
       notificationSoundMap: {
-        taskComplete: "bloom",
-        error: "signal",
-        waiting: "pulse",
+        taskComplete: "resolve",
+        error: "fault",
+        waiting: "query",
       },
       notificationThresholdMs: 10000,
       remoteNotificationChannels: createDefaultRemoteNotificationChannels(),

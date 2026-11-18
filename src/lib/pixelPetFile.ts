@@ -76,16 +76,16 @@ export function buildPixelPetFileGuide(): string {
 
 - UTF-8 JSON 对象。id（字符串，最多32字符）、name（最多48字符）、pixelSize（整数1–4）。新角色使用新的 id。
 - palette：单字符到十六进制颜色的映射，例如 {"K":"#172033"}。点号 . 固定为透明，不要给 . 配色。
-- frames：动作到帧数组的映射。每帧是字符串数组，每个字符是一像素；每帧1–32行、每行1–32字符，行宽一致，所有非点字符必须定义在 palette。
+- frames：动作到帧数组的映射。每帧是字符串数组，每个字符是一像素；每帧1–32行、每行1–32字符，行宽一致，所有非点字符必须定义在 palette。默认朝向为向右，脚底对齐画布底边；向左走时自动镜像。
 - 建议所有动作使用同一画布尺寸并对齐脚底，以免动画跳动；不强制16×16。
-- frames.idle 或 frames.walk 至少一个包含有效帧。可用动作：idle、walk、run、jump、sleep、celebrate、alert。未提供的动作会复用 idle/walk，丰富动画需自行绘制。
-- clips（可选）：过渡动画，结构同 frames。支持上述动作及 fall、crouch、land、turn、stop、edgeLook、wallGrab、climb、wallHang、wallJump。
+- frames.idle 或 frames.walk 至少一个包含有效帧。可用动作：idle、walk、run、jump、sleep、celebrate、alert。未提供 run 时回退到 walk，其他未提供动作回退到 idle。
+- clips（可选）：过渡与专属动画，结构同 frames。支持上述动作及 fall、crouch、land、turn、stop、edgeLook、doze（打盹过渡）、wake（醒来过渡）、wallGrab、climb、wallHang、wallJump、easterEgg（角色专属彩蛋）。
 - frameDurationsMs（可选）：动作/clip 名到单帧时长（毫秒）的映射。
 - frameTimingsMs（可选）：clip 名到逐帧时长数组（每项40–10000毫秒，最多128项）。
 - submergeRows（可选，0–12）：向下隐藏的像素行数，普通陆地角色省略。
 - behavior（可选，缺失字段使用默认值）：walkSpeedPxPerSec（8–140）、runSpeedPxPerSec（12–220）、jumpVelocityPxPerSec（60–360）、gravityPxPerSec2（200–1600）、sleepAfterIdleMs（2000–120000）。
-- behavior 布尔开关：allowPlatformHop、allowWallClimb、reactToCodingMood、enableRandomEvents。攀墙需要 wallGrab 和 climb 动画；随机事件仅在符合角色设计时开启。
-- behavior.cheerBubbles / workBubbles：短文字数组，每项最多12字符。
+- behavior 布尔开关：allowPlatformHop、allowWallClimb、reactToCodingMood、enableRandomEvents。攀墙需要 clips.wallGrab 与 clips.climb；角色专属彩蛋需要 clips.easterEgg，均在巡逻或发呆时自动触发。
+- 宠物纯靠像素动作表达，不设文字气泡；旧文件中的 cheerBubbles / workBubbles 字段会被兼容忽略，新文件无需填写。
 
 最小结构示例（实际角色请绘制完整造型和动作）：
 {"id":"custom","name":"My pet","pixelSize":2,"palette":{"K":"#172033"},"frames":{"idle":[[".KK.","KKKK",".KK."]]},"behavior":{"allowWallClimb":false,"enableRandomEvents":false}}

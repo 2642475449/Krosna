@@ -27,7 +27,11 @@ it("resets the clip clock on mood changes and allows pause to cancel anticipatio
   expect(sim.clipElapsedMs).toBe(0);
   sim = togglePetPaused(triggerPetJump(sim));
   sim = stepPetSimulation(sim, 50, 400, "idle");
-  expect(sim.transitionMs).toBe(0);
+  expect(sim.transitionMs).toBe(270);
+  expect(sim.clip).toBe("doze");
+  for (let i = 0; i < 6; i++) {
+    sim = stepPetSimulation(sim, 50, 400, "idle");
+  }
   expect(sim.clip).toBe("sleep");
 });
 
@@ -57,4 +61,17 @@ it("accelerates gradually without leaving bounds, including during a resize", ()
   sim = triggerPetJump({ ...sim, x: 350 });
   sim = stepPetSimulation(sim, 50, 200, "idle");
   expect(sim.x).toBeLessThanOrEqual(148);
+});
+
+it("uses dedicated run frames when provided and ignores legacy bubble fields in JSON", () => {
+  const parsed = parsePixelPetConfigJson(JSON.stringify({
+    palette: { X: "#fff", R: "#f00" },
+    frames: { idle: [["X."]], walk: [[".X"]], run: [["RR"]] },
+    behavior: { cheerBubbles: ["GO!"], workBubbles: ["RUN"] },
+  }));
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) return;
+  expect(getPetSpriteFrame("run", 0, parsed.config)).toEqual(["RR"]);
+  expect(getPetSpriteFrame("easterEgg", 0, parsed.config)).toEqual(["X."]);
+  expect(getPetSpriteFrame("doze", 0, parsed.config)).toEqual(["X."]);
 });

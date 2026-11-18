@@ -1811,10 +1811,24 @@
       "allowPlatformHop": "上下バー間の自動移動",
       "allowPlatformHopDesc": "ステータスバーとタイトルバーの空白領域を自動で行き来します。",
       "reactToCodingMood": "AI セッションと連動",
-      "reactToCodingMoodDesc": "AI 実行中は走り、完了時はジャンプ、エラー時はアラートを出します。",
-      "enableRandomEvents": "ランダムミニイベント",
-      "enableRandomEventsDesc": "ときどきスライム・おばけ・流れ星が現れ、ペットが追いかけて反応します。",
-      "triggerEncounterTest": "イベント発生",
+      "reactToCodingMoodDesc": "AI 実行中は走り、完了時はジャンプ、エラー時はアラート動作を行います。",
+      "enableRandomEvents": "キャラクター固有イベント",
+      "enableRandomEventsDesc": "待機中や巡回中にキャラクター固有のイースターエッグ動作をランダムに再生します。",
+      "audition": {
+        "jump": "ジャンプ",
+        "run": "走る",
+        "rest": "居眠り",
+        "wake": "起きる",
+        "celebrate": "歓呼",
+        "alert": "警告",
+        "easterEgg": "イースターエッグ"
+      },
+      "capabilities": {
+        "run": "走る",
+        "sleepTransition": "居眠り/起床",
+        "wallClimb": "壁登り",
+        "easterEgg": "専用彩蛋"
+      },
       "jsonSection": "JSON 設定と AI 制作",
       "jsonSectionDesc": "キャラクター JSON を書き出し・読み込み、AI で新規作成や編集ができます。関連付けたファイルは保存後に検証され、プレビューが自動更新されます。下の JSON も直接編集できます。",
       "applyJson": "JSON 設定を適用",
@@ -3085,6 +3099,12 @@
     }
   },
   "sounds": {
+    "resolve": "解決（完了）",
+    "resolveDesc": "上行して主音に落ち着く",
+    "query": "問いかけ（待機）",
+    "queryDesc": "同じ高音を 2 回軽く叩き、未解決のまま",
+    "fault": "下降（異常）",
+    "faultDesc": "低音域で下行、暗めで耳に刺さらない",
     "default": "クラシック完了音",
     "defaultDesc": "聞き慣れた 2 音の完了通知",
     "waiting": "上昇待機音",

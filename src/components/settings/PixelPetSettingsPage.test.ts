@@ -167,8 +167,6 @@ it("fits thumbnails and resizes the live stage on character/scale changes while 
   const ctx = { clearRect: vi.fn(), fillRect: vi.fn(), setTransform: vi.fn() } as unknown as CanvasRenderingContext2D;
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx);
   const draw = vi.spyOn(sprites, "drawPixelPetFrame").mockImplementation(() => {});
-  vi.spyOn(sprites, "drawPixelBubble").mockImplementation(() => {});
-  vi.spyOn(sprites, "drawPetEncounter").mockImplementation(() => {});
   const daimao = PIXEL_PET_PRESETS.find((preset) => preset.id === "daimao")!;
   useAppStore.setState({ pixelPetConfig: daimao });
   await act(async () => root.render(createElement(Content)));
@@ -194,6 +192,9 @@ it("fits thumbnails and resizes the live stage on character/scale changes while 
   await act(async () => nextFrame(now += 50));
   expect(stage.height).toBeGreaterThan(initialHeight);
   draw.mockClear();
+  await act(async () => { stage.parentElement!.click(); nextFrame(now += 50); });
+  await act(async () => nextFrame(now += 50));
+  await act(async () => nextFrame(now += 50));
   for (let i = 0; i < 40; i++) {
     await act(async () => { stage.parentElement!.click(); nextFrame(now += 50); });
   }
@@ -211,4 +212,24 @@ it("fits thumbnails and resizes the live stage on character/scale changes while 
   await act(async () => nextFrame(now += 50));
   expect(stage.height).toBeLessThan(initialHeight + 88);
   expect(draw.mock.lastCall![5]).toBe(1);
+});
+
+it("triggers audition actions on the preview stage and updates live status", async () => {
+  await act(async () => root.render(null));
+  let nextFrame!: FrameRequestCallback;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { nextFrame = callback; return 1; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const ctx = { clearRect: vi.fn(), fillRect: vi.fn(), setTransform: vi.fn() } as unknown as CanvasRenderingContext2D;
+  vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx);
+  vi.spyOn(sprites, "drawPixelPetFrame").mockImplementation(() => {});
+  await act(async () => root.render(createElement(Content)));
+
+  let now = performance.now();
+  await click("彩蛋");
+  await act(async () => nextFrame(now += 50));
+  expect(host.textContent).toContain("celebrate/easterEgg");
+
+  await click("提醒");
+  await act(async () => nextFrame(now += 50));
+  expect(host.textContent).toContain("alert/alert");
 });

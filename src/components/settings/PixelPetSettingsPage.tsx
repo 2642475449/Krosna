@@ -9,18 +9,20 @@ import { useAppStore } from "@/store";
 import {
   buildPixelPetAiPrompt,
   DEFAULT_PIXEL_PET_CONFIG,
+  getPetCapabilities,
   PIXEL_PET_PRESETS,
   type PixelPetConfig,
 } from "@/lib/pixelPetConfig";
 import {
   createInitialPetSimulation,
+  dispatchPetEvent,
   stepPetSimulation,
   triggerPetJump,
+  type PetPlatform,
   type PetSimulationState,
+  type PetStandardEvent,
 } from "@/lib/pixelPet";
 import {
-  drawPetEncounter,
-  drawPixelBubble,
   drawPixelPetFrame,
   getPetSpriteFrame,
 } from "@/lib/pixelPetSprites";
@@ -68,10 +70,17 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const preview = useMemo(() => preparePixelPetPreview(config), [config]);
+  const capabilities = useMemo(() => getPetCapabilities(config), [config]);
   const configRef = useRef(preview);
   configRef.current = preview;
+  const capabilitiesRef = useRef(capabilities);
+  capabilitiesRef.current = capabilities;
   const simRef = useRef<PetSimulationState>(createInitialPetSimulation(420));
   const widthRef = useRef(420);
+  const [liveStatus, setLiveStatus] = useState<{ action: string; clip: string }>({
+    action: "idle",
+    clip: "idle",
+  });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -118,9 +127,17 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         widthRef.current,
         "idle",
         {
-          behavior: { ...activeConfig.behavior, allowPlatformHop: false },
+          behavior: { ...activeConfig.behavior, allowPlatformHop: false, allowWallClimb: false },
+          capabilities: capabilitiesRef.current,
           spriteWidth,
         },
+      );
+
+      const sim = simRef.current;
+      setLiveStatus((prev) =>
+        prev.action === sim.action && prev.clip === sim.clip
+          ? prev
+          : { action: sim.action, clip: sim.clip },
       );
 
       const ctx = canvas.getContext("2d");
@@ -131,10 +148,6 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         ctx.fillStyle = "rgba(128, 128, 128, 0.25)";
         ctx.fillRect(12, groundLineY, widthRef.current - 24, 1);
 
-        const sim = simRef.current;
-        if (sim.encounter) {
-          drawPetEncounter(ctx, sim.encounter, groundLineY, sim.animElapsedMs);
-        }
         // Repeated clicks can boost a jump beyond its nominal arc. Keep the
         // complete sprite inside the preview even then, and after a resize.
         const top = Math.max(topPadding, groundLineY - spriteHeight - sim.y);
@@ -149,9 +162,6 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
           pixelSize,
           activeConfig.palette,
         );
-        if (sim.bubble) {
-          drawPixelBubble(ctx, sim.bubble.text, left + spriteWidth / 2, top);
-        }
       }
 
       rafId = window.requestAnimationFrame(tick);
@@ -165,32 +175,94 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
     };
   }, []);
 
+  const triggerAudition = (event: PetStandardEvent) => {
+    const platforms: PetPlatform[] = [
+      { id: "preview-ground", minX: 12, maxX: Math.max(120, widthRef.current - 12), groundY: 80 },
+      { id: "preview-upper", minX: 12, maxX: Math.max(120, widthRef.current - 12), groundY: 36 },
+    ];
+    simRef.current = dispatchPetEvent(
+      simRef.current,
+      event,
+      widthRef.current,
+      {
+        platforms,
+        behavior: configRef.current.behavior,
+        capabilities: capabilitiesRef.current,
+      },
+    );
+  };
+
+  const auditionActions: { event: PetStandardEvent; labelKey: string; disabled?: boolean }[] = [
+    { event: "click", labelKey: "settings.pixelPet.audition.jump" },
+    { event: "work_start", labelKey: "settings.pixelPet.audition.run" },
+    { event: "rest", labelKey: "settings.pixelPet.audition.rest" },
+    { event: "wake", labelKey: "settings.pixelPet.audition.wake" },
+    { event: "work_complete", labelKey: "settings.pixelPet.audition.celebrate" },
+    { event: "work_error", labelKey: "settings.pixelPet.audition.alert" },
+    { event: "easter_egg", labelKey: "settings.pixelPet.audition.easterEgg", disabled: !capabilities.easterEgg },
+  ];
+
+  const capabilityBadges: { labelKey: string; supported: boolean }[] = [
+    { labelKey: "settings.pixelPet.capabilities.run", supported: capabilities.run },
+    { labelKey: "settings.pixelPet.capabilities.sleepTransition", supported: capabilities.sleepTransition },
+    { labelKey: "settings.pixelPet.capabilities.wallClimb", supported: capabilities.wallClimb },
+    { labelKey: "settings.pixelPet.capabilities.easterEgg", supported: capabilities.easterEgg },
+  ];
+
   return (
-    <div
-      ref={containerRef}
-      onClick={() => {
-        simRef.current = triggerPetJump(
-          simRef.current,
-          undefined,
-          Math.random,
-          configRef.current.behavior,
-        );
-      }}
-      title={t("settings.pixelPet.previewHint")}
-      className="relative w-full cursor-pointer overflow-hidden rounded-lg border"
-      style={{
-        minHeight: 76,
-        borderColor: "var(--cs-border-sidebar)",
-        background: "color-mix(in srgb, var(--cs-bg-card) 75%, transparent)",
-      }}
-    >
-      <canvas ref={canvasRef} className="block h-full w-full" style={{ imageRendering: "pixelated" }} />
-      <span
-        className="pointer-events-none absolute right-2.5 top-2 text-[11px]"
-        style={{ color: "var(--cs-text-tertiary)" }}
+    <div className="space-y-2">
+      <div
+        ref={containerRef}
+        onClick={() => {
+          simRef.current = triggerPetJump(
+            simRef.current,
+            configRef.current.behavior,
+          );
+        }}
+        title={t("settings.pixelPet.previewHint")}
+        className="relative w-full cursor-pointer overflow-hidden rounded-lg border"
+        style={{
+          minHeight: 76,
+          borderColor: "var(--cs-border-sidebar)",
+          background: "color-mix(in srgb, var(--cs-bg-card) 75%, transparent)",
+        }}
       >
-        {t("settings.pixelPet.previewHint")}
-      </span>
+        <canvas ref={canvasRef} className="block h-full w-full" style={{ imageRendering: "pixelated" }} />
+        <span
+          className="pointer-events-none absolute right-2.5 top-2 text-[11px]"
+          style={{ color: "var(--cs-text-tertiary)" }}
+        >
+          {t("settings.pixelPet.previewHint")}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {auditionActions.map((item) => (
+            <Button
+              key={item.event}
+              size="small"
+              disabled={item.disabled}
+              onClick={() => triggerAudition(item.event)}
+            >
+              {t(item.labelKey)}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2" style={{ color: "var(--cs-text-tertiary)" }}>
+          <span>
+            {liveStatus.action}/{liveStatus.clip}
+          </span>
+          {capabilityBadges.map((cap) => (
+            <span
+              key={cap.labelKey}
+              style={{ opacity: cap.supported ? 1 : 0.45 }}
+            >
+              {cap.supported ? "●" : "○"} {t(cap.labelKey)}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

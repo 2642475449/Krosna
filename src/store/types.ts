@@ -127,6 +127,9 @@ export type Language = "zh_CN" | "en" | "ja";
 export type SidebarSection = "project" | "sessions" | "git";
 
 export type NotificationSoundType =
+  | "resolve"
+  | "query"
+  | "fault"
   | "default"
   | "waiting"
   | "alert"
