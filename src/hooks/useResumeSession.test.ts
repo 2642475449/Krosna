@@ -3,9 +3,9 @@ import type { Session } from "@/types";
 
 const mocks = vi.hoisted(() => ({
   session: {} as Session,
+  otherSessions: [] as Session[],
   cleanup: vi.fn(),
   close: vi.fn(),
-  resolveCodex: vi.fn(),
   spawn: vi.fn(),
   updateSession: vi.fn(),
   clearExit: vi.fn(),
@@ -20,12 +20,11 @@ vi.mock("@/lib/api", () => ({
   cleanupSessionProcess: mocks.cleanup,
   closePty: mocks.close,
   spawnPty: mocks.spawn,
-  resolveRecentCodexSessionId: mocks.resolveCodex,
 }));
 vi.mock("@/store", () => {
   const state = () => ({
     defaultTerminalShell: "powershell",
-    sessions: [mocks.session],
+    sessions: [mocks.session, ...mocks.otherSessions],
     updateSession: mocks.updateSession,
     clearTerminalExitCode: mocks.clearExit,
   });
@@ -38,9 +37,9 @@ import { useResumeSession } from "./useResumeSession";
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.session = { id: "terminal", path: "D:/project", name: "Terminal", createdAt: 1, active: false, agentId: "cmd" };
+  mocks.otherSessions = [];
   mocks.cleanup.mockResolvedValue(undefined);
   mocks.close.mockResolvedValue(undefined);
-  mocks.resolveCodex.mockResolvedValue(null);
   mocks.spawn.mockResolvedValue(undefined);
   mocks.ready.mockResolvedValue(undefined);
   mocks.updateSession.mockImplementation((_id: string, updates: Partial<Session>) => Object.assign(mocks.session, updates));
@@ -66,20 +65,17 @@ it("ordinary resume leaves a live session untouched", async () => {
 it("restores the exact Codex conversation after stopping its old process", async () => {
   mocks.session = { ...mocks.session, active: true, status: "running", agentId: "codex", hasPromptHistory: true, agentSessionId: "conversation-id" };
   await useResumeSession()(mocks.session.id, { restart: true });
-  expect(mocks.resolveCodex).not.toHaveBeenCalled();
   expect(mocks.spawn.mock.calls[0][4]).toContain('resume "conversation-id"');
   expect(mocks.session.agentSessionId).toBe("conversation-id");
 });
 
 it("keeps a live Codex process when its original conversation cannot be resolved", async () => {
   mocks.session = { ...mocks.session, active: true, status: "running", statusRevision: 7, agentId: "codex", hasPromptHistory: true };
-  mocks.resolveCodex.mockResolvedValue("another-terminal-conversation");
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     await useResumeSession()(mocks.session.id, { restart: true });
     expect(mocks.close).not.toHaveBeenCalled();
     expect(mocks.spawn).not.toHaveBeenCalled();
-    expect(mocks.resolveCodex).not.toHaveBeenCalled();
     expect(mocks.session).toMatchObject({ active: true, status: "running", statusRevision: 7 });
     expect(mocks.messageError).toHaveBeenCalledWith("tabBar.restartSessionRestoreFailed");
   } finally {
@@ -155,20 +151,45 @@ it("preserves a newer status event when closing fails", async () => {
 
 it("restarts empty Codex without consulting another terminal's recent conversation", async () => {
   mocks.session = { ...mocks.session, active: true, status: "waiting", agentId: "codex", hasPromptHistory: false };
-  mocks.resolveCodex.mockResolvedValue("another-terminal-conversation");
   await useResumeSession()(mocks.session.id, { restart: true });
-  expect(mocks.resolveCodex).not.toHaveBeenCalled();
   expect(mocks.spawn.mock.calls[0][4]).not.toContain("resume");
   expect(mocks.spawn.mock.calls[0][4]).not.toContain("another-terminal-conversation");
 });
 
-it("preserves the existing recent-conversation fallback for ordinary resume", async () => {
-  mocks.session = { ...mocks.session, active: false, agentId: "codex", hasPromptHistory: true };
-  mocks.resolveCodex.mockResolvedValue("legacy-conversation");
-  await useResumeSession()(mocks.session.id);
-  expect(mocks.resolveCodex).toHaveBeenCalledWith("D:/project", 1);
-  expect(mocks.spawn.mock.calls[0][4]).toContain('resume "legacy-conversation"');
+it.each([true, undefined])("refuses to resume an unbound Codex session with history flag %s", async (hasPromptHistory) => {
+  mocks.session = { ...mocks.session, agentId: "codex", hasPromptHistory };
+  mocks.otherSessions = [{ ...mocks.session, id: "newer", createdAt: 2, agentSessionId: "other-thread" }];
+  expect(await useResumeSession()(mocks.session.id)).toBe(false);
+  expect(mocks.spawn).not.toHaveBeenCalled();
   expect(mocks.close).not.toHaveBeenCalled();
+  expect(mocks.messageError).toHaveBeenCalledWith(expect.objectContaining({
+    content: "sidebar.codexSessionRestoreFailedDescription",
+  }));
+});
+
+it("keeps the Codex ID reported by the new process when reopening an empty session", async () => {
+  mocks.session = { ...mocks.session, agentId: "codex", hasPromptHistory: false, agentSessionId: null };
+  mocks.spawn.mockImplementationOnce(async () => { mocks.session.agentSessionId = "new-thread"; });
+  expect(await useResumeSession()(mocks.session.id)).toBe(true);
+  expect(mocks.spawn.mock.calls[0][2]).toBe(false);
+  expect(mocks.spawn.mock.calls[0][4]).not.toContain("resume");
+  expect(mocks.session.agentSessionId).toBe("new-thread");
+});
+
+it.each([{}, { restart: true }, { automatic: true }])("blocks a previously duplicated Codex binding with options %j", async (options) => {
+  mocks.session = { ...mocks.session, agentId: "codex", agentSessionId: "shared-thread" };
+  mocks.otherSessions = [{ ...mocks.session, id: "duplicate" }];
+  expect(await useResumeSession()(mocks.session.id, options)).toBe(false);
+  expect(mocks.close).not.toHaveBeenCalled();
+  expect(mocks.spawn).not.toHaveBeenCalled();
+  expect(mocks.session.agentSessionId).toBe("shared-thread");
+});
+
+it("resumes the exact Codex conversation after the other entry is archived", async () => {
+  mocks.session = { ...mocks.session, agentId: "codex", agentSessionId: "shared-thread" };
+  mocks.otherSessions = [{ ...mocks.session, id: "duplicate", archived: true }];
+  expect(await useResumeSession()(mocks.session.id)).toBe(true);
+  expect(mocks.spawn.mock.calls[0][4]).toContain('resume "shared-thread"');
 });
 
 it("restarts Pi with the stable session ID when no external ID is bound", async () => {
@@ -235,7 +256,6 @@ it.each(["codex", "antigravity", "qoder", "opencode"] as const)("automatically r
   mocks.session = { ...mocks.session, agentId, hasPromptHistory: true, agentSessionId: "bound-conversation" };
   const result = await useResumeSession()(mocks.session.id, { automatic: true });
   expect(result).toBe(true);
-  expect(mocks.resolveCodex).not.toHaveBeenCalled();
   expect(mocks.ready).toHaveBeenCalledWith("terminal");
   expect(mocks.ready.mock.invocationCallOrder[0]).toBeLessThan(mocks.spawn.mock.invocationCallOrder[0]);
   expect(mocks.spawn.mock.calls[0][4]).toContain('"bound-conversation"');
@@ -246,7 +266,6 @@ it.each(["codex", "antigravity", "qoder", "opencode"] as const)("automatically r
 it.each(["codex", "antigravity", "qoder", "opencode"] as const)("does not automatically guess a missing %s identity", async (agentId) => {
   mocks.session = { ...mocks.session, agentId, hasPromptHistory: true };
   expect(await useResumeSession()(mocks.session.id, { automatic: true })).toBe(false);
-  expect(mocks.resolveCodex).not.toHaveBeenCalled();
   expect(mocks.spawn).not.toHaveBeenCalled();
   expect(mocks.ready).not.toHaveBeenCalled();
   expect(mocks.messageError).not.toHaveBeenCalled();
@@ -255,7 +274,6 @@ it.each(["codex", "antigravity", "qoder", "opencode"] as const)("does not automa
 it("starts an explicitly empty Codex session without resolving another conversation", async () => {
   mocks.session = { ...mocks.session, agentId: "codex", hasPromptHistory: false };
   expect(await useResumeSession()(mocks.session.id, { automatic: true })).toBe(true);
-  expect(mocks.resolveCodex).not.toHaveBeenCalled();
   expect(mocks.spawn.mock.calls[0][2]).toBe(false);
   expect(mocks.spawn.mock.calls[0][4]).not.toContain("resume");
   expect(mocks.spawn.mock.calls[0][5]).toBeUndefined();
@@ -343,7 +361,6 @@ it.each(["cmd", "powershell"] as const)("automatically reopens an ephemeral %s t
   expect(mocks.spawn.mock.calls[0][5]).toBeUndefined();
   expect(mocks.spawn.mock.calls[0][6]).toBe(agentId);
   expect(mocks.spawn.mock.calls[0][9]).toBe("D:/project/subdir");
-  expect(mocks.resolveCodex).not.toHaveBeenCalled();
 });
 
 it("does not leave a cancelled automatic restore starting after a newer startup event", async () => {

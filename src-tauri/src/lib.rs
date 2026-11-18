@@ -295,7 +295,6 @@ pub fn run() {
             commands::session::close_pty,
             commands::session::cleanup_stale_sessions,
             commands::session::cleanup_session_process,
-            commands::session::resolve_recent_codex_session_id,
             commands::session::is_session_active,
             commands::session::open_in_explorer,
             commands::session::open_in_associated_application,

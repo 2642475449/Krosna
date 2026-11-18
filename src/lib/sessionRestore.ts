@@ -4,6 +4,15 @@ export type SessionRestorePlan =
   | { kind: "resume-exact" | "start-empty"; agentSessionId: string | null; resume: boolean }
   | { kind: "unavailable"; reason: "missing-conversation-id" | "unsupported-session" };
 
+export function hasOtherCodexSessionBinding(
+  sessions: readonly Session[],
+  sessionId: string,
+  agentSessionId: string,
+): boolean {
+  return sessions.some((session) => session.id !== sessionId && !session.archived &&
+    session.agentId === "codex" && session.agentSessionId?.trim() === agentSessionId);
+}
+
 /** 自动恢复只使用绑定的会话身份，不按最近时间或 --continue 猜测对话。 */
 export function buildSessionRestorePlan(session: Session): SessionRestorePlan {
   const agentId = session.agentId ?? "claude";

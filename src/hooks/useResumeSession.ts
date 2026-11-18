@@ -2,13 +2,12 @@ import { useCallback } from "react";
 import { message } from "antd";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
-import { cleanupSessionProcess, closePty, resolveRecentCodexSessionId, spawnPty } from "@/lib/api";
+import { cleanupSessionProcess, closePty, spawnPty } from "@/lib/api";
 import { getAgentCommandShell, getAgentStartupCommand, isAiAgentId } from "@/lib/agents";
-import { buildSessionRestorePlan } from "@/lib/sessionRestore";
+import { buildSessionRestorePlan, hasOtherCodexSessionBinding } from "@/lib/sessionRestore";
 import { waitForTerminalRecoveryReady } from "@/store/slices/terminalRecovery";
 import type { ClaudeSessionLaunchOptions, SessionLaunchOptions } from "@/types";
 
-class CodexSessionRestoreError extends Error {}
 class SessionRestoreError extends Error {}
 class SessionRestoreCancelledError extends Error {}
 
@@ -43,10 +42,30 @@ export function useResumeSession() {
   const updateSession = useAppStore((state) => state.updateSession);
 
   return useCallback(async (sessionId: string, options: ResumeSessionOptions = {}): Promise<boolean> => {
-    const session = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    const { sessions } = useAppStore.getState();
+    const session = sessions.find((item) => item.id === sessionId);
     if (!session || options.signal?.aborted || (!options.restart && session.active) || session.status === "starting" || launchingSessions.has(sessionId)) return false;
-    const automaticPlan = options.automatic ? buildSessionRestorePlan(session) : undefined;
-    if (automaticPlan?.kind === "unavailable") return false;
+    const isCodex = session.agentId === "codex";
+    const restorePlan = options.automatic || isCodex ? buildSessionRestorePlan(session) : undefined;
+    if (restorePlan?.kind === "unavailable") {
+      if (isCodex && !options.automatic) {
+        if (options.restart) {
+          message.error(t("tabBar.restartSessionRestoreFailed"));
+        } else {
+          message.error({
+            key: `codex-session-restore-${sessionId}`,
+            title: t("sidebar.codexSessionRestoreFailedTitle"),
+            content: t("sidebar.codexSessionRestoreFailedDescription"),
+          });
+        }
+      }
+      return false;
+    }
+    if (isCodex && restorePlan?.agentSessionId &&
+      hasOtherCodexSessionBinding(sessions, sessionId, restorePlan.agentSessionId)) {
+      if (!options.automatic) message.error(t("sidebar.codexSessionBindingConflict"));
+      return false;
+    }
     const isCurrentSession = () => !options.signal?.aborted && useAppStore.getState().sessions.some((item) =>
       item.id === sessionId && item.path === session.path && item.agentId === session.agentId && !item.archived);
 
@@ -61,16 +80,8 @@ export function useResumeSession() {
         statusRevision: 0,
         statusUpdatedAt: Date.now(),
       });
-      let agentSessionId = automaticPlan ? automaticPlan.agentSessionId : session.agentSessionId;
-      if (!automaticPlan && session.agentId === "codex") {
-        if (!options.restart) {
-          agentSessionId ??= await resolveRecentCodexSessionId(session.path, session.createdAt);
-          if (!agentSessionId) throw new CodexSessionRestoreError();
-        } else if (session.hasPromptHistory && !agentSessionId) {
-          // 最近修改的对话可能属于同项目中另一个并发终端，重启只能使用已绑定 ID。
-          throw new SessionRestoreError();
-        }
-      } else if (!automaticPlan && session.agentId === "pi") {
+      let agentSessionId = restorePlan ? restorePlan.agentSessionId : session.agentSessionId;
+      if (!restorePlan && session.agentId === "pi") {
         // Pi can create or resume an exact UUID with --session-id. Reuse the
         // stable Krosna session ID so restoration never depends on recency.
         agentSessionId ??= sessionId;
@@ -108,7 +119,7 @@ export function useResumeSession() {
       await spawnPty(
         sessionId,
         session.path,
-        automaticPlan ? automaticPlan.resume : Boolean(session.hasPromptHistory),
+        restorePlan ? restorePlan.resume : Boolean(session.hasPromptHistory),
         session.agentId === "claude" || !session.agentId
           ? (claudeOptions?.skipPermissions ?? session.claudeSkipPermissions ?? false)
           : false,
@@ -118,7 +129,7 @@ export function useResumeSession() {
           agentSessionId,
           null,
           launchOptions,
-          automaticPlan ? automaticPlan.resume : options.restart ? Boolean(agentSessionId) : true,
+          restorePlan ? restorePlan.resume : options.restart ? Boolean(agentSessionId) : true,
         ),
         undefined,
         isAiAgentId(session.agentId)
@@ -139,7 +150,12 @@ export function useResumeSession() {
         await closePty(sessionId);
         throw new SessionRestoreCancelledError();
       }
-      updateSession(sessionId, { active: true, status: "waiting", agentSessionId, workspaceRestorePending: false });
+      updateSession(sessionId, {
+        active: true,
+        status: "waiting",
+        ...(!isCodex ? { agentSessionId } : {}),
+        workspaceRestorePending: false,
+      });
       useAppStore.getState().clearTerminalExitCode(sessionId);
       return true;
     } catch (error) {
@@ -158,13 +174,7 @@ export function useResumeSession() {
           : { active: currentSession.active, status: "error" });
       }
       if (cancelled || options.automatic) return false;
-      if (error instanceof CodexSessionRestoreError) {
-        message.error({
-          key: `codex-session-restore-${sessionId}`,
-          title: t("sidebar.codexSessionRestoreFailedTitle"),
-          content: t("sidebar.codexSessionRestoreFailedDescription"),
-        });
-      } else if (error instanceof SessionRestoreError) {
+      if (error instanceof SessionRestoreError) {
         message.error(t("tabBar.restartSessionRestoreFailed"));
       } else {
         message.error(error instanceof Error ? error.message : String(error));

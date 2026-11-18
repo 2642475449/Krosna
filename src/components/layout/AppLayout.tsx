@@ -28,6 +28,7 @@ import { useAgentHookHealthStore } from "@/store/slices/agentHookHealth";
 import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useResumeSession } from "@/hooks/useResumeSession";
+import { hasOtherCodexSessionBinding } from "@/lib/sessionRestore";
 import { addTerminalSession } from "@/lib/sessions";
 import { getDefaultSessionTitle } from "@/lib/sessionTitles";
 import type { TerminalSplitTarget } from "@/types";
@@ -44,7 +45,6 @@ import {
   isVoiceGlobalShortcutRegistered,
   openProjectWindow,
   spawnPty,
-  resolveRecentCodexSessionId,
 } from "@/lib/api";
 import {
   getAgentCommandShell,
@@ -761,15 +761,6 @@ function AppLayout() {
             kind: "task",
           });
         }
-        if (agent.id === "codex") {
-          const codexSessionId = await resolveRecentCodexSessionId(
-            currentProject.path,
-            sessionCreatedAt,
-          );
-          if (codexSessionId) {
-            updateSession(sessionId, { agentSessionId: codexSessionId });
-          }
-        }
         return sessionId;
       } catch (error) {
         console.error(`Failed to start ${agent.name} session:`, error);
@@ -1254,7 +1245,8 @@ function AppLayout() {
   useEffect(() => {
     const unlistenPromise = listen<AgentStatusUpdatePayload>("agent-status", (event) => {
       const payload = event.payload;
-      const session = useAppStore.getState().sessions.find((item) => item.id === payload.sessionId);
+      const { sessions } = useAppStore.getState();
+      const session = sessions.find((item) => item.id === payload.sessionId);
       if (!session) return;
       if (session.agentId && session.agentId !== payload.agent) return;
       if (
@@ -1295,6 +1287,9 @@ function AppLayout() {
         return;
       }
       if (payload.agent === "codex") useAgentHookHealthStore.getState().setObserved(Date.now());
+      const agentSessionId = payload.agentSessionId;
+      const canBind = agentSessionId && (payload.agent !== "codex" ||
+        !hasOtherCodexSessionBinding(sessions, session.id, agentSessionId));
       updateSession(payload.sessionId, {
         status: payload.state,
         active: true,
@@ -1304,7 +1299,7 @@ function AppLayout() {
           ? { lastActivityAt: payload.createdAt } : {}),
         // 原生新状态取代本地中断标记，避免下一轮权限等待沿用旧的输入就绪状态。
         lastEventType: payload.eventType ?? undefined,
-        ...(payload.agentSessionId ? { agentSessionId: payload.agentSessionId } : {}),
+        ...(canBind ? { agentSessionId } : {}),
       });
       useAppStore.getState().recordAttentionEventDiagnostic({
         eventId: `status:${payload.sessionId}:${payload.revision}`,

@@ -271,16 +271,6 @@ export async function ensureAgentStatusHook(agentId: string): Promise<AgentHookS
   return await invoke("ensure_agent_status_hook", { agentId });
 }
 
-export async function resolveRecentCodexSessionId(
-  projectPath: string,
-  sinceTimestampMs?: number,
-): Promise<string | null> {
-  return await invoke("resolve_recent_codex_session_id", {
-    projectPath,
-    sinceTimestampMs: sinceTimestampMs ?? null,
-  });
-}
-
 export async function checkClaudeReady(): Promise<void> {
   await invoke("check_claude_ready");
 }

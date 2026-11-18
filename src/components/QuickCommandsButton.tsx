@@ -23,7 +23,7 @@ import {
   quickCommandMatchesRepository,
 } from "@/lib/quickCommands";
 import { searchQuickCommands } from "@/lib/quickCommandSearch";
-import { inspectAgentClis, resolveRecentCodexSessionId, spawnPty } from "@/lib/api";
+import { inspectAgentClis, spawnPty } from "@/lib/api";
 import {
   getAgentCommandShell,
   getAgentDisplayName,
@@ -193,18 +193,6 @@ export function QuickCommandsButton() {
           ...(isAgentPrompt ? { lastActivityAt: Date.now() } : {}),
         });
         void useQuickCommandUsageStore.getState().setCommandUsed(projectPath, command.id);
-        if (isAgentPrompt && selectedAgent!.id === "codex") {
-          try {
-            const codexSessionId = await resolveRecentCodexSessionId(projectPath, sessionCreatedAt);
-            if (codexSessionId) {
-              updateSession(sessionId, { agentSessionId: codexSessionId });
-            }
-          } catch (resolveError) {
-            // The prompt is already running; failure to discover the resume id should
-            // not incorrectly report the whole quick command as failed.
-            console.warn("Failed to resolve Codex session id:", resolveError);
-          }
-        }
       } catch (error) {
         updateSession(sessionId, { active: false, status: "error" });
         console.error("快速命令执行失败:", error);
