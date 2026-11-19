@@ -58,6 +58,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           tagName: v__VERSION__
+          # The tag already pins the build. Use the default branch for GitHub's release metadata permission check.
+          releaseCommitish: ${{ github.event.repository.default_branch }}
           releaseName: Krosna v__VERSION__
           generateReleaseNotes: true
           releaseDraft: true
