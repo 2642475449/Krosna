@@ -1,11 +1,11 @@
 ---
 name: krosna-github-release
-description: Prepare, publish, and verify Krosna releases with Tauri auto-update artifacts hosted entirely in GitHub Releases. Use when changing a release version, creating or repairing a Krosna GitHub Release, updating the updater manifest, investigating an update check, or modifying the release workflow.
+description: Prepare, publish, and verify Krosna releases and signed Tauri updates on GitHub Releases and the China mirror. Use when changing a release version, creating or repairing a Krosna GitHub Release, updating the updater manifest, investigating an update check, or modifying the release workflow.
 ---
 
 # Krosna GitHub Release
 
-Keep all updater artifacts in GitHub Releases. New clients must not depend on a self-hosted update server. The legacy-update-bridge job mirrors signed assets to the existing legacy endpoint only for previously installed clients; preserve its deployed script, staging path and legacy installer alias.
+Build and sign each release once. Publish the original installer, signature and manifest in GitHub Releases. The `legacy-update-bridge` job serves the same signed bytes independently from the China mirror for Krosna and older Termflow clients. Preserve the deployed script, staging path and versioned installer alias.
 
 ## Release contract
 
@@ -13,8 +13,8 @@ Keep all updater artifacts in GitHub Releases. New clients must not depend on a 
 - Publish the signed Windows NSIS installer and its `.sig` file as assets of the matching `v<version>` GitHub Release.
 - Generate and upload `latest.json` to that same release.
 - Publish substantive, user-facing Release notes that explain what was added or upgraded and what was fixed. The automatically generated `Full Changelog` link alone is not an acceptable release description.
-- Keep the updater endpoint in `src-tauri/tauri.conf.json` as `https://github.com/2642475449/Krosna/releases/latest/download/latest.json`.
-- Ensure each manifest platform URL uses the immutable release tag: `https://github.com/2642475449/Krosna/releases/download/v<version>/Krosna_<version>_x64-setup.exe`.
+- Keep both updater endpoints in `src-tauri/tauri.conf.json` (`https://github.com/2642475449/Krosna/releases/latest/download/latest.json` and `https://termflow.jianglan.online/latest.json`).
+- Each manifest must name its own host's immutable artifact. GitHub serves `/2642475449/Krosna/releases/download/v<version>/Krosna_<version>_x64-setup.exe` and the China mirror serves `/releases/Termflow_<version>_x64-setup.exe`. Both manifests carry the same signature, version and notes.
 
 ## Prepare a release
 
@@ -48,14 +48,14 @@ Keep all updater artifacts in GitHub Releases. New clients must not depend on a 
 1. Push the matching `v<version>` tag only when the user has explicitly authorized publication.
 2. The `Release Krosna` workflow must publish the installer, signature, generated `latest.json`, and curated Release notes, then mark the release as latest.
 3. After the workflow finishes, inspect the public Release page and confirm both `新增与升级` and `问题修复` are present with the intended content; reject a body containing only GitHub's generated changelog.
-4. Download `releases/latest/download/latest.json` and validate its JSON, version, signature, installer URL, and user-facing notes. Confirm the installer URL resolves.
-5. Test update detection from a previously installed lower version in a packaged Windows build. A source-only build is insufficient.
+4. Check both public manifests and their actual downloads. Confirm the expected version, signature and release notes match, each installer downloads from its own source, and both files have the same SHA-256 and pass updater signature verification. To retry a mirror deployment, dispatch the workflow for the current latest release tag.
+5. Exercise a packaged Windows updater with the previous version. Test the China path with GitHub unavailable and the GitHub path with the China mirror unavailable. Check update detection and the download through signature verification. An active user's session can be preserved by running the test in a separate profile.
 
 ## Diagnose update checks
 
 - A green “already up to date” message means Tauri `check()` found no version greater than the app's embedded version; it is not proof that the repository's newest tag was consulted.
-- Inspect the packaged app's updater endpoint, then inspect the public GitHub `latest.json` asset and compare its version with the installed app.
-- Releases built before the GitHub endpoint change retain their old endpoint. They need a one-time manual install of a GitHub-hosted release; a newly built release cannot change an older app's embedded endpoint remotely.
+- Inspect the exact installed build's endpoints, its proxy mode and the public manifests. A shell process and the installed desktop process can inherit different environment proxies.
+- Krosna 1.8.36 and 1.8.37 embed only the GitHub endpoint. When GitHub cannot be reached, those versions can bootstrap by manually installing the new signed package from the China mirror. Older Termflow clients can still read their original mirror manifest.
 - Treat an updater error separately from “already up to date”; report the actual failure rather than converting it into a success message.
 
 ## Safety

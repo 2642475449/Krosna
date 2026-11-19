@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/make-dialog/refs/heads/main/tauri/tauri.conf.json",
   "productName": "Krosna",
-  "version": "1.8.37",
+  "version": "1.8.38",
   "identifier": "com.krosna.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -54,7 +54,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBRDVFMzZGMTE1RDJBQzAKUldUQUtsMFJiK1BWaXV0QUh3MGhmeC9TVG1RRVFNUHd5b0YxaXN3OGFoUS9GWFlIWWR3NnNXNFMK",
       "endpoints": [
-        "https://github.com/2642475449/Krosna/releases/latest/download/latest.json"
+        "https://github.com/2642475449/Krosna/releases/latest/download/latest.json",
+        "https://termflow.jianglan.online/latest.json"
       ],
       "windows": {
         "installMode": "passive"

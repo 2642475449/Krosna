@@ -1,11 +1,10 @@
-import type { Update } from "@tauri-apps/plugin-updater";
 import packageJson from "../../package.json";
 import {
+  type ApplicationUpdate,
   checkApplicationUpdate,
   closeApplicationUpdate,
   downloadApplicationUpdate,
   installApplicationUpdate,
-  resolveNetworkProxySettings,
   savePersistentSettings,
 } from "@/lib/api";
 import { applyUpdaterDownloadEvent, createUpdateProgress } from "@/lib/updateProgress";
@@ -15,7 +14,6 @@ import {
   type ApplicationUpdatePhase,
 } from "@/store/slices/applicationUpdate";
 
-const CHECK_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const PENDING_UPDATE_VERSION_KEY = "krosna.pending-update-version";
 
@@ -34,7 +32,7 @@ export type ApplicationUpdateCheckResult =
   | { status: "available"; currentVersion: string; version: string }
   | { status: "error"; currentVersion: string; error: string };
 
-let pendingUpdate: Update | null = null;
+let pendingUpdate: ApplicationUpdate | null = null;
 let checkPromise: Promise<ApplicationUpdateCheckResult> | null = null;
 let downloadPromise: Promise<void> | null = null;
 
@@ -103,24 +101,23 @@ export async function checkForApplicationUpdate(
   checkPromise = (async () => {
     try {
       const persistentSettings = getRuntimePersistentSettingsSnapshot();
-      const resolvedProxy = await resolveNetworkProxySettings({
+      const update = await checkApplicationUpdate({
         mode: persistentSettings.networkProxyMode,
         customProxyUrl: persistentSettings.networkCustomProxyUrl,
         noProxy: persistentSettings.networkNoProxy,
       });
-      const proxy = resolvedProxy.httpsProxy ?? resolvedProxy.httpProxy ?? undefined;
-      const update = await checkApplicationUpdate({ timeout: CHECK_TIMEOUT_MS, proxy });
+      const previous = pendingUpdate;
+      pendingUpdate = update;
+      if (previous && previous !== update) {
+        void closeApplicationUpdate(previous).catch((error) => {
+          console.warn("Failed to close superseded application update:", error);
+        });
+      }
       if (!update) {
         useApplicationUpdateStore.getState().reset(version);
         return { status: "up-to-date", currentVersion: version } as const;
       }
 
-      if (pendingUpdate && pendingUpdate !== update) {
-        void closeApplicationUpdate(pendingUpdate).catch((error) => {
-          console.warn("Failed to close superseded application update:", error);
-        });
-      }
-      pendingUpdate = update;
       useApplicationUpdateStore.getState().patch({
         phase: "available",
         currentVersion: update.currentVersion,

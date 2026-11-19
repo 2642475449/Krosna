@@ -5,6 +5,7 @@ pub(crate) mod agent_runner;
 pub mod agent_usage;
 pub mod agent_versions;
 pub mod agents;
+pub mod application_update;
 pub mod background;
 pub mod claude_config;
 pub mod command_library;

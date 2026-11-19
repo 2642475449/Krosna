@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import {
   checkForApplicationUpdate,
-  downloadPendingApplicationUpdate,
   installPendingApplicationUpdate,
   KROSNA_RELEASES_URL,
 } from "@/lib/applicationUpdater";
@@ -34,6 +33,7 @@ export function ApplicationUpdateModal() {
     update.phase === "installing";
   const canInstall = update.phase === "ready";
   const canRetry = update.phase === "error";
+  const { availableVersion } = update;
 
   const requestInstall = () => {
     // 仅在点击安装时按需读取会话/标签状态，避免常驻订阅导致高频重渲染。
@@ -53,30 +53,32 @@ export function ApplicationUpdateModal() {
       return;
     }
     if (!canRetry) return;
-    if (update.errorStage === "check") void checkForApplicationUpdate({ manual: true });
-    else if (update.errorStage === "download") void downloadPendingApplicationUpdate();
-    else void installPendingApplicationUpdate();
+    if (update.errorStage === "install") requestInstall();
+    else void checkForApplicationUpdate({ manual: true });
   };
 
-  const primaryText = update.phase === "installing"
-    ? t("updater.installing")
-    : update.phase === "downloading"
-      ? update.percent === null
+  const primaryText = () => {
+    switch (update.phase) {
+      case "checking": return t("settings.quickMenu.checkingForUpdate");
+      case "available": return t("updater.preparingDownload");
+      case "downloading": return update.percent === null
         ? t("updater.downloading")
-        : t("updater.downloadingPercent", { percent: update.percent })
-      : canRetry
-        ? t("updater.retry")
-        : t("updater.restartAndInstall");
+        : t("updater.downloadingPercent", { percent: update.percent });
+      case "installing": return t("updater.installing");
+      case "error": return t("updater.retry");
+      default: return t("updater.restartAndInstall");
+    }
+  };
 
   return (
     <>
       <Modal
         centered
         open={update.modalOpen}
-        title={update.availableVersion
-          ? t("updater.updateAvailable", { version: update.availableVersion })
+        title={availableVersion
+          ? t("updater.updateAvailable", { version: availableVersion })
           : t("updater.title")}
-        okText={primaryText}
+        okText={primaryText()}
         cancelText={t("updater.close")}
         okButtonProps={{ disabled: isBusy }}
         confirmLoading={update.phase === "installing"}
@@ -87,17 +89,23 @@ export function ApplicationUpdateModal() {
         onCancel={update.closeModal}
       >
         <div className="space-y-3">
-          {update.availableVersion ? (
+          {availableVersion ? (
             <p className="m-0 text-sm text-[var(--cs-text-secondary)]">
               {t("updater.versionDescription", {
                 currentVersion: update.currentVersion,
-                version: update.availableVersion,
+                version: availableVersion,
               })}
             </p>
           ) : null}
 
           {update.phase === "checking" || update.phase === "available" ? (
-            <Alert type="info" showIcon title={t("updater.preparingDownload")} />
+            <Alert
+              type="info"
+              showIcon
+              title={update.phase === "checking"
+                ? t("settings.quickMenu.checkingForUpdate")
+                : t("updater.preparingDownload")}
+            />
           ) : null}
 
           {update.phase === "downloading" || update.phase === "ready" || update.phase === "installing" ? (
@@ -148,24 +156,26 @@ export function ApplicationUpdateModal() {
                 : update.errorStage === "download"
                   ? t("updater.downloadFailed")
                   : t("updater.installFailed")}
-              description={(
-                <div className="space-y-2 text-xs">
-                  {update.errorStage === "check" || update.errorStage === "download" ? (
-                    <div>{t("updater.githubConnectivityHint")}</div>
-                  ) : null}
-                  <div className="break-all font-mono">{update.error}</div>
-                </div>
-              )}
+              description={<div className="whitespace-pre-wrap break-all font-mono text-xs">{update.error}</div>}
             />
           ) : null}
 
           {update.errorStage === "check" || update.errorStage === "download" ? (
-            <Button onClick={() => void openExternalUrl(KROSNA_RELEASES_URL)}>
-              {t("updater.manualDownload")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {update.errorStage === "download" && availableVersion ? (
+                <Button onClick={() => void openExternalUrl(
+                  `https://termflow.jianglan.online/releases/Termflow_${encodeURIComponent(availableVersion)}_x64-setup.exe`,
+                )}>
+                  {t("updater.downloadFromMirror")}
+                </Button>
+              ) : null}
+              <Button onClick={() => void openExternalUrl(KROSNA_RELEASES_URL)}>
+                {t("updater.manualDownload")}
+              </Button>
+            </div>
           ) : null}
 
-          {update.availableVersion ? (
+          {availableVersion ? (
             <div>
               <div className="mb-1 text-sm font-medium">{t("updater.releaseNotes")}</div>
               <div className="max-h-44 overflow-y-auto whitespace-pre-wrap rounded-md bg-[var(--cs-bg-tertiary)] p-3 text-xs leading-5 text-[var(--cs-text-secondary)]">

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to mirror for legacy clients (for example, v1.8.35)"
+        description: "Current latest release tag to sync to the China update server"
         required: true
         type: string
 
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   release-windows:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
 
     steps:
@@ -86,12 +86,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ github.ref_name }}" --notes-file "release-notes/${{ github.ref_name }}.md" --draft=false --latest
 
-  # Only old clients use this domain. New clients update directly from GitHub.
-  # Preserve the deployed server's legacy staging path, script and asset alias.
+  # Both Krosna and older Termflow clients use the deployed mirror and its installer alias.
   legacy-update-bridge:
+    name: Sync and verify China update mirror
     needs: release-windows
     if: ${{ always() && ((startsWith(github.ref, 'refs/tags/v') && needs.release-windows.result == 'success') || github.event_name == 'workflow_dispatch') }}
     runs-on: windows-latest
+    concurrency:
+      group: krosna-update-mirror
+      cancel-in-progress: false
     steps:
       - name: Download signed GitHub release
         shell: pwsh
@@ -102,6 +105,8 @@ jobs:
         run: |
           $tag = $env:RELEASE_TAG
           if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw "Invalid release tag" }
+          $latestTag = gh release view --repo $env:RELEASE_REPOSITORY --json tagName --jq .tagName
+          if ($LASTEXITCODE -ne 0 -or $latestTag -cne $tag) { throw "Only the latest public release ($latestTag) can be mirrored" }
           $version = $tag -replace '^v', ''
           $assets = Join-Path $env:RUNNER_TEMP "krosna-legacy-assets"
           New-Item -ItemType Directory -Force -Path $assets | Out-Null
@@ -113,11 +118,11 @@ jobs:
             throw "Manifest version or Windows signature is invalid"
           }
           $artifactName = [uri]::UnescapeDataString(([uri]$platform.url).Segments[-1])
-          if ($artifactName -notmatch '^(Krosna|Termflow)_[0-9A-Za-z.+-]+_x64-setup\.exe$') { throw "Unexpected installer name" }
+          if ($artifactName -cnotin @("Krosna_${version}_x64-setup.exe", "Termflow_${version}_x64-setup.exe")) { throw "Unexpected installer name" }
           gh release download $tag --repo $env:RELEASE_REPOSITORY --pattern $artifactName --pattern "${artifactName}.sig" --dir $assets
           if ($LASTEXITCODE -ne 0) { throw "Unable to download signed installer" }
           $signature = (Get-Content -Raw (Join-Path $assets "${artifactName}.sig")).Trim()
-          if ($signature -ne $platform.signature.Trim()) { throw "Installer signature does not match manifest" }
+          if ($signature -cne $platform.signature.Trim()) { throw "Installer signature does not match manifest" }
           $alias = "Termflow_${version}_x64-setup.exe"
           if ($artifactName -ne $alias) {
             Copy-Item -LiteralPath (Join-Path $assets $artifactName) -Destination (Join-Path $assets $alias)
@@ -128,7 +133,7 @@ jobs:
           "LEGACY_ASSETS=$assets" | Out-File -FilePath $env:GITHUB_ENV -Append
           "LEGACY_INSTALLER=$alias" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Configure legacy bridge SSH access
+      - name: Configure update mirror SSH access
         shell: pwsh
         env:
           UPDATE_DEPLOY_SSH_KEY: ${{ secrets.UPDATE_DEPLOY_SSH_KEY }}
@@ -138,7 +143,7 @@ jobs:
           [System.IO.File]::WriteAllText($keyPath, $env:UPDATE_DEPLOY_SSH_KEY.Trim() + "`n", [System.Text.UTF8Encoding]::new($false))
           icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:R" | Out-Null
 
-      - name: Mirror release for legacy clients
+      - name: Deploy signed installer and mirror manifest
         shell: pwsh
         run: |
           $keyPath = Join-Path $env:RUNNER_TEMP "krosna-update-deploy"
@@ -152,6 +157,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Unable to upload legacy update" }
           ssh @sshOptions $destination "mv $staging/server-latest.json $staging/latest.json && sudo /usr/local/sbin/deploy-termflow-update"
           if ($LASTEXITCODE -ne 0) { throw "Unable to deploy legacy update" }
+
+      - name: Verify public mirror manifest and installer
+        shell: pwsh
+        run: |
+          $mirrorUrl = "https://termflow.jianglan.online/latest.json"
+          $expected = Get-Content -Raw (Join-Path $env:LEGACY_ASSETS server-latest.json) | ConvertFrom-Json
+          $published = Invoke-RestMethod -Uri $mirrorUrl -MaximumRedirection 0 -TimeoutSec 30
+          $platform = $published.platforms.'windows-x86_64'
+          $expectedPlatform = $expected.platforms.'windows-x86_64'
+          if ($published.version -cne $expected.version -or $published.notes -cne $expected.notes -or
+              $platform.url -cne $expectedPlatform.url -or $platform.signature -cne $expectedPlatform.signature) {
+            throw "Public mirror manifest does not match the signed GitHub release"
+          }
+          $download = Join-Path $env:RUNNER_TEMP "verified-mirror-installer.exe"
+          Invoke-WebRequest -Uri $platform.url -OutFile $download -MaximumRedirection 0 -TimeoutSec 300
+          $sourceHash = (Get-FileHash -LiteralPath (Join-Path $env:LEGACY_ASSETS $env:LEGACY_INSTALLER)).Hash
+          if ((Get-FileHash -LiteralPath $download).Hash -ne $sourceHash) { throw "Mirror installer differs from GitHub release" }
 
       - name: Remove temporary SSH key
         if: always()

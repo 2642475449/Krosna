@@ -117,13 +117,28 @@ mod tests {
     }
 
     #[test]
-    fn release_workflow_keeps_legacy_bridge_separate_from_primary_release() {
+    fn krosna_retains_both_independent_update_sources() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let endpoints = config["plugins"]["updater"]["endpoints"].as_array().unwrap();
+        for endpoint in [
+            "https://github.com/2642475449/Krosna/releases/latest/download/latest.json",
+            "https://termflow.jianglan.online/latest.json",
+        ] {
+            assert!(endpoints.iter().any(|url| url.as_str() == Some(endpoint)), "{endpoint}");
+        }
+    }
+
+    #[test]
+    fn release_workflow_keeps_mirror_independently_retryable_and_serializes_deployments() {
         let workflow: serde_yaml::Value = serde_yaml::from_str(include_str!("../../.github/workflows/release.yml")).unwrap();
         let jobs = workflow["jobs"].as_mapping().unwrap();
         assert_eq!(jobs.len(), 2);
         assert!(workflow["jobs"]["release-windows"]["needs"].is_null());
         assert_eq!(workflow["jobs"]["legacy-update-bridge"]["needs"].as_str(), Some("release-windows"));
         assert!(workflow["jobs"]["legacy-update-bridge"]["if"].as_str().unwrap().contains("workflow_dispatch"));
+        let concurrency = &workflow["jobs"]["legacy-update-bridge"]["concurrency"];
+        assert_eq!(concurrency["group"].as_str(), Some("krosna-update-mirror"));
+        assert_eq!(concurrency["cancel-in-progress"].as_bool(), Some(false));
     }
 
     #[test]
