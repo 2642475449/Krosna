@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::WebviewWindow;
 
 // 每个窗口的所有终端共用在途预算，覆盖 IPC 与 xterm 解析队列。
 pub const OUTPUT_WINDOW_BYTES: usize = 256 * 1024;
@@ -143,49 +143,48 @@ impl OutputHub {
         }
     }
 
+    // 重载后仍使用同一窗口，额度始终取自它当前的订阅。
+    fn reserve_window_output(
+        &self,
+        label: &str,
+        bytes: usize,
+        cancelled: &AtomicBool,
+    ) -> Option<(Arc<OutputFlow>, u64)> {
+        let flow = self.subscribers.lock().get(label).cloned()?;
+        let delivery_id = flow.reserve(bytes, cancelled)?;
+        Some((flow, delivery_id))
+    }
+
     pub fn send_output(
         &self,
-        app: &AppHandle,
+        window: &WebviewWindow,
         session_id: &str,
         data: &str,
         cancelled: &AtomicBool,
     ) {
-        let subscribers: Vec<_> = self
-            .subscribers
-            .lock()
-            .iter()
-            .map(|(window, flow)| (window.clone(), flow.clone()))
-            .collect();
-        for (label, flow) in subscribers {
-            let Some(window) = app.get_webview_window(&label) else {
-                self.unsubscribe_output(&label, Some(&flow.subscription_id));
-                continue;
-            };
-            let Some(delivery_id) = flow.reserve(data.len(), cancelled) else {
-                continue;
-            };
-            if let Err(error) = emit_pty_event(
-                &window,
-                "pty-output",
-                PtyOutputPayload {
-                    session_id: session_id.to_string(),
-                    data: data.to_string(),
-                    subscription_id: flow.subscription_id.clone(),
-                    delivery_id,
-                },
-            ) {
-                log::warn!("Failed to deliver PTY output for {session_id}: {error}");
-                self.unsubscribe_output(&label, Some(&flow.subscription_id));
-            }
+        let Some((flow, delivery_id)) =
+            self.reserve_window_output(window.label(), data.len(), cancelled)
+        else {
+            return;
+        };
+        if let Err(error) = emit_pty_event(
+            window,
+            "pty-output",
+            PtyOutputPayload {
+                session_id: session_id.to_string(),
+                data: data.to_string(),
+                subscription_id: flow.subscription_id.clone(),
+                delivery_id,
+            },
+        ) {
+            log::warn!("Failed to deliver PTY output for {session_id}: {error}");
+            self.unsubscribe_output(window.label(), Some(&flow.subscription_id));
         }
     }
 
-    pub fn send_exit(&self, app: &AppHandle, payload: PtyExitPayload) {
-        let labels: Vec<_> = self.subscribers.lock().keys().cloned().collect();
-        for label in labels {
-            if let Some(window) = app.get_webview_window(&label) {
-                let _ = emit_pty_event(&window, "pty-exit", payload.clone());
-            }
+    pub fn send_exit(&self, window: &WebviewWindow, payload: PtyExitPayload) {
+        if self.subscribers.lock().contains_key(window.label()) {
+            let _ = emit_pty_event(window, "pty-exit", payload);
         }
     }
 }
@@ -194,6 +193,40 @@ impl OutputHub {
 mod tests {
     use super::*;
     use std::sync::{mpsc, Arc};
+
+    #[test]
+    fn output_uses_only_the_owning_windows_current_subscription() {
+        let hub = Arc::new(OutputHub::default());
+        hub.subscribe_output("main", "foreground".into()).unwrap();
+        hub.subscribe_output("project-b", "background".into())
+            .unwrap();
+        let cancelled = AtomicBool::new(false);
+        let (background, _) = hub
+            .reserve_window_output("project-b", OUTPUT_WINDOW_BYTES, &cancelled)
+            .unwrap();
+        let (sent, received) = mpsc::channel();
+        let sender = hub.clone();
+        let worker = std::thread::spawn(move || {
+            sent.send(sender.reserve_window_output("main", 1, &AtomicBool::new(false)))
+                .unwrap();
+        });
+        let result = received.recv_timeout(Duration::from_secs(2));
+        let background_counts = background.pending_counts();
+        hub.unsubscribe_output("project-b", None);
+        worker.join().unwrap();
+        let (foreground, _) = result.unwrap().unwrap();
+        assert_eq!(background_counts, (OUTPUT_WINDOW_BYTES, 1));
+        assert_eq!(foreground.subscription_id, "foreground");
+        assert_eq!(foreground.pending_counts(), (1, 1));
+        assert!(hub
+            .reserve_window_output("project-b", 1, &cancelled)
+            .is_none());
+
+        hub.subscribe_output("main", "reloaded".into()).unwrap();
+        let (reloaded, _) = hub.reserve_window_output("main", 1, &cancelled).unwrap();
+        assert_eq!(reloaded.subscription_id, "reloaded");
+        assert_eq!(foreground.pending_counts(), (0, 0));
+    }
 
     #[test]
     fn stale_ack_and_unsubscribe_cannot_release_a_replacement_subscription() {

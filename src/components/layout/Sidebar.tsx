@@ -21,7 +21,6 @@ import {
 } from "@ant-design/icons";
 import { useAppStore, type SidebarSection } from "@/store";
 import {
-  gitBranchInfo,
   gitRepoInfo,
   gitStatus,
   openInFileManager,
@@ -133,11 +132,9 @@ function Sidebar({ collapsed, section }: SidebarProps) {
         return;
       }
 
-      const [statuses, branch] = await Promise.all([
-        gitStatus(projectPath),
-        gitBranchInfo(projectPath).catch(() => null),
-      ]);
+      const statuses = await gitStatus(projectPath);
       if (!isCurrentRequest()) return;
+      const branch = repoInfo.branchInfo;
       setGitChangeCount(statuses.length);
       setGitSyncCounts(branch?.ahead ?? 0, branch?.behind ?? 0);
       publishGitStatusSnapshot({
@@ -162,7 +159,7 @@ function Sidebar({ collapsed, section }: SidebarProps) {
     { debounceDelay: 1000, cooldownDelay: 5000, pollingInterval: 30000 }
   );
 
-  // 使用文件系统监听（事件驱动，替代轮询）
+  // 文件事件与前台的兜底轮询共用同一刷新控制器。
   useGitFileWatcher(
     currentProject?.path ?? null,
     requestRefresh,

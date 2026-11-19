@@ -23,6 +23,7 @@ import {
   type PetStandardEvent,
 } from "@/lib/pixelPet";
 import {
+  drawPixelBubble,
   drawPixelPetFrame,
   getPetSpriteFrame,
 } from "@/lib/pixelPetSprites";
@@ -153,7 +154,7 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
         const top = Math.max(topPadding, groundLineY - spriteHeight - sim.y);
         const left = Math.max(0, Math.min(widthRef.current - spriteWidth, sim.x));
         const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, activeConfig);
-        drawPixelPetFrame(
+        const spriteBounds = drawPixelPetFrame(
           ctx,
           frame,
           left,
@@ -162,6 +163,9 @@ function PixelPetPreviewStage({ config }: { config: PixelPetConfig }) {
           pixelSize,
           activeConfig.palette,
         );
+        if (sim.bubble) {
+          drawPixelBubble(ctx, sim.bubble.text, spriteBounds, pixelSize, { width: widthRef.current, height: layout.height });
+        }
       }
 
       rafId = window.requestAnimationFrame(tick);

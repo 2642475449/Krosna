@@ -46,6 +46,11 @@ export interface PetPlatform {
   groundY: number;
 }
 
+export interface PetBubble {
+  text: string;
+  remainingMs: number;
+}
+
 export type PetClimbPhase = "grab" | "climb" | "hang" | "jump";
 
 export interface PetClimbState {
@@ -77,6 +82,7 @@ export interface PetSimulationState {
   motionElapsedMs: number;
   targetX: number | null;
   paused: boolean;
+  bubble: PetBubble | null;
   lastMood: PetCodingMood;
   lastEvent: PetStandardEvent | "auto" | null;
   easterEggRemainingMs: number;
@@ -202,6 +208,7 @@ export function createInitialPetSimulation(
     motionElapsedMs: 0,
     targetX: null,
     paused: false,
+    bubble: null,
     lastMood: "idle",
     lastEvent: null,
     easterEggRemainingMs: 0,
@@ -210,13 +217,20 @@ export function createInitialPetSimulation(
   };
 }
 
-/**
- * Trigger a jump on the pet.
- */
+function pickBubble(lines: readonly string[] | undefined, random: () => number, remainingMs: number): PetBubble | null {
+  if (!lines?.length) return null;
+  const text = lines[Math.floor(random() * lines.length)];
+  return text ? { text, remainingMs } : null;
+}
+
+/** 点击和动作试演共用跳跃逻辑；调用方也可指定本次气泡的文字。 */
 export function triggerPetJump(
   state: PetSimulationState,
+  textOrBehavior?: string | Partial<PixelPetBehaviorConfig>,
+  random: () => number = Math.random,
   behavior?: Partial<PixelPetBehaviorConfig>,
 ): PetSimulationState {
+  if (typeof textOrBehavior === "object") behavior = textOrBehavior;
   const jumpVelocity = behavior?.jumpVelocityPxPerSec ?? JUMP_VELOCITY_PX_PER_SEC;
   const fromGround = state.y === 0 && !state.climb;
   return {
@@ -234,6 +248,9 @@ export function triggerPetJump(
     idleAccumulatedMs: 0,
     paused: false,
     lastEvent: "click",
+    bubble: typeof textOrBehavior === "string"
+      ? { text: textOrBehavior, remainingMs: 1600 }
+      : pickBubble(behavior?.cheerBubbles, random, 1600),
   };
 }
 
@@ -351,6 +368,7 @@ export function hopPetToPlatform(
     targetX: null,
     paused: false,
     lastEvent: "hop_platform",
+    bubble: { text: "★", remainingMs: 1200 },
   };
 }
 
@@ -391,6 +409,7 @@ function enterSleepState(state: PetSimulationState, paused: boolean, durationMs:
     climb: null,
     easterEggRemainingMs: 0,
     paused,
+    bubble: { text: "Zzz", remainingMs: 2200 },
     vy: state.y === 0 ? 0 : state.vy,
     action: "sleep",
     clip: "doze",
@@ -408,6 +427,7 @@ function enterSleepState(state: PetSimulationState, paused: boolean, durationMs:
 function wakeFromSleepState(state: PetSimulationState, nextAction: PetActionState = "idle"): PetSimulationState {
   return {
     ...state,
+    bubble: { text: "GO!", remainingMs: 1200 },
     climb: null,
     easterEggRemainingMs: 0,
     paused: false,
@@ -456,7 +476,7 @@ export function dispatchPetEvent(
 
   switch (event) {
     case "click":
-      return triggerPetJump(state, options?.behavior);
+      return triggerPetJump(state, options?.behavior, random);
     case "work_start":
       return {
         ...state,
@@ -472,9 +492,10 @@ export function dispatchPetEvent(
         idleAccumulatedMs: 0,
         lastMood: "working",
         lastEvent: "work_start",
+        bubble: pickBubble(options?.behavior?.workBubbles, random, 1800),
       };
     case "work_complete": {
-      const jumped = triggerPetJump(state, options?.behavior);
+      const jumped = triggerPetJump(state, options?.behavior, random);
       return {
         ...jumped,
         action: "celebrate",
@@ -499,6 +520,7 @@ export function dispatchPetEvent(
         idleAccumulatedMs: 0,
         lastMood: "error",
         lastEvent: "work_error",
+        bubble: { text: "!?", remainingMs: 2200 },
       };
     case "rest":
       return {
@@ -517,7 +539,7 @@ export function dispatchPetEvent(
         (p) => p.id !== platform.id && p.maxX - p.minX >= spriteWidth * 2,
       );
       const target = candidates[0];
-      return target ? hopPetToPlatform(state, target, random, spriteWidth) : triggerPetJump(state, options?.behavior);
+      return target ? hopPetToPlatform(state, target, random, spriteWidth) : triggerPetJump(state, options?.behavior, random);
     }
     case "wall_climb": {
       const candidates = (options?.platforms ?? []).filter(
@@ -527,7 +549,7 @@ export function dispatchPetEvent(
       if (target && options?.capabilities?.wallClimb) {
         return startPetWallClimb(state, platform, target, spriteWidth, random);
       }
-      return triggerPetJump(state, options?.behavior);
+      return triggerPetJump(state, options?.behavior, random);
     }
   }
 }
@@ -650,6 +672,11 @@ export function stepPetSimulation(
 ): PetSimulationState {
   const dt = Number.isFinite(dtMs) ? Math.max(0, Math.min(dtMs, 100)) : 0;
   const spriteWidth = options?.spriteWidth ?? PET_SPRITE_LOGICAL_SIZE;
+  // 攀墙、过渡、彩蛋和休息都有提前返回，气泡先统一按模拟时钟计时。
+  if (prev.bubble && dt > 0) {
+    const remainingMs = prev.bubble.remainingMs - dt;
+    prev = { ...prev, bubble: remainingMs > 0 ? { ...prev.bubble, remainingMs } : null };
+  }
 
   if (prev.climb) {
     return stepClimbSimulation(prev, dt, options);
@@ -820,8 +847,9 @@ function advancePetBehavior(
         next.actionTimerMs = 3200;
         next.idleAccumulatedMs = 0;
         next.lastEvent = "work_start";
+        next.bubble = pickBubble(behavior?.workBubbles, random, 1800);
       } else if (effectiveMood === "completed" && prev.lastMood === "working") {
-        next = triggerPetJump(next, behavior);
+        next = triggerPetJump(next, behavior, random);
         next.action = "celebrate";
         next.actionTimerMs = 1100;
         next.lastMood = effectiveMood;
@@ -831,6 +859,7 @@ function advancePetBehavior(
         next.actionTimerMs = 1600;
         next.idleAccumulatedMs = 0;
         next.lastEvent = "work_error";
+        next.bubble = { text: "!?", remainingMs: 2200 };
       }
     }
   }
@@ -940,6 +969,9 @@ function advancePetBehavior(
       next.actionTimerMs = 2400 + Math.floor(random() * 2600);
       if (random() < 0.25) {
         next.facing = next.facing === 1 ? -1 : 1;
+      }
+      if (!next.bubble && behavior?.workBubbles?.length && random() < 0.22) {
+        next.bubble = pickBubble(behavior.workBubbles, random, 1500);
       }
     } else if (next.action === "walk" || next.action === "run" || next.action === "alert") {
       if (random() < 0.72) {

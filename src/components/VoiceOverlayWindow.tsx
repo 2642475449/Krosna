@@ -1,18 +1,9 @@
 import { useEffect, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { VoiceStatusCapsule } from "@/components/VoiceButton";
-import type { AsrPhase } from "@/hooks/useVoiceRecognition";
+import type { VoiceOverlayState } from "@/lib/voiceWindowState";
 
-interface VoiceOverlayStatePayload {
-  phase: AsrPhase;
-  level: number;
-  elapsedMs: number;
-  errorMessage: string | null;
-  liveText: string;
-  shortcutLabel: string;
-}
-
-const INITIAL_STATE: VoiceOverlayStatePayload = {
+const INITIAL_STATE: VoiceOverlayState = {
   phase: "idle",
   level: 0,
   elapsedMs: 0,
@@ -22,7 +13,7 @@ const INITIAL_STATE: VoiceOverlayStatePayload = {
 };
 
 function VoiceOverlayWindow() {
-  const [voiceState, setVoiceState] = useState<VoiceOverlayStatePayload>(INITIAL_STATE);
+  const [voiceState, setVoiceState] = useState<VoiceOverlayState>(INITIAL_STATE);
 
   useEffect(() => {
     const root = document.getElementById("root");
@@ -83,13 +74,14 @@ function VoiceOverlayWindow() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void listen<VoiceOverlayStatePayload>(
+    void listen<VoiceOverlayState>(
       "voice-overlay-state",
       (event) => {
         if (!disposed) {
           setVoiceState(event.payload);
         }
       },
+      { target: "voice-overlay" },
     ).then((nextUnlisten) => {
       if (disposed) {
         nextUnlisten();

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { observeWindowActivity } from "@/lib/windowActivity";
 
 /**
  * Git 刷新控制器配置
@@ -50,7 +51,8 @@ export function useGitRefreshController(
   const debounceTimerRef = useRef<number | null>(null);
   const cooldownTimerRef = useRef<number | null>(null);
   const pollingTimerRef = useRef<number | null>(null);
-  const isCoolingDownRef = useRef(false);
+  const nextRefreshAtRef = useRef(0);
+  const foregroundRef = useRef(false);
   const activeOperationIdsRef = useRef(new Set<string>());
   const operationSequenceRef = useRef(0);
   const pendingRefreshRef = useRef(false);
@@ -83,19 +85,30 @@ export function useGitRefreshController(
   }, []);
 
   // 执行刷新（带冷却保护）
-  const executeRefresh = useCallback(async (): Promise<void> => {
-    if (executeRefreshRef.current !== executeRefresh) return;
+  const executeRefresh = useCallback(async (manual = false): Promise<void> => {
+    if (!isMountedRef.current || executeRefreshRef.current !== executeRefresh) return;
     // 同一生命周期内合并刷新；切项目后旧请求不再拥有控制器状态。
+    pendingRefreshRef.current = true;
     if (
-      isCoolingDownRef.current ||
+      (!foregroundRef.current && !manual) ||
       refreshingGenerationRef.current !== null ||
-      activeOperationIdsRef.current.size > 0 ||
-      !isMountedRef.current
+      activeOperationIdsRef.current.size > 0
     ) {
-      if (isMountedRef.current) pendingRefreshRef.current = true;
+      return;
+    }
+    const remaining = nextRefreshAtRef.current - performance.now();
+    if (remaining > 0) {
+      if (cooldownTimerRef.current === null) {
+        cooldownTimerRef.current = window.setTimeout(() => {
+          cooldownTimerRef.current = null;
+          void executeRefresh(manual);
+        }, Math.ceil(remaining));
+      }
       return;
     }
 
+    clearDebounceTimer();
+    clearCooldownTimer();
     pendingRefreshRef.current = false;
     const generation = generationRef.current;
     refreshingGenerationRef.current = generation;
@@ -110,27 +123,19 @@ export function useGitRefreshController(
     if (generationRef.current !== generation || !isMountedRef.current) return;
     refreshingGenerationRef.current = null;
 
-    // 开始冷却期
-    isCoolingDownRef.current = true;
-    clearCooldownTimer();
-    cooldownTimerRef.current = window.setTimeout(() => {
-      if (generationRef.current !== generation || !isMountedRef.current) return;
-      isCoolingDownRef.current = false;
-      cooldownTimerRef.current = null;
-      if (
-        pendingRefreshRef.current &&
-        activeOperationIdsRef.current.size === 0 &&
-        isMountedRef.current
-      ) {
-        void executeRefreshRef.current();
-      }
-    }, cooldownDelay);
-  }, [onRefresh, cooldownDelay, clearCooldownTimer]);
+    // 用截止时间保留冷却；只有待刷新的前台窗口才需启动定时器。
+    nextRefreshAtRef.current = performance.now() + cooldownDelay;
+    if (pendingRefreshRef.current) void executeRefresh();
+  }, [onRefresh, cooldownDelay, clearDebounceTimer, clearCooldownTimer]);
   executeRefreshRef.current = executeRefresh;
 
   // 请求刷新（带防抖）
   const requestRefresh = useCallback(() => {
-    if (executeRefreshRef.current !== executeRefresh) return;
+    if (!isMountedRef.current || executeRefreshRef.current !== executeRefresh) return;
+    if (!foregroundRef.current) {
+      pendingRefreshRef.current = true;
+      return;
+    }
     clearDebounceTimer();
     debounceTimerRef.current = window.setTimeout(() => {
       debounceTimerRef.current = null;
@@ -142,7 +147,7 @@ export function useGitRefreshController(
   const refreshNow = useCallback(() => {
     if (executeRefreshRef.current !== executeRefresh) return;
     clearDebounceTimer();
-    void executeRefresh();
+    void executeRefresh(true);
   }, [clearDebounceTimer, executeRefresh]);
 
   // 标记 git 操作开始
@@ -165,27 +170,33 @@ export function useGitRefreshController(
     if (!hasActiveOperations) requestRefresh();
   }, [requestRefresh]);
 
-  // 初始化：挂载时执行一次刷新 + 设置轮询
+  // 每个项目窗口仅在前台轮询；恢复后一个快照覆盖后台积累的变更。
   useEffect(() => {
     generationRef.current += 1;
     isMountedRef.current = true;
-    isCoolingDownRef.current = false;
+    nextRefreshAtRef.current = 0;
     refreshingGenerationRef.current = null;
     pendingRefreshRef.current = false;
     setIsOperating(false);
 
-    // 首次刷新
-    void executeRefresh();
-
-    // 设置轮询（比原来的 15 秒更保守）
-    pollingTimerRef.current = window.setInterval(() => {
+    const stopObserving = observeWindowActivity((active) => {
+      foregroundRef.current = active;
+      if (!active) {
+        clearPollingTimer();
+        clearDebounceTimer();
+        clearCooldownTimer();
+        pendingRefreshRef.current = true;
+        return;
+      }
       void executeRefresh();
-    }, pollingInterval);
+      pollingTimerRef.current = window.setInterval(() => { void executeRefresh(); }, pollingInterval);
+    });
 
     return () => {
+      stopObserving();
       generationRef.current += 1;
       isMountedRef.current = false;
-      isCoolingDownRef.current = false;
+      foregroundRef.current = false;
       refreshingGenerationRef.current = null;
       pendingRefreshRef.current = false;
       activeOperationIdsRef.current.clear();
@@ -194,33 +205,6 @@ export function useGitRefreshController(
       clearPollingTimer();
     };
   }, [executeRefresh, pollingInterval, clearDebounceTimer, clearCooldownTimer, clearPollingTimer]);
-
-  // 失焦优化：失焦时暂停轮询，聚焦时触发刷新
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        // 页面变为可见时，重置冷却并触发刷新
-        isCoolingDownRef.current = false;
-        clearCooldownTimer();
-        void executeRefresh();
-      }
-    };
-
-    const handleWindowFocus = () => {
-      // 窗口获得焦点时，重置冷却并触发刷新
-      isCoolingDownRef.current = false;
-      clearCooldownTimer();
-      void executeRefresh();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleWindowFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleWindowFocus);
-    };
-  }, [executeRefresh, clearCooldownTimer]);
 
   return {
     requestRefresh,

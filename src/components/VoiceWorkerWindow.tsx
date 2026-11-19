@@ -1,9 +1,10 @@
 import type { VoicePolishConfig } from "@/lib/voicePolish";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { useVoiceRecognition, type AsrPhase } from "@/hooks/useVoiceRecognition";
 import type { MimoAuthMode } from "@/lib/mimoAsr";
 import type { AsrLanguage } from "@/lib/asrLanguage";
+import { publishVoiceWindowState, sendVoiceOverlayState, type VoiceOverlayState } from "@/lib/voiceWindowState";
 import {
   ensureVoiceOverlayWindow,
   hideVoiceOverlayWindow,
@@ -37,23 +38,6 @@ interface VoiceWorkerConfigPayload {
 
 interface VoiceWorkerControlPayload {
   action: VoiceWorkerAction;
-}
-
-interface VoiceWorkerStatePayload {
-  phase: AsrPhase;
-  level: number;
-  elapsedMs: number;
-  errorMessage: string | null;
-  liveText: string;
-  shortcutLabel: string;
-  inputTarget: VoiceInputTarget;
-  hasGlobalShortcut: boolean;
-}
-
-interface VoiceGlobalShortcutStatusPayload {
-  registered: boolean;
-  shortcut: string | null;
-  errorMessage: string | null;
 }
 
 interface VoiceGlobalShortcutTriggerPayload {
@@ -93,7 +77,6 @@ function VoiceWorkerWindow() {
     shortcut: voiceShortcut,
     inputTarget: voiceInputTarget,
   });
-  const [hasGlobalShortcut, setHasGlobalShortcut] = useState(false);
 
   const voice = useVoiceRecognition({
     apiKey: config.apiKey,
@@ -115,9 +98,11 @@ function VoiceWorkerWindow() {
       if (config.inputTarget === "system") {
         void sendTextToFocusedWindow(text).catch((err) => {
           console.error("voice worker system input failed:", err);
+          const reason = err instanceof Error ? err.message : String(err);
           void emit("voice-worker-error", {
             code: "system_input_failed",
-            message: err instanceof Error && err.message ? err.message : "System voice input failed.",
+            message: reason === "settings.voice.inputFocusChanged" || reason === "settings.voice.inputUnconfirmed"
+              ? i18n.t(reason) : i18n.t("settings.voice.systemInputFailed"),
           });
         });
         return;
@@ -142,7 +127,7 @@ function VoiceWorkerWindow() {
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
 
-  const workerState = useMemo<VoiceWorkerStatePayload>(
+  const overlayState = useMemo<VoiceOverlayState>(
     () => ({
       phase: voice.phase,
       level: voice.level,
@@ -150,12 +135,9 @@ function VoiceWorkerWindow() {
       errorMessage: voice.errorMessage,
       liveText: voice.liveText,
       shortcutLabel: config.shortcut,
-      inputTarget: config.inputTarget,
-      hasGlobalShortcut,
     }),
     [
       config.shortcut,
-      hasGlobalShortcut,
       voice.elapsedMs,
       voice.errorMessage,
       voice.liveText,
@@ -266,14 +248,9 @@ function VoiceWorkerWindow() {
 
   useEffect(() => {
     let disposed = false;
-    const unlistenPromise = listen<VoiceGlobalShortcutStatusPayload>(
-      "voice-global-shortcut-state",
-      (event) => {
-        if (!disposed) {
-          setHasGlobalShortcut(event.payload.registered);
-        }
-      }
-    );
+    const unlistenPromise = listen<string>("voice-worker-phase-request", (event) => {
+      if (!disposed) void emitTo(event.payload, "voice-worker-phase", voiceRef.current.phase);
+    }, { target: "voice-worker" });
 
     return () => {
       disposed = true;
@@ -281,37 +258,20 @@ function VoiceWorkerWindow() {
     };
   }, []);
 
-  const overlayState = useMemo(
-    () => ({
-      phase: workerState.phase,
-      level: workerState.level,
-      elapsedMs: workerState.elapsedMs,
-      errorMessage: workerState.errorMessage,
-      liveText: workerState.liveText,
-      shortcutLabel: workerState.shortcutLabel,
-    }),
-    [
-      workerState.elapsedMs,
-      workerState.errorMessage,
-      workerState.liveText,
-      workerState.level,
-      workerState.phase,
-      workerState.shortcutLabel,
-    ],
-  );
   const overlayStateRef = useRef(overlayState);
   overlayStateRef.current = overlayState;
+  const previousPhaseRef = useRef<AsrPhase>(undefined);
 
   useEffect(() => {
-    void emit("voice-worker-state", workerState);
-    void emit("voice-overlay-state", overlayState);
-  }, [overlayState, workerState]);
+    void publishVoiceWindowState(overlayState, previousPhaseRef.current);
+    previousPhaseRef.current = overlayState.phase;
+  }, [overlayState]);
 
   useEffect(() => {
     let disposed = false;
     const unlistenPromise = listen("voice-overlay-ready", () => {
       if (!disposed) {
-        void emit("voice-overlay-state", overlayStateRef.current);
+        void sendVoiceOverlayState(overlayStateRef.current);
       }
     });
 
@@ -323,8 +283,8 @@ function VoiceWorkerWindow() {
 
   useEffect(() => {
     const isOverlayActive =
-      workerState.phase !== "idle" &&
-      workerState.phase !== "done";
+      overlayState.phase !== "idle" &&
+      overlayState.phase !== "done";
 
     if (!isOverlayActive) {
       hideVoiceOverlayWindow().catch(() => undefined);
@@ -341,7 +301,7 @@ function VoiceWorkerWindow() {
           await hideVoiceOverlayWindow();
           return;
         }
-        if (!disposed) await emit("voice-overlay-state", latestState);
+        if (!disposed) await sendVoiceOverlayState(latestState);
       } catch (error) {
         if (disposed) return;
         console.error("voice worker failed to ensure overlay window:", error);
@@ -361,7 +321,7 @@ function VoiceWorkerWindow() {
       disposed = true;
       clearInterval(reassertTimer);
     };
-  }, [workerState.phase]);
+  }, [overlayState.phase]);
 
   return null;
 }

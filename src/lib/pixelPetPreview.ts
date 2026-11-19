@@ -1,5 +1,5 @@
 import type { PixelPetConfig } from "./pixelPetConfig";
-import { getPetRenderedDimensions } from "./pixelPetSprites";
+import { getPetRenderedDimensions, getPixelBubbleFontSize } from "./pixelPetSprites";
 
 /**
  * Use one visible-pixel envelope for every preview frame. Cropping each frame
@@ -68,7 +68,8 @@ export function getPixelPetPreviewStageLayout(config: PixelPetConfig, viewportWi
   // Include the nominal jump arc, with extra room for the discrete physics step.
   const jumpHeight = Math.ceil(config.behavior.jumpVelocityPxPerSec ** 2
     / (2 * config.behavior.gravityPxPerSec2) + config.behavior.jumpVelocityPxPerSec * 0.05);
-  const topPadding = 24;
+  // 为单行台词留出行高、内边距和气泡尖角。
+  const topPadding = getPixelBubbleFontSize(pixelSize) + 16;
   const height = Math.max(76, spriteHeight + jumpHeight + topPadding + 14);
   return { pixelSize, spriteWidth, spriteHeight, height, groundY: height - 14, topPadding };
 }

@@ -166,7 +166,9 @@ it("fits thumbnails and resizes the live stage on character/scale changes while 
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   const ctx = { clearRect: vi.fn(), fillRect: vi.fn(), setTransform: vi.fn() } as unknown as CanvasRenderingContext2D;
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx);
-  const draw = vi.spyOn(sprites, "drawPixelPetFrame").mockImplementation(() => {});
+  const bounds = { x: 0, y: 0, width: 1, height: 1 };
+  const draw = vi.spyOn(sprites, "drawPixelPetFrame").mockReturnValue(bounds);
+  const drawBubble = vi.spyOn(sprites, "drawPixelBubble").mockReturnValue(bounds);
   const daimao = PIXEL_PET_PRESETS.find((preset) => preset.id === "daimao")!;
   useAppStore.setState({ pixelPetConfig: daimao });
   await act(async () => root.render(createElement(Content)));
@@ -202,11 +204,12 @@ it("fits thumbnails and resizes the live stage on character/scale changes while 
     expect(frame).toHaveLength(32);
     expect(x).toBeGreaterThanOrEqual(0);
     expect(x + frame[0].length * scale!).toBeLessThanOrEqual(stage.width);
-    expect(y).toBeGreaterThanOrEqual(24);
+    expect(y).toBeGreaterThanOrEqual(36);
     expect(y + frame.length * scale!).toBeLessThanOrEqual(stage.height - 14);
     expect(waterline).toBeUndefined();
   }
-  expect(draw.mock.calls.some((call) => call[3] === 24)).toBe(true);
+  expect(draw.mock.calls.some((call) => call[3] === 36)).toBe(true);
+  expect(drawBubble.mock.lastCall?.[3]).toBe(4);
 
   await act(async () => useAppStore.setState({ pixelPetConfig: { ...large, pixelSize: 1 } }));
   await act(async () => nextFrame(now += 50));
@@ -221,7 +224,9 @@ it("triggers audition actions on the preview stage and updates live status", asy
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   const ctx = { clearRect: vi.fn(), fillRect: vi.fn(), setTransform: vi.fn() } as unknown as CanvasRenderingContext2D;
   vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx);
-  vi.spyOn(sprites, "drawPixelPetFrame").mockImplementation(() => {});
+  const bounds = { x: 0, y: 0, width: 1, height: 1 };
+  vi.spyOn(sprites, "drawPixelPetFrame").mockReturnValue(bounds);
+  vi.spyOn(sprites, "drawPixelBubble").mockReturnValue(bounds);
   await act(async () => root.render(createElement(Content)));
 
   let now = performance.now();

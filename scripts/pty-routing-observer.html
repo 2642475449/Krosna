@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>PTY routing observer</title></head>
+<body>
+<script type="module">
+  import { listenPtyEvent } from "../src/lib/api/ptyEvents";
+
+  let messages = 0;
+  let exits = 0;
+  // 阻塞解析确认，若误收正文，发送方将很快耗尽该窗口的在途额度。
+  const neverParsed = new Promise(() => {});
+  await listenPtyEvent("pty-output", () => { messages++; return neverParsed; });
+  await listenPtyEvent("pty-exit", () => { exits++; });
+  window.chrome.webview.addEventListener("message", ({ data }) => {
+    if (data.channel === "krosna-pty" && data.event === "probe-barrier") {
+      localStorage.setItem("routing-observer-" + data.payload, JSON.stringify({ messages, exits }));
+    }
+  });
+  localStorage.setItem("routing-observer-ready", "true");
+</script>
+</body>
+</html>

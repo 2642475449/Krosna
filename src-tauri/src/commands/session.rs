@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{Emitter, Manager, State, WebviewWindow};
 
 #[path = "session_title.rs"]
 mod title_generation;
@@ -41,7 +41,7 @@ struct AgentHookConfigurationFailedPayload {
 pub async fn spawn_pty(
     session_id: String,
     path: String,
-    app: AppHandle,
+    window: WebviewWindow,
     manager: State<'_, Arc<PtyManager>>,
     database: State<'_, Arc<crate::database::Database>>,
     resume: Option<bool>,
@@ -85,7 +85,7 @@ pub async fn spawn_pty(
         if let Some(error) = hook_error {
             // Status integration is best-effort and must never prevent the terminal from opening.
             warn!("failed to configure {agent_id} status hook: {error}");
-            let _ = app.emit(
+            let _ = window.app_handle().emit(
                 "agent-hook-configuration-failed",
                 AgentHookConfigurationFailedPayload {
                     session_id: session_id.clone(),
@@ -101,7 +101,7 @@ pub async fn spawn_pty(
     let result = manager.spawn(
         spawned_session_id.clone(),
         path,
-        app,
+        window,
         resume.unwrap_or(false),
         skip_permissions.unwrap_or(false),
         startup_command,

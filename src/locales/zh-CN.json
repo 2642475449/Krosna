@@ -406,6 +406,10 @@
   },
   "statusBar": {
     "pixelPet": {
+      "daimao": {
+        "cheerBubbles": ["老大，出发喵！", "团子分我一串？", "开饭喵！"],
+        "workBubbles": ["老大，我望风。", "有脚印喵！", "……团子呢？"]
+      },
       "show": "显示像素宠物",
       "hide": "隐藏像素宠物",
       "pause": "让小人休息",
@@ -2944,7 +2948,9 @@
       "timeout": "语音转录超时，请重试",
       "emptyAudio": "未识别到语音内容",
       "noActiveTerminal": "请先激活一个终端标签页再使用语音输入",
-      "systemInputFailed": "系统级语音输入失败，请确认目标输入框当前处于激活状态"
+      "systemInputFailed": "系统级语音输入失败，请确认目标输入框当前处于激活状态",
+      "inputFocusChanged": "前台窗口已切换，本次转写未发送。",
+      "inputUnconfirmed": "未收到终端的语音输入确认，请查看输入框再决定是否重试。"
     },
     "searchIndex": {
       "title": "索引库",

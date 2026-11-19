@@ -1,23 +1,27 @@
-import { useEffect, useMemo, useRef, type MouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@/store";
 import {
   createInitialPetSimulation,
   derivePetCodingMood,
   hopPetToPlatform,
-  PET_SPRITE_LOGICAL_SIZE,
   stepPetSimulation,
   togglePetPaused,
   triggerPetJump,
+  type PetCodingMood,
   type PetPlatform,
   type PetSimulationState,
 } from "@/lib/pixelPet";
-import { getPetCapabilities } from "@/lib/pixelPetConfig";
+import { getPetCapabilities, type PixelPetConfig, type PixelSpriteFrame } from "@/lib/pixelPetConfig";
 import {
+  drawPixelBubble,
   drawPixelPetFrame,
   getPetRenderedDimensions,
   getPetSpriteFrame,
+  type PetDrawBounds,
 } from "@/lib/pixelPetSprites";
+import { observeWindowActivity } from "@/lib/windowActivity";
+import type { Session } from "@/types";
 
 export function collectPetPlatforms(
   viewportWidth: number,
@@ -75,125 +79,143 @@ export function PixelPetTrack() {
   const { t } = useTranslation();
   const visible = useAppStore((state) => state.pixelPetVisible);
   const petConfig = useAppStore((state) => state.pixelPetConfig);
-  const sessions = useAppStore((state) => state.sessions);
-  const activeSessionId = useAppStore((state) => state.activeSessionId);
-
-  const codingMood = useMemo(
-    () => derivePetCodingMood(sessions, activeSessionId),
-    [sessions, activeSessionId],
-  );
-  const moodRef = useRef(codingMood);
-  moodRef.current = codingMood;
 
   const configRef = useRef(petConfig);
   configRef.current = petConfig;
 
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hitboxRef = useRef<HTMLButtonElement | null>(null);
-  const viewportRef = useRef({ width: 1280, height: 800 });
   const platformsRef = useRef<PetPlatform[]>([]);
-  const simRef = useRef<PetSimulationState>(createInitialPetSimulation(1280));
+  const simRef = useRef<PetSimulationState | null>(null);
 
   useEffect(() => {
-    if (!visible) return;
+    const track = trackRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!visible || !track || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    const syncViewport = () => {
-      const vw = Math.max(200, window.innerWidth);
-      const vh = Math.max(120, window.innerHeight);
-      const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-      const { height: spriteHeight } = getPetRenderedDimensions(configRef.current);
-      viewportRef.current = { width: vw, height: vh };
-      platformsRef.current = collectPetPlatforms(vw, vh, spriteHeight);
+    let width = 0;
+    let height = 0;
+    let dpr = 0;
+    let active = false;
+    let rafId: number | null = null;
+    let lastFrame: number | null = null;
+    let lastMeasurement = 0;
+    let mood: PetCodingMood = "idle";
+    let moodSessions: Session[] | undefined;
+    let moodSessionId: string | null = null;
+    let config = configRef.current;
+    let dimensions = getPetRenderedDimensions(config);
+    let capabilities = getPetCapabilities(config);
+    const painted: PetDrawBounds[] = [];
+    let lastPaint: {
+      config: PixelPetConfig;
+      frame: PixelSpriteFrame;
+      sim: PetSimulationState;
+      spriteTop: number;
+    } | null = null;
 
-      canvas.width = Math.floor(vw * dpr);
-      canvas.height = Math.floor(vh * dpr);
-      canvas.style.width = `${vw}px`;
-      canvas.style.height = `${vh}px`;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const measure = () => {
+      width = Math.max(200, window.innerWidth);
+      height = Math.max(120, window.innerHeight);
+      const ratio = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+      const canvasWidth = Math.floor(width * ratio);
+      const canvasHeight = Math.floor(height * ratio);
+      if (canvas.width !== canvasWidth || canvas.height !== canvasHeight || dpr !== ratio) {
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.imageSmoothingEnabled = false;
+        painted.length = 0;
+        lastPaint = null;
+        dpr = ratio;
       }
+      if (config !== configRef.current) {
+        config = configRef.current;
+        dimensions = getPetRenderedDimensions(config);
+        capabilities = getPetCapabilities(config);
+      }
+      platformsRef.current = collectPetPlatforms(width, height, dimensions.height);
+      lastMeasurement = performance.now();
     };
-
-    syncViewport();
-    simRef.current = createInitialPetSimulation(viewportRef.current.width, platformsRef.current);
-
-    window.addEventListener("resize", syncViewport);
-    const surfaceSyncTimer = window.setInterval(() => {
-      const { height: spriteHeight } = getPetRenderedDimensions(configRef.current);
-      platformsRef.current = collectPetPlatforms(
-        viewportRef.current.width,
-        viewportRef.current.height,
-        spriteHeight,
-      );
-    }, 500);
-
-    let rafId = 0;
-    let lastTimestamp = performance.now();
 
     const renderFrame = (now: number) => {
-      const dtMs = now - lastTimestamp;
-      lastTimestamp = now;
+      if (!active) return;
+      if (now - lastMeasurement >= 500 || config !== configRef.current) measure();
+      const { sessions, activeSessionId } = useAppStore.getState();
+      if (sessions !== moodSessions || activeSessionId !== moodSessionId) {
+        mood = derivePetCodingMood(sessions, activeSessionId);
+        moodSessions = sessions;
+        moodSessionId = activeSessionId;
+      }
+      const previous = simRef.current ?? createInitialPetSimulation(width, platformsRef.current);
+      const sim = stepPetSimulation(previous, lastFrame === null ? 0 : now - lastFrame, width, mood, {
+        platforms: platformsRef.current,
+        behavior: config.behavior,
+        capabilities,
+        spriteWidth: dimensions.width,
+      });
+      simRef.current = sim;
+      lastFrame = now;
+      const groundY = sim.groundY > 0 ? sim.groundY : height - 28;
+      const submergePx = (config.submergeRows ?? 0) * Math.max(1, Math.round(config.pixelSize || 2));
+      const waterline = !sim.climb && submergePx > 0 ? groundY : undefined;
+      const spriteTop = groundY - dimensions.height + (sim.climb ? 0 : submergePx) - sim.y;
+      const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, config);
+      rafId = window.requestAnimationFrame(renderFrame);
+      // 空闲时模拟时钟继续推进，同一画面可以沿用上帧像素与命中区域。
+      if (lastPaint && lastPaint.config === config && lastPaint.frame === frame
+        && lastPaint.spriteTop === spriteTop && lastPaint.sim.x === sim.x
+        && lastPaint.sim.facing === sim.facing && lastPaint.sim.groundY === sim.groundY
+        && Boolean(lastPaint.sim.climb) === Boolean(sim.climb)
+        && lastPaint.sim.bubble?.text === sim.bubble?.text) return;
+      lastPaint = { config, frame, sim, spriteTop };
 
-      if (document.visibilityState !== "hidden") {
-        const { width, height } = viewportRef.current;
-        const activeConfig = configRef.current;
-        const { width: spriteWidth, height: spriteHeight } = getPetRenderedDimensions(activeConfig);
-
-        simRef.current = stepPetSimulation(
-          simRef.current,
-          dtMs,
-          width,
-          moodRef.current,
-          {
-            platforms: platformsRef.current,
-            behavior: activeConfig.behavior,
-            capabilities: getPetCapabilities(activeConfig),
-            spriteWidth,
-          },
-        );
-
-        const sim = simRef.current;
-        const groundY = sim.groundY > 0 ? sim.groundY : height - 28;
-        const submergePx =
-          (activeConfig.submergeRows ?? 0) * Math.max(1, Math.round(activeConfig.pixelSize || 2));
-        const spriteTop = groundY - spriteHeight + (sim.climb ? 0 : submergePx) - sim.y;
-
-        if (hitboxRef.current) {
-          hitboxRef.current.style.width = `${spriteWidth}px`;
-          hitboxRef.current.style.height = `${spriteHeight}px`;
-          hitboxRef.current.style.transform = `translate3d(${Math.round(sim.x)}px, ${Math.round(spriteTop)}px, 0)`;
-        }
-
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.clearRect(0, 0, width, height);
-          const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, activeConfig);
-          drawPixelPetFrame(
-            ctx,
-            frame,
-            sim.x,
-            spriteTop,
-            sim.facing,
-            activeConfig.pixelSize,
-            activeConfig.palette,
-            !sim.climb && submergePx > 0 ? groundY : undefined,
-          );
-        }
+      const hitbox = hitboxRef.current;
+      if (hitbox) {
+        hitbox.style.width = `${dimensions.width}px`;
+        hitbox.style.height = `${dimensions.height}px`;
+        hitbox.style.transform = `translate3d(${Math.round(sim.x)}px, ${Math.round(spriteTop)}px, 0)`;
+        hitbox.style.visibility = "visible";
       }
 
-      rafId = window.requestAnimationFrame(renderFrame);
+      // 先擦除上帧所有绘制区域，保留 1px 余量以覆盖小数 DPR 的边缘。
+      for (const rect of painted) {
+        ctx.clearRect(rect.x - 1, rect.y - 1, rect.width + 2, rect.height + 2);
+      }
+      painted.length = 0;
+      const spriteBounds = drawPixelPetFrame(
+        ctx, frame, sim.x, spriteTop, sim.facing, config.pixelSize, config.palette, waterline,
+      );
+      painted.push(spriteBounds);
+      if (sim.bubble) {
+        painted.push(drawPixelBubble(ctx, sim.bubble.text, spriteBounds, config.pixelSize, { width, height }));
+      }
     };
 
-    rafId = window.requestAnimationFrame(renderFrame);
+    const onResize = () => { if (active) measure(); };
+    window.addEventListener("resize", onResize);
+    const stopObserving = observeWindowActivity((nextActive) => {
+      active = nextActive;
+      track.hidden = !active;
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      rafId = null;
+      lastFrame = null;
+      if (active) {
+        measure();
+        rafId = window.requestAnimationFrame(renderFrame);
+      }
+    });
 
     return () => {
-      window.cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", syncViewport);
-      window.clearInterval(surfaceSyncTimer);
+      active = false;
+      track.hidden = true;
+      stopObserving();
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", onResize);
+      simRef.current = null;
     };
   }, [visible]);
 
@@ -202,6 +224,7 @@ export function PixelPetTrack() {
   }
 
   const handlePetClick = () => {
+    if (!simRef.current) return;
     simRef.current = triggerPetJump(
       simRef.current,
       configRef.current.behavior,
@@ -209,32 +232,30 @@ export function PixelPetTrack() {
   };
 
   const handlePetDoubleClick = () => {
-    const platforms = platformsRef.current;
-    const other = platforms.find((p) => p.id !== simRef.current.platformId);
+    const sim = simRef.current;
+    if (!sim) return;
+    const other = platformsRef.current.find((p) => p.id !== sim.platformId);
     if (other) {
-      simRef.current = hopPetToPlatform(simRef.current, other);
+      simRef.current = hopPetToPlatform(sim, other);
     } else {
-      simRef.current = triggerPetJump(
-        simRef.current,
-        configRef.current.behavior,
-      );
+      simRef.current = triggerPetJump(sim, configRef.current.behavior);
     }
   };
 
   const handlePetContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    simRef.current = togglePetPaused(simRef.current);
+    if (simRef.current) simRef.current = togglePetPaused(simRef.current);
   };
 
   return (
     <div
+      ref={trackRef}
+      hidden
       className="pointer-events-none fixed inset-0 z-[35] overflow-hidden select-none"
-      aria-hidden="false"
     >
       <canvas
         ref={canvasRef}
-        className="pointer-events-none block h-full w-full"
-        style={{ imageRendering: "pixelated" }}
+        className="pointer-events-none block h-full w-full [image-rendering:pixelated]"
       />
       <button
         ref={hitboxRef}
@@ -244,8 +265,7 @@ export function PixelPetTrack() {
         onContextMenu={handlePetContextMenu}
         title={t("statusBar.pixelPet.trackHint")}
         aria-label={t("statusBar.pixelPet.trackHint")}
-        style={{ width: PET_SPRITE_LOGICAL_SIZE, height: PET_SPRITE_LOGICAL_SIZE }}
-        className="pointer-events-auto absolute left-0 top-0 cursor-pointer border-0 bg-transparent p-0 focus:outline-none"
+        className="invisible pointer-events-auto absolute left-0 top-0 cursor-pointer border-0 bg-transparent p-0 focus:outline-none"
       />
     </div>
   );

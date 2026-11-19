@@ -64,13 +64,26 @@ function deferred() {
   return { promise, resolve };
 }
 
+let focused = true;
+function setFocus(value: boolean) {
+  focused = value;
+  window.dispatchEvent(new Event(value ? "focus" : "blur"));
+}
+function setVisible(value: boolean) {
+  Object.assign(document, { visibilityState: value ? "visible" : "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   runtime.cells = [];
   runtime.cursor = 0;
   runtime.effects = [];
   vi.stubGlobal("window", Object.assign(new EventTarget(), { setTimeout, clearTimeout, setInterval, clearInterval }));
-  vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "visible" }));
+  focused = true;
+  vi.stubGlobal("document", Object.assign(new EventTarget(), {
+    visibilityState: "visible", hasFocus: () => focused,
+  }));
 });
 afterEach(() => {
   unmount();
@@ -160,5 +173,74 @@ it("waits until every active Git operation finishes before refreshing", async ()
   expect(refresh).toHaveBeenCalledOnce();
   controller.markOperationEnd(second);
   await vi.advanceTimersByTimeAsync(10);
+  expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+it("coalesces background file changes, missed polls and paired resume events into one scan", async () => {
+  const refresh = vi.fn(async () => undefined);
+  const controller = render(refresh);
+  await vi.advanceTimersByTimeAsync(0);
+  controller.requestRefresh(); // 切走之前遗留的防抖回调也必须暂停。
+  setFocus(false);
+  for (let i = 0; i < 8; i++) {
+    controller.requestRefresh();
+    await vi.advanceTimersByTimeAsync(30_000);
+  }
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+  setVisible(false);
+  setFocus(true);
+  expect(refresh).toHaveBeenCalledOnce();
+  setVisible(true);
+  setFocus(true);
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(refresh).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(24_000);
+  expect(refresh).toHaveBeenCalledTimes(3);
+});
+
+it("defers an initially unfocused project and respects the cooldown across short focus changes", async () => {
+  focused = false;
+  const refresh = vi.fn(async () => undefined);
+  const controller = render(refresh);
+  controller.requestRefresh();
+  await vi.advanceTimersByTimeAsync(90_000);
+  expect(refresh).not.toHaveBeenCalled();
+  setFocus(true);
+  await vi.advanceTimersByTimeAsync(100);
+  controller.refreshNow(); // 已在冷却队列中的请求要跨越失焦。
+  setFocus(false);
+  expect(vi.getTimerCount()).toBe(0);
+  setVisible(false);
+  setVisible(true);
+  setFocus(true);
+  await vi.advanceTimersByTimeAsync(4899);
+  expect(refresh).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+it("keeps a running refresh and pending Git operations from scheduling background scans", async () => {
+  const inFlight = deferred();
+  const refresh = vi.fn().mockReturnValueOnce(inFlight.promise).mockResolvedValue(undefined);
+  const controller = render(refresh);
+  const operation = controller.markOperationStart();
+  setFocus(false);
+  controller.requestRefresh();
+  inFlight.resolve();
+  await vi.advanceTimersByTimeAsync(1000);
+  controller.markOperationEnd(operation);
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
+  setFocus(true);
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(refresh).toHaveBeenCalledTimes(2);
+  unmount();
+  setFocus(false);
+  setFocus(true);
+  controller.requestRefresh();
+  controller.refreshNow();
+  expect(vi.getTimerCount()).toBe(0);
   expect(refresh).toHaveBeenCalledTimes(2);
 });

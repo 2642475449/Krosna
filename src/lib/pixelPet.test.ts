@@ -94,11 +94,11 @@ describe("stepPetSimulation", () => {
     expect(sim.x).toBeCloseTo(140 - PET_SPRITE_LOGICAL_SIZE / 2, 0);
   });
 
-  it("jumps and lands back on the ground via gravity without bubbles", () => {
+  it("jumps and lands back on the ground via gravity when no dialogue is configured", () => {
     const width = 400;
     let sim = triggerPetJump(createInitialPetSimulation(width));
     expect(sim.action).toBe("jump");
-    expect("bubble" in sim).toBe(false);
+    expect(sim.bubble).toBeNull();
 
     sim = stepPetSimulation(sim, 50, width, "idle", { random: () => 0.5 });
     expect(sim.y).toBe(0);
@@ -116,6 +116,27 @@ describe("stepPetSimulation", () => {
     expect(clips.has("land")).toBe(true);
     expect(sim.y).toBe(0);
     expect(sim.vy).toBe(0);
+  });
+
+  it("uses the configured lines for clicks, live work transitions and the action preview", () => {
+    const state = createInitialPetSimulation(400);
+    const behavior = { cheerBubbles: ["老大，出发喵！", "开饭喵！"], workBubbles: ["老大，我望风。"] };
+    const options = { behavior, random: () => 0.9 };
+    expect(triggerPetJump(state, "★", options.random, behavior).bubble?.text).toBe("★");
+    const click = dispatchPetEvent(state, "click", 400, options);
+    expect(click.bubble?.text).toBe("开饭喵！");
+    const working = stepPetSimulation(state, 16, 400, "working", options);
+    expect(working.bubble).toEqual(dispatchPetEvent(state, "work_start", 400, options).bubble);
+    expect(working.bubble?.text).toBe("老大，我望风。");
+    const done = stepPetSimulation(working, 16, 400, "completed", options);
+    expect(done.bubble).toEqual(dispatchPetEvent(working, "work_complete", 400, options).bubble);
+    expect(done.bubble?.text).toBe("开饭喵！");
+
+    // 蹲跳蓄力、落地等过渡也消耗显示时间，刚过期的气泡不会留在画布上。
+    let jumping = click;
+    for (let i = 0; i < 16; i++) jumping = stepPetSimulation(jumping, 100, 400, "idle", options);
+    expect(jumping.bubble).toBeNull();
+    expect(click.bubble?.remainingMs).toBe(1600);
   });
 
   it("runs while working and celebrates when coding mood transitions from working to completed", () => {

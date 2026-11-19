@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::AppHandle;
+use tauri::{Manager, WebviewWindow};
 
 mod output_flow;
 mod output_transport;
@@ -442,7 +442,7 @@ impl PtyManager {
         self: &Arc<Self>,
         session_id: String,
         path: String,
-        app: AppHandle,
+        window: WebviewWindow,
         resume: bool,
         skip_permissions: bool,
         startup_command_override: Option<String>,
@@ -591,13 +591,13 @@ impl PtyManager {
         if monitor_claude_usage {
             spawn_usage_monitor(
                 Arc::downgrade(self),
-                app.clone(),
+                window.app_handle().clone(),
                 session_id.clone(),
                 path.clone(),
             );
         }
         emit_session_event(
-            &app,
+            window.app_handle(),
             &SessionEvent {
                 id: format!("runtime:{}:{}", session_id, now_ms()),
                 revision: None,
@@ -632,14 +632,13 @@ impl PtyManager {
         });
         let manager = Arc::clone(self);
         let sid = session_id.clone();
-        let app_clone = app.clone();
         std::thread::spawn(move || {
             forward_pty_output(output_receiver, |data| {
                 if !manager.is_session_instance_current(&sid, instance_id) {
                     return false;
                 }
                 output_log.lock().append(&data);
-                manager.output.send_output(&app_clone, &sid, &data, &output_cancelled);
+                manager.output.send_output(&window, &sid, &data, &output_cancelled);
                 !output_cancelled.load(Ordering::Acquire)
             });
             let Some(mut exited_session) = manager.take_session_instance(&sid, instance_id) else {
@@ -652,7 +651,7 @@ impl PtyManager {
             exited_session.exit_code = code;
             output_log.lock().finish(code, false);
             emit_session_event(
-                &app_clone,
+                window.app_handle(),
                 &SessionEvent {
                     id: format!("runtime:{}:{}", sid, now_ms()),
                     revision: None,
@@ -672,7 +671,7 @@ impl PtyManager {
                 },
             );
             manager.output.send_exit(
-                &app_clone,
+                &window,
                 PtyExitPayload {
                     session_id: sid,
                     code,

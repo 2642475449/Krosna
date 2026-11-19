@@ -1,8 +1,23 @@
 import type { PetActionState, PetClipId } from "./pixelPet";
 import { DAIMAO_FRAMES, DAIMAO_PALETTE } from "./pixelPetDaimaoFrames";
 import { HERO_FRAMES, HERO_PALETTE } from "./pixelPetHeroFrames";
+import zhCN from "@/locales/zh-CN.json";
+import enUS from "@/locales/en-US.json";
+import jaJP from "@/locales/ja-JP.json";
+import type { Language } from "@/store/types";
 
 export type PixelSpriteFrame = readonly string[];
+
+const DAIMAO_DIALOGUE = {
+  zh_CN: zhCN.statusBar.pixelPet.daimao,
+  en: enUS.statusBar.pixelPet.daimao,
+  ja: jaJP.statusBar.pixelPet.daimao,
+} satisfies Record<Language, Pick<PixelPetBehaviorConfig, "cheerBubbles" | "workBubbles">>;
+
+const DAIMAO_PREVIOUS_DIALOGUE = {
+  cheerBubbles: ["Woof!", "♥", "★", ":3"],
+  workBubbles: ["...", "</>", "🐾"],
+};
 
 export interface PixelPetBehaviorConfig {
   walkSpeedPxPerSec: number;
@@ -14,6 +29,8 @@ export interface PixelPetBehaviorConfig {
   allowWallClimb: boolean;
   reactToCodingMood: boolean;
   enableRandomEvents: boolean;
+  cheerBubbles: string[];
+  workBubbles: string[];
 }
 
 export interface PixelPetCapabilities {
@@ -46,6 +63,8 @@ export const DEFAULT_PET_BEHAVIOR: PixelPetBehaviorConfig = {
   allowWallClimb: true,
   reactToCodingMood: true,
   enableRandomEvents: true,
+  cheerBubbles: ["!", "+1", "★", "GO!", ":)"],
+  workBubbles: ["</>", "...", "RUN", "⚡"],
 };
 
 const CAT_PALETTE: Record<string, string> = {
@@ -521,6 +540,8 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       enableRandomEvents: true,
       walkSpeedPxPerSec: 24,
       runSpeedPxPerSec: 58,
+      cheerBubbles: ["Meow", "♥", "★", "~"],
+      workBubbles: ["purr", "</>", "🐾"],
     },
   },
   {
@@ -556,6 +577,8 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       walkSpeedPxPerSec: 30,
       runSpeedPxPerSec: 60,
       enableRandomEvents: true,
+      cheerBubbles: ["BITE", "40%", "HA!", "COOL"],
+      workBubbles: ["BEER", "101", "⚡"],
     },
   },
   {
@@ -602,12 +625,33 @@ export const PIXEL_PET_PRESETS: PixelPetConfig[] = [
       enableRandomEvents: true,
       walkSpeedPxPerSec: 26,
       runSpeedPxPerSec: 54,
+      ...DAIMAO_DIALOGUE.zh_CN,
     },
   },
 ];
 
 export const DEFAULT_PIXEL_PET_CONFIG: PixelPetConfig =
   PIXEL_PET_PRESETS.find((preset) => preset.id === "hero") ?? PIXEL_PET_PRESETS[0];
+
+/** 只更新仍使用内置整组台词的气泡，保留玩家单独改过的庆祝或工作台词。 */
+export function localizePixelPetDialogue(config: PixelPetConfig, language: Language): PixelPetConfig {
+  if (config.id !== "daimao") return config;
+  const dialogue = DAIMAO_DIALOGUE[language];
+  const behavior = config.behavior;
+  const known = [DAIMAO_PREVIOUS_DIALOGUE, ...Object.values(DAIMAO_DIALOGUE)];
+  function resolve(group: keyof typeof dialogue) {
+    const lines = behavior[group];
+    if (!Array.isArray(lines)) return dialogue[group];
+    const matches = (defaults: string[]) => lines.length === defaults.length
+      && defaults.every((line, index) => line === lines[index]);
+    if (matches(dialogue[group])) return lines;
+    return known.some((source) => matches(source[group])) ? dialogue[group] : lines;
+  }
+  const cheerBubbles = resolve("cheerBubbles");
+  const workBubbles = resolve("workBubbles");
+  if (cheerBubbles === behavior.cheerBubbles && workBubbles === behavior.workBubbles) return config;
+  return { ...config, behavior: { ...behavior, cheerBubbles, workBubbles } };
+}
 
 const ACTION_KEYS: PetActionState[] = [
   "idle",
@@ -670,6 +714,13 @@ function parseFrameTimings(value: unknown): PixelPetConfig["frameTimingsMs"] {
     }
   }
   return Object.keys(result).length ? result : undefined;
+}
+
+function parseBubbleLines(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((text): text is string => typeof text === "string" && text.trim().length > 0)
+      .map((text) => Array.from(text.trim()).slice(0, 12).join(""))
+    : [];
 }
 
 function isValidFrame(frame: unknown): frame is string[] {
@@ -816,6 +867,8 @@ export function parsePixelPetConfigJson(
       typeof rawBehavior.enableRandomEvents === "boolean"
         ? rawBehavior.enableRandomEvents
         : hasEasterEggFrames,
+    cheerBubbles: parseBubbleLines(rawBehavior.cheerBubbles),
+    workBubbles: parseBubbleLines(rawBehavior.workBubbles),
   };
 
   const config: PixelPetConfig = {
@@ -875,6 +928,8 @@ export function upgradePersistedPixelPetConfig(
           ? persisted.behavior.allowWallClimb
           : builtIn.behavior.allowWallClimb,
       reactToCodingMood: persisted.behavior?.reactToCodingMood ?? builtIn.behavior.reactToCodingMood,
+      cheerBubbles: persisted.behavior?.cheerBubbles ?? builtIn.behavior.cheerBubbles,
+      workBubbles: persisted.behavior?.workBubbles ?? builtIn.behavior.workBubbles,
       enableRandomEvents:
         typeof persisted.behavior?.enableRandomEvents === "boolean"
           ? persisted.behavior.enableRandomEvents
@@ -892,7 +947,7 @@ export function buildPixelPetAiPrompt(baseConfig: PixelPetConfig, filePath?: str
     filePath ? `角色配置文件：${JSON.stringify(filePath)}` : "请读取我附上的角色 JSON 文件。",
     filePath ? `格式说明文件：${JSON.stringify(`${filePath}.guide.md`)}` : "请同时阅读附上的格式说明。",
     `当前角色名称：${JSON.stringify(baseConfig.name)}。先读取文件，再根据我的要求修改 palette、frames、clips（含专属彩蛋 easterEgg、打盹/醒来/爬墙等可选动作）和 behavior。`,
-    "角色纯靠像素动作表达，不设文字气泡。直接保存纯 JSON，保留未要求修改的内容；Krosna 会自动校验并刷新预览。若另存为新文件，请告诉我路径，我会在设置中加载它。",
+    "可在 behavior.cheerBubbles 和 workBubbles 中填写符合角色设定的短句。直接保存纯 JSON，保留未要求修改的内容；Krosna 会自动校验并刷新预览。若另存为新文件，请告诉我路径，我会在设置中加载它。",
     "如果无法访问本机文件，请让我附上配置和格式说明，并返回完整 JSON 文件。",
     "我的要求：［在这里描述新角色或修改内容］",
   ].join("\n");

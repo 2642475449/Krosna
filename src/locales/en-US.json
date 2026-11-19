@@ -406,6 +406,10 @@
   },
   "statusBar": {
     "pixelPet": {
+      "daimao": {
+        "cheerBubbles": ["Ready, boss!", "One dango?", "Chow time!"],
+        "workBubbles": ["On lookout!", "Pawprints!", "...Dango?"]
+      },
       "show": "Show pixel pet",
       "hide": "Hide pixel pet",
       "pause": "Rest pet",
@@ -2944,7 +2948,9 @@
       "timeout": "Voice transcription timed out. Please try again",
       "emptyAudio": "No speech detected",
       "noActiveTerminal": "Please activate a terminal tab before using voice input",
-      "systemInputFailed": "System-level voice input failed. Make sure the target input is currently focused"
+      "systemInputFailed": "System-level voice input failed. Make sure the target input is currently focused",
+      "inputFocusChanged": "The focused window changed. The transcript was not sent.",
+      "inputUnconfirmed": "The terminal has not confirmed voice input. Check the input field before retrying."
     },
     "searchIndex": {
       "title": "Search Index",

@@ -58,7 +58,7 @@ function closeDiffs() {
   phase = "diffs-closed";
   return sample(phase);
 }
-async function output() {
+async function output(chunks?: number) {
   phase = "output";
   received = 0; parsed = 0;
   const terminal = new Terminal({ cols: 160, rows: 40, scrollback: 5000 });
@@ -71,17 +71,43 @@ async function output() {
     received += payload.data.length;
     return ack.track(() => frame.write(payload.data)).then(() => { parsed += payload.data.length; });
   });
-  const stopExit = await listenPtyEvent("pty-exit", () => frame.flush());
-  const bytes = await invoke<number>("probe_output");
-  while (parsed !== bytes) await delay(20);
+  let exits = 0;
+  let exitCode: number | null = null;
+  let receivedAtExit = 0;
+  const stopExit = await listenPtyEvent("pty-exit", ({ payload }) => {
+    exits++;
+    exitCode = payload.code;
+    receivedAtExit = received;
+    frame.flush();
+  });
+  const bytes = await invoke<number>("probe_output", { chunks });
+  while (parsed !== bytes || !exits) await delay(20);
   sample("output-parsed");
   frame.dispose(); ime.dispose(); ack.dispose(); terminal.dispose(); stop(); stopExit();
   document.getElementById("terminal")!.replaceChildren();
   const pending = await invoke("probe_pending");
   phase = "output-closed";
-  return { ...sample(phase), pending };
+  return { ...sample(phase), pending, exits, exitCode, receivedAtExit };
+}
+async function routing(round: number) {
+  const waitForObserver = async (key: string) => {
+    const deadline = performance.now() + 15_000;
+    while (performance.now() < deadline) {
+      const value = localStorage.getItem(key);
+      if (value !== null) return JSON.parse(value);
+      await delay(20);
+    }
+    throw new Error(`Timed out waiting for ${key}. Start the isolated host with --routing.`);
+  };
+  await waitForObserver("routing-observer-ready");
+  const key = "routing-observer-" + round;
+  localStorage.removeItem(key);
+  const owner = await output(16);
+  await invoke("probe_routing_barrier", { round });
+  return { owner, observer: await waitForObserver(key) };
 }
 Object.assign(window, { memoryRegression: { previews, closeDiffs, output, sample,
+  routing,
   pending: () => invoke("probe_pending"),
   state: () => ({ phase, results, received, parsed }), models: () => monaco.editor.getModels().length } });
 sample("ready");

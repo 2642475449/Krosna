@@ -33,7 +33,7 @@ import { addTerminalSession } from "@/lib/sessions";
 import { getDefaultSessionTitle } from "@/lib/sessionTitles";
 import type { TerminalSplitTarget } from "@/types";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import {
   getClaudeCliInfo,
   listenPtyEvent,
@@ -149,17 +149,6 @@ function sideQuestionLaunchOptions(agentId: AiAgentId): SessionLaunchOptions | u
   return undefined;
 }
 
-interface WorkerVoiceStatePayload {
-  phase: AsrPhase;
-  level: number;
-  elapsedMs: number;
-  errorMessage: string | null;
-  liveText: string;
-  shortcutLabel: string;
-  inputTarget: "terminal" | "system";
-  hasGlobalShortcut: boolean;
-}
-
 interface VoiceGlobalShortcutStatusPayload {
   registered: boolean;
   shortcut: string | null;
@@ -182,17 +171,6 @@ interface AgentHookConfigurationFailedPayload {
   agentId: string;
   error: string;
 }
-
-const INITIAL_WORKER_VOICE_STATE: WorkerVoiceStatePayload = {
-  phase: "idle",
-  level: 0,
-  elapsedMs: 0,
-  errorMessage: null,
-  liveText: "",
-  shortcutLabel: "Ctrl+Shift+V",
-  inputTarget: "terminal",
-  hasGlobalShortcut: false,
-};
 
 function WorkspacePane({ paneId }: { paneId: string }) {
   const settingsVisible = useAppStore(isWorkspaceSettingsVisible);
@@ -952,12 +930,10 @@ function AppLayout() {
   const shortcutRecordingAction = useShortcutStore((s) => s.recordingAction);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const [hasGlobalVoiceShortcut, setHasGlobalVoiceShortcut] = useState(false);
-  const [workerVoiceState, setWorkerVoiceState] = useState<WorkerVoiceStatePayload>(
-    INITIAL_WORKER_VOICE_STATE,
-  );
+  const [voicePhase, setVoicePhase] = useState<AsrPhase>("idle");
 
   useEffect(() => {
-    if (workerVoiceState.phase === "idle") return;
+    if (voicePhase === "idle") return;
     const handleCancelVoice = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -966,7 +942,7 @@ function AppLayout() {
     };
     window.addEventListener("keydown", handleCancelVoice, true);
     return () => window.removeEventListener("keydown", handleCancelVoice, true);
-  }, [workerVoiceState.phase]);
+  }, [voicePhase]);
 
   const handleVoiceTrigger = useCallback(() => {
     void emit("voice-worker-control", { action: "toggle" });
@@ -1027,12 +1003,18 @@ function AppLayout() {
 
 
   useEffect(() => {
-    const unlistenPromise = listen<WorkerVoiceStatePayload>("voice-worker-state", (event) => {
-      setWorkerVoiceState(event.payload);
-    });
-
+    let disposed = false;
+    const label = getCurrentWindow().label;
+    const unlistenPromise = listen<AsrPhase>("voice-worker-phase", (event) => {
+      if (!disposed) setVoicePhase(event.payload);
+    }, { target: label });
+    void unlistenPromise.then(() => {
+      // 项目可能在录音中途打开，订阅完成后补取已发生的阶段切换。
+      if (!disposed) return emitTo("voice-worker", "voice-worker-phase-request", label);
+    }).catch(() => {});
     return () => {
-      unlistenPromise.then((fn) => fn()).catch(() => {});
+      disposed = true;
+      void unlistenPromise.then((fn) => fn()).catch(() => {});
     };
   }, []);
 
@@ -1323,11 +1305,11 @@ function AppLayout() {
   useEffect(() => {
     const unlistenPromise = listenPtyEvent("pty-output", (event) => {
       const sessionId = event.payload.session_id;
-      const detected = detectClaudeRuntimeState(event.payload.data);
-      if (!detected) return;
-
       const currentSession = useAppStore.getState().sessions.find((session) => session.id === sessionId);
       if (!currentSession) return;
+
+      const detected = detectClaudeRuntimeState(event.payload.data);
+      if (!detected) return;
 
       const updates: Record<string, unknown> = {};
       let changed = false;
@@ -1864,7 +1846,6 @@ function AppLayout() {
   }, [sidebarCollapsed, visibleTerminalSessionKey, workspaceLayoutKey]);
 
   const hasTabs = Object.values(panesById).some((pane) => pane.tabIds.length > 0);
-  const displayVoiceState = workerVoiceState;
 
   return (
     <Layout className="app-shell h-screen flex flex-col">
@@ -1918,7 +1899,7 @@ function AppLayout() {
               onClick={handleVoiceTrigger}
               onHide={handleHideVoiceTrigger}
               shortcutLabel={voiceShortcut}
-              phase={displayVoiceState.phase}
+              phase={voicePhase}
             />
           </div>
           {windowMode === "project" && currentProject ? <BottomRunnerPanel /> : null}

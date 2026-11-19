@@ -85,7 +85,7 @@ export function buildPixelPetFileGuide(): string {
 - submergeRows（可选，0–12）：向下隐藏的像素行数，普通陆地角色省略。
 - behavior（可选，缺失字段使用默认值）：walkSpeedPxPerSec（8–140）、runSpeedPxPerSec（12–220）、jumpVelocityPxPerSec（60–360）、gravityPxPerSec2（200–1600）、sleepAfterIdleMs（2000–120000）。
 - behavior 布尔开关：allowPlatformHop、allowWallClimb、reactToCodingMood、enableRandomEvents。攀墙需要 clips.wallGrab 与 clips.climb；角色专属彩蛋需要 clips.easterEgg，均在巡逻或发呆时自动触发。
-- 宠物纯靠像素动作表达，不设文字气泡；旧文件中的 cheerBubbles / workBubbles 字段会被兼容忽略，新文件无需填写。
+- behavior.cheerBubbles / workBubbles（可选）：点击或庆祝、工作时分别从对应数组挑选一句台词，每句最多12个字符。留空数组可关闭该组台词。
 
 最小结构示例（实际角色请绘制完整造型和动作）：
 {"id":"custom","name":"My pet","pixelSize":2,"palette":{"K":"#172033"},"frames":{"idle":[[".KK.","KKKK",".KK."]]},"behavior":{"allowWallClimb":false,"enableRandomEvents":false}}

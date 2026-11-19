@@ -1,4 +1,5 @@
 // 隔离宿主启动后运行：node scripts/run-memory-regression.mjs <新的报告文件路径>
+// 单独验证两窗口路由时，宿主和本脚本均添加 --routing。
 // 仅连接本机诊断端口，不连接生产窗口；自然回落和强制 GC 分开记录。
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
@@ -51,14 +52,7 @@ async function sample(label, gc = false) {
   console.log(JSON.stringify(result));
   return result;
 }
-let failure;
-try {
-  await send("Runtime.enable");
-  for (let attempt = 0; attempt < 60; attempt++) {
-    if (await evaluate("Boolean(window.memoryRegression)")) break;
-    await delay(500);
-  }
-  assert(await evaluate("Boolean(window.memoryRegression)"), "Fixture failed to load");
+async function checkMemory() {
   await evaluate("window.memoryRegression.previews(1)");
   await evaluate("window.memoryRegression.closeDiffs()");
   await delay(1500);
@@ -98,6 +92,32 @@ try {
     }
     await sample("all-closed-final-gc", true);
   }
+}
+async function checkRouting() {
+  // 第二轮重建拥有窗口的订阅；旁观窗口在两轮内持续订阅且不返回 ACK。
+  for (const round of [1, 2]) {
+    const result = await evaluate(`window.memoryRegression.routing(${round})`);
+    samples.push({ round, ...result });
+    console.log(JSON.stringify({ round, ...result }));
+    assert.equal(result.owner.received, 1024 * 1024);
+    assert.equal(result.owner.parsed, result.owner.received);
+    assert.equal(result.owner.receivedAtExit, result.owner.received);
+    assert.equal(result.owner.exits, 1);
+    assert.equal(result.owner.exitCode, 0);
+    assert.deepEqual(result.owner.pending, [0, 0]);
+    assert.deepEqual(result.observer, { messages: 0, exits: 0 });
+  }
+}
+let failure;
+try {
+  await send("Runtime.enable");
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (await evaluate("Boolean(window.memoryRegression)")) break;
+    await delay(500);
+  }
+  assert(await evaluate("Boolean(window.memoryRegression)"), "Fixture failed to load");
+  if (process.argv.includes("--routing")) await checkRouting();
+  else await checkMemory();
   assert.deepEqual(errors, [], "WebView emitted uncaught exceptions");
 } catch (error) {
   failure = String(error);

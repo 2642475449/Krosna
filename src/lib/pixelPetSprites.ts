@@ -113,7 +113,7 @@ export function drawPixelPetFrame(
   pixelSize = DEFAULT_PIXEL_PET_CONFIG.pixelSize,
   palette: Record<string, string> = DEFAULT_PIXEL_PET_CONFIG.palette,
   waterlineY?: number,
-): void {
+): PetDrawBounds {
   const safePixelSize = Math.max(1, Math.round(pixelSize));
   const spriteWidth = (frame[0]?.length ?? 16) * safePixelSize;
   const drawX = Math.round(x);
@@ -127,11 +127,13 @@ export function drawPixelPetFrame(
     ctx.translate(drawX, drawY);
   }
 
+  let widestRow = 0;
   for (let row = 0; row < frame.length; row++) {
     const isSubmerged =
       typeof waterlineY === "number" && drawY + row * safePixelSize >= waterlineY;
     ctx.globalAlpha = isSubmerged ? 0.22 : 1;
     const line = frame[row];
+    widestRow = Math.max(widestRow, line.length);
     for (let col = 0; col < line.length; col++) {
       const ch = line[col];
       if (ch === ".") continue;
@@ -142,4 +144,101 @@ export function drawPixelPetFrame(
     }
   }
   ctx.restore();
+  const width = widestRow * safePixelSize;
+  return { x: facing === -1 ? drawX + spriteWidth - width : drawX, y: drawY, width, height: frame.length * safePixelSize };
+}
+
+export interface PetDrawBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function getPixelBubbleFontSize(pixelSize: number): number {
+  return 12 + 2 * Math.max(1, Math.min(4, Math.round(pixelSize)));
+}
+
+/**
+ * Draw a crisp pixel speech bubble above or beside the pet.
+ */
+export function drawPixelBubble(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  sprite: PetDrawBounds,
+  pixelSize: number,
+  viewport: { width: number; height: number },
+): PetDrawBounds {
+  const fontSize = getPixelBubbleFontSize(pixelSize);
+  const lineHeight = fontSize + 4;
+  const paddingX = 6;
+  const margin = 2;
+  const gap = 4;
+  ctx.save();
+  ctx.font = `600 ${fontSize}px system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const metrics = ctx.measureText(text);
+  const maxTextWidth = viewport.width - 2 * (paddingX + margin);
+  const lines = [{ text, metrics }];
+  if (metrics.width > maxTextWidth) {
+    lines.length = 0;
+    let line = "";
+    for (const char of text) {
+      if (line && ctx.measureText(line + char).width > maxTextWidth) {
+        lines.push({ text: line, metrics: ctx.measureText(line) });
+        line = "";
+      }
+      line += char;
+    }
+    lines.push({ text: line, metrics: ctx.measureText(line) });
+  }
+  const boxWidth = Math.ceil(Math.max(fontSize, ...lines.map((line) => line.metrics.width))) + 2 * paddingX;
+  const boxHeight = lines.length * lineHeight + 6;
+  const centerX = sprite.x + sprite.width / 2;
+  const above = sprite.y >= boxHeight + gap + margin;
+  let x = centerX - boxWidth / 2;
+  let y = sprite.y - boxHeight - gap;
+  if (!above) {
+    const right = sprite.x + sprite.width + gap;
+    const left = sprite.x - gap - boxWidth;
+    y = sprite.y + gap;
+    if (right + boxWidth <= viewport.width - margin) x = right;
+    else if (left >= margin) x = left;
+    else y = sprite.y + sprite.height + gap;
+  }
+  const boxX = Math.max(margin, Math.min(Math.round(x), viewport.width - boxWidth - margin));
+  const boxY = Math.max(margin, Math.min(Math.round(y), viewport.height - boxHeight - margin));
+
+  ctx.fillStyle = "#fffdf5";
+  ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+  ctx.strokeStyle = "#2b2520";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxWidth - 1, boxHeight - 1);
+
+  if (above) {
+    const tipX = Math.max(boxX + 3, Math.min(Math.round(centerX), boxX + boxWidth - 3));
+    ctx.fillStyle = "#fffdf5";
+    ctx.fillRect(tipX - 2, boxY + boxHeight - 1, 4, 2);
+    ctx.fillStyle = "#2b2520";
+    ctx.fillRect(tipX - 1, boxY + boxHeight + 1, 2, 2);
+  }
+
+  ctx.fillStyle = "#1e1b18";
+  const textX = Math.round(boxX + boxWidth / 2);
+  let left = boxX;
+  let top = boxY;
+  let right = boxX + boxWidth;
+  let bottom = boxY + boxHeight + (above ? 3 : 0);
+  lines.forEach((line, index) => {
+    const textY = boxY + 3 + lineHeight * (index + 0.5);
+    ctx.fillText(line.text, textX, textY);
+    left = Math.min(left, Math.floor(textX - (line.metrics.actualBoundingBoxLeft || 0)));
+    top = Math.min(top, Math.floor(textY - (line.metrics.actualBoundingBoxAscent || 0)));
+    right = Math.max(right, Math.ceil(textX + (line.metrics.actualBoundingBoxRight || 0)));
+    bottom = Math.max(bottom, Math.ceil(textY + (line.metrics.actualBoundingBoxDescent || 0)));
+  });
+  ctx.restore();
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }

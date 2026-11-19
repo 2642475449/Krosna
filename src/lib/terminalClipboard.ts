@@ -76,6 +76,11 @@ export function formatClipboardImageReference(agentId: string | undefined, path:
   return ` ${prefix}${quoted} `;
 }
 
+export function formatTerminalVoicePaste(text: string, bracketedPasteMode: boolean): string {
+  // 未开启括号粘贴的 CLI 会将 CR 或 LF 当成回车提交。
+  return bracketedPasteMode ? text : text.replace(/\r\n?|\n/g, " ");
+}
+
 /** 图片保存期间排队后续输入；在回放前处理粘贴，保证回车与标题捕获顺序一致。 */
 export function createTerminalPasteGate(callbacks: {
   input: (data: string) => void;
@@ -88,16 +93,23 @@ export function createTerminalPasteGate(callbacks: {
   let queue = Promise.resolve();
   const enqueue = (operation: () => Promise<void> | void) => {
     pending += 1;
-    queue = queue.then(() => { if (!disposed) return operation(); })
-      .catch((error: unknown) => { if (!disposed) callbacks.error(error); })
+    const result = queue.then(operation)
       .finally(() => { pending -= 1; });
-    return queue;
+    queue = result.catch(() => {});
+    return result;
+  };
+  const reportError = (error: unknown) => { if (!disposed) callbacks.error(error); };
+  const applyPaste = (text: string) => {
+    if (!text) return;
+    applyingPaste = true;
+    try { callbacks.paste(text); }
+    finally { applyingPaste = false; }
   };
   return {
     input(data: string) {
       if (disposed) return;
       if (applyingPaste || pending === 0) callbacks.input(data);
-      else void enqueue(() => callbacks.input(data));
+      else void enqueue(() => { if (!disposed) callbacks.input(data); }).catch(reportError);
     },
     paste(prepare: () => Promise<string>) {
       if (disposed) return Promise.resolve();
@@ -110,11 +122,17 @@ export function createTerminalPasteGate(callbacks: {
         const result = await prepared;
         if (disposed) return;
         if (result.error !== undefined) throw result.error;
-        if (!result.text) return;
-        applyingPaste = true;
-        try { callbacks.paste(result.text); }
-        finally { applyingPaste = false; }
-      });
+        applyPaste(result.text);
+      }).catch(reportError);
+    },
+    async pasteText(readAtInsertion: () => string) {
+      // 转写已经就绪，普通情况同步交给 xterm。若已有粘贴，轮到它时再验证焦点和会话。
+      const insert = () => {
+        if (disposed) throw new Error("terminal.clipboardSessionChanged");
+        applyPaste(readAtInsertion());
+      };
+      if (pending === 0) insert();
+      else await enqueue(insert);
     },
     dispose() { disposed = true; },
   };

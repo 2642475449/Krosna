@@ -120,6 +120,7 @@ import {
   createTerminalPasteGate,
   encodeClipboardImage,
   formatClipboardImageReference,
+  formatTerminalVoicePaste,
   readTerminalClipboard,
   readTerminalPasteEvent,
   type TerminalClipboardContent,
@@ -1317,7 +1318,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
     const enqueueInput = createTerminalInputQueue();
     enqueueInputRef.current = enqueueInput;
-    const getSession = () => useAppStore.getState().sessions.find((item) => item.id === sessionId);
+    const getSession = () => {
+      const state = useAppStore.getState();
+      return state.sessions.find((item) => item.id === sessionId)
+        ?? (runnerOptionsRef.current
+          ? state.projectSessions[currentSessionPathRef.current]?.find((item) => item.id === sessionId)
+          : undefined);
+    };
     const activityTracker = createTerminalActivityTracker(() => {
       if (!isTerminalDisposed && getSession()?.active) {
         updateSession(sessionId, { hasPromptHistory: true, lastActivityAt: Date.now() });
@@ -1477,7 +1484,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const pasteGate = createTerminalPasteGate({
       input: handleTerminalData,
       paste: (text) => {
-        const latest = useAppStore.getState().sessions.find((item) => item.id === sessionId);
+        const latest = getSession();
         if (!latest?.active || latest.status === "starting") {
           throw new Error("terminal.clipboardSessionChanged");
         }
@@ -1667,7 +1674,18 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     // During IME composition xterm owns the textarea.  Its final input is
     // delivered on the next task after compositionend, so defer PTY output
     // through that boundary to keep the cursor and committed text aligned.
-    const textarea = containerRef.current.querySelector("textarea");
+    const textarea = term.textarea;
+    const pasteVoiceText = (text: string, requireFocus: boolean) => {
+      void pasteGate.pasteText(() => {
+        const session = getSession();
+        if (isTerminalDisposed || restoringTerminalOutput || term.options.disableStdin || textarea?.readOnly || textarea?.disabled ||
+            !session?.active || session.status === "starting" ||
+            (requireFocus && (!document.hasFocus() || document.activeElement !== textarea))) {
+          throw new Error("terminal.clipboardSessionChanged");
+        }
+        return formatTerminalVoicePaste(text, term.modes.bracketedPasteMode && !term.options.ignoreBracketedPasteMode);
+      }).catch(reportPasteError);
+    };
     const onCompositionStart = () => {
       imeOutputGate.compositionStart();
     };
@@ -1675,6 +1693,8 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       imeOutputGate.compositionEnd();
     };
     if (textarea) {
+      // 原生语音路由只调用实际持焦的 xterm 输入框，编辑器和搜索框保留系统输入。
+      Object.assign(textarea, { krosnaPasteVoiceText: (text: string) => pasteVoiceText(text, true) });
       textarea.addEventListener("compositionstart", onCompositionStart);
       textarea.addEventListener("compositionend", onCompositionEnd);
       // 窗口/标签切走时部分输入法不会发送 compositionend，仍须释放暂停输出。
@@ -1704,12 +1724,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         if (isTerminalDisposed || event.payload.sessionId !== sessionId || !event.payload.text) {
           return;
         }
-        // 使用终端粘贴协议，避免分段或列表中的换行被当作回车提交。
-        // 未启用括号粘贴的程序不具备该保护，此时将换行折叠为空格。
-        const text = term.modes.bracketedPasteMode
-          ? event.payload.text
-          : event.payload.text.replace(/\r?\n/g, " ");
-        void pasteGate.paste(async () => text);
+        pasteVoiceText(event.payload.text, false);
       },
     );
     // Listen for PTY exit
@@ -1862,6 +1877,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync as EventListener);
       // 清理 composition 事件监听器
       if (textarea) {
+        Reflect.deleteProperty(textarea, "krosnaPasteVoiceText");
         textarea.removeEventListener("compositionstart", onCompositionStart);
         textarea.removeEventListener("compositionend", onCompositionEnd);
         textarea.removeEventListener("blur", onCompositionEnd);

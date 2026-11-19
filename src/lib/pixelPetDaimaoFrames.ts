@@ -1,6 +1,6 @@
 import type { PetActionState, PetClipId } from "./pixelPet";
 
-/** 呆猫（穿猫耳连体衣的小狗）调色板，基于 19×20 真实像素网格对齐与众数采样提取。 */
+/** 呆猫的 19×20 像素调色板，造型取自《怪物猎人》随从艾露猫 Kit T. 的二创形象。 */
 export const DAIMAO_PALETTE: Record<string, string> = {
   A: "#171120",
   B: "#576fc0",
