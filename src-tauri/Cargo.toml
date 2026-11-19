@@ -1,6 +1,6 @@
 [package]
 name = "krosna"
-version = "1.8.36"
+version = "1.8.37"
 edition = "2021"
 license = "MIT"
 
