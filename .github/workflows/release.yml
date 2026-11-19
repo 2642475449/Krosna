@@ -95,6 +95,7 @@ jobs:
     concurrency:
       group: krosna-update-mirror
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Download signed GitHub release
         shell: pwsh
