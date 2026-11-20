@@ -11,6 +11,7 @@ import type { AgentCliInfo, AiAgentId, ClaudeEffortInfo, Session, SessionLaunchO
 import { AgentIcon } from "@/components/AgentIcon";
 import { TASK_CHOICES, useLaunchChoiceLabel } from "@/hooks/useLaunchChoiceLabel";
 import { useDefaultInstalledAgentSelection } from "@/hooks/useDefaultInstalledAgentSelection";
+import { openSettingsPage } from "@/lib/settingsNavigation";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
 import { useAppStore } from "@/store";
@@ -175,7 +176,7 @@ export function NewSessionDialog({ open, creating, title, onCancel, onCreate }: 
           onClick={() => { setNameDraft(sessionName); setEditingName(true); }}
           onKeyDown={event => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
         >{sessionName || title || t("newSession.title")}</button>}
-        {selected && !["pi", "opencode"].includes(selected.id) && <Tooltip title={t("newSession.permissionManagedInSettings")}><button type="button" className="app-launcher-permission" disabled={creating} data-yolo={isAgentYoloEnabled(selected.id, defaults)} onClick={() => { onCancel(); sessionStorage.setItem("krosna.settings.pendingPage", "agents"); useAppStore.getState().openTab("__settings__"); window.dispatchEvent(new CustomEvent("settings:navigate", { detail: "agents" })); }}>{isAgentYoloEnabled(selected.id, defaults) ? t("newSession.yoloActive") : t("newSession.manualActive")}</button></Tooltip>}
+        {selected && !["pi", "opencode"].includes(selected.id) && <Tooltip title={t("newSession.permissionManagedInSettings")}><button type="button" className="app-launcher-permission" disabled={creating} data-yolo={isAgentYoloEnabled(selected.id, defaults)} onClick={() => { onCancel(); openSettingsPage("agents"); }}>{isAgentYoloEnabled(selected.id, defaults) ? t("newSession.yoloActive") : t("newSession.manualActive")}</button></Tooltip>}
       </div>
       <div className="app-launcher-body"><div className="mb-2 text-xs text-[var(--cs-text-secondary)]">{t("newSession.agent")}</div>
         {!detecting && !agents.length ? <p role="status" className="mb-0 text-xs text-[var(--cs-text-secondary)]">{t(failed ? "newSession.detectionFailed" : "newSession.noAgents")}</p> : (

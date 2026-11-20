@@ -164,7 +164,22 @@ export function startWorkspaceRecoverySync(): () => void {
       });
     }, 750);
   };
-  const stopApp = useAppStore.subscribe(schedule);
+  const stopApp = useAppStore.subscribe((state, previous) => {
+    if (
+      state.currentProject !== previous.currentProject
+      || state.sessions !== previous.sessions
+      || state.projectSessions !== previous.projectSessions
+      || state.projectWorkspaces !== previous.projectWorkspaces
+      || state.tabsById !== previous.tabsById
+      || state.panesById !== previous.panesById
+      || state.layout !== previous.layout
+      || state.activePaneId !== previous.activePaneId
+      || state.focusedTabId !== previous.focusedTabId
+      || state.gitDiffDocuments !== previous.gitDiffDocuments
+    ) {
+      schedule();
+    }
+  });
   const stopRecovery = useWorkspaceRecoveryStore.subscribe((state, previous) => {
     if (state.editorViews !== previous.editorViews || state.phase !== previous.phase) schedule();
   });

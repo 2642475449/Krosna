@@ -331,6 +331,7 @@
     "paste": "貼り付け",
     "openInFileManager": "ファイルマネージャーで開く",
     "openInAssociatedApp": "関連付けられたアプリで開く",
+    "openInExplorer": "エクスプローラーで開く",
     "create": "作成",
     "save": "保存",
     "refresh": "更新",
@@ -407,8 +408,16 @@
   "statusBar": {
     "pixelPet": {
       "daimao": {
-        "cheerBubbles": ["旦那さん、行くニャ！", "お団子一本ちょうだいニャ", "ごはんニャ！"],
-        "workBubbles": ["見張りは任せるニャ", "足跡だニャ！", "……お団子は？"]
+        "cheerBubbles": [
+          "旦那さん、行くニャ！",
+          "お団子一本ちょうだいニャ",
+          "ごはんニャ！"
+        ],
+        "workBubbles": [
+          "見張りは任せるニャ",
+          "足跡だニャ！",
+          "……お団子は？"
+        ]
       },
       "show": "ピクセルペットを表示",
       "hide": "ピクセルペットを非表示",
@@ -450,6 +459,10 @@
       "multiple": "{{count}} 件のバックグラウンドタスクを実行中",
       "searchIndex": "コード検索インデックス",
       "indexing": "{{name}} をインデックス中",
+      "indexFailed": "{{name}} の索引に失敗",
+      "retryIndex": "再試行",
+      "openIndexSettings": "索引設定",
+      "unknownError": "インデックス構築に失敗しました。設定を確認するか再試行してください。",
       "cloneCompact": "クローン",
       "indexCompact": "索引",
       "pending": "進行待ち",
@@ -1526,6 +1539,7 @@
     "downloadFailed": "更新のダウンロードに失敗しました",
     "installFailed": "更新のインストールに失敗しました",
     "downloadFromMirror": "中国ミラーからインストーラーをダウンロード",
+    "downloadFromMirrorDesc": "中国ミラーサイトから Windows インストーラーを直接ダウンロード",
     "manualDownload": "GitHub のリリースページを開く",
     "releaseNotes": "更新内容",
     "noReleaseNotes": "このバージョンには更新内容がありません。",
@@ -1534,7 +1548,21 @@
     "runningTurnsWarning": "実行中のエージェントターンが {{count}} 件あります。",
     "dirtyTabsWarning": "未保存の変更があるタブが {{count}} 件あります。",
     "installAnyway": "それでも再起動してインストール",
-    "installedSuccessfully": "Krosna を v{{version}} に更新しました。"
+    "installedSuccessfully": "Krosna を v{{version}} に更新しました。",
+    "updateAvailableTitle": "新しいバージョン",
+    "currentVersionLabel": "現在のバージョン v{{currentVersion}}",
+    "versionTransition": "v{{currentVersion}} → v{{version}}",
+    "checkingTitle": "更新を確認中…",
+    "checkingHint": "GitHub から最新のリリース情報を取得しています。",
+    "preparingDownloadHint": "まもなくバックグラウンドで更新のダウンロードを開始します。",
+    "recoveryHint": "詳細を開くと原因を確認できます。ネットワーク設定を見直して再試行するか、インストーラーを手動でダウンロードできます。",
+    "installErrorHint": "インストーラーを起動できませんでした。再インストールを試すか、下の技術詳細を確認してください。",
+    "showErrorDetails": "技術詳細を表示",
+    "hideErrorDetails": "技術詳細を隠す",
+    "copyErrorDetails": "エラーをコピー",
+    "openNetworkSettings": "ネットワークとプロキシを設定",
+    "openNetworkSettingsDesc": "システム・カスタムプロキシの設定や GitHub 接続テストを行います",
+    "manualDownloadDesc": "ブラウザでリリースページを開き最新のインストーラーを取得"
   },
   "settings": {
     "loading": "設定を読み込み中…",
@@ -3037,6 +3065,72 @@
       "legacy": "所有元が不明な旧画像 {{size}} を含みます。互換性のため保持されています。",
       "failed": "キャッシュの読み取りまたは削除に失敗しました。再試行してください。",
       "syncFailed": "参照の同期に失敗しました。画像を保持して再試行します。手動削除は一時的に無効です。"
+    },
+    "memoryDiagnostics": {
+      "title": "メモリ診断",
+      "renderer": "ワークスペースのレンダラー",
+      "sampling": "{{seconds}} 秒ごとに採取し、直近 {{hours}} 時間分を保持します。このカードを閉じても記録は続き、ウィンドウを閉じると消去されます。",
+      "start": "記録を開始",
+      "stop": "記録を一時停止",
+      "clear": "履歴をクリア",
+      "copy": "診断サマリーをコピー",
+      "copied": "コピーしました",
+      "pausedGap": "一時停止区間",
+      "workspaceSummary": "ターミナル {{terminals}} · スクロールバック {{rows}} 行 · エディター {{editors}}",
+      "trendSrSummary": "{{start}}〜{{end}} に {{count}} 件採取、現在のプライベートワーキングセット {{resident}}。",
+      "ready": "記録を開始すると、このウィンドウのメモリ推移を確認できます。",
+      "recording": "記録中",
+      "paused": "記録を一時停止しました",
+      "unsupported": "このプラットフォームでは WebView2 のメモリを採取できません。",
+      "sampleError": "採取に失敗しました。記録中は自動的に再試行します。",
+      "emptyTrend": "グラフに表示するデータはまだありません",
+      "mib": "{{value}} MiB",
+      "process": "PID {{pid}} · 関連フレーム {{count}} 件",
+      "updated": "{{time}} に更新",
+      "allocations": "Chromium の割り当てスナップショット",
+      "allocationNote": "現在のレンダラーの割り当てを手動で取得します。割り当て量はプライベートワーキングセットと計測方法が異なり、項目間で重複する場合があります。",
+      "capture": "スナップショットを取得",
+      "captureStatus": {
+        "busy": "別のウィンドウで取得中です。少し待ってから再試行してください。",
+        "error": "このレンダラーの割り当て詳細を取得できませんでした。"
+      },
+      "captureInfo": "PID {{pid}} · {{time}}",
+      "emptyCapture": "同じプロセスで 2 回取得すると、割り当ての変化を比較できます。",
+      "category": "カテゴリ",
+      "size": "報告サイズ",
+      "change": "前回との差",
+      "workspace": "ワークスペースのオブジェクト",
+      "workspaceNote": "JS ヒープと DOM は現在の WebView の値です。ターミナルとエディターはこのウィンドウ内の数です。",
+      "metrics": {
+        "resident": "プライベートワーキングセット",
+        "commit": "プライベートコミット",
+        "heap": "JS ヒープの使用量",
+        "workingSet": "ワーキングセット（共有ページを含む）",
+        "heapTotal": "JS ヒープ容量",
+        "embedderHeap": "埋め込みオブジェクトのヒープ使用量",
+        "backingStorage": "JS バッファーのバックストレージ",
+        "documents": "ドキュメント数",
+        "nodes": "DOM ノード数",
+        "listeners": "JS イベントリスナー数",
+        "terminals": "マウント済みターミナル",
+        "alternateTerminals": "代替画面のターミナル",
+        "scrollbackRows": "通常のスクロールバック行数",
+        "editorModels": "エディターモデル",
+        "editorCodeUnits": "モデルテキストの UTF-16 単位"
+      },
+      "categories": {
+        "v8": "V8",
+        "blink": "Blink GC",
+        "partitionAlloc": "PartitionAlloc",
+        "malloc": "ネイティブアロケーター",
+        "mallocObjects": "使用中のネイティブ割り当て",
+        "gpu": "GPU 関連の割り当て",
+        "skia": "Skia",
+        "canvas": "Canvas",
+        "shared": "共有メモリ",
+        "discardable": "破棄可能なメモリ",
+        "webCache": "ウェブリソースキャッシュ"
+      }
     },
     "usageData": {
       "title": "データとプライバシー",

@@ -85,12 +85,14 @@ import {
 import { createTerminalLayoutScheduler } from "@/lib/terminalResize";
 import { createTerminalSizeReconciler } from "@/lib/terminalSizeReconcile";
 import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
+import { registerMemoryDiagnosticTerminal } from "@/lib/memoryDiagnostics";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
+import { installTerminalImeComposition } from "@/lib/terminalImeComposition";
 import {
   createTerminalOutputFrameGate,
   writeTerminalOutputWithCursorRefresh,
 } from "@/lib/terminalOutputFrames";
-import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
+import { createTerminalInputQueue, isTerminalEditingInput } from "@/lib/terminalInputQueue";
 import { createTerminalActivityTracker } from "@/lib/terminalActivity";
 import { terminalInputErrorKey } from "@/lib/terminalInputError";
 import { createTerminalRevealRepaint, terminalRenderingPool } from "@/lib/terminalRendering";
@@ -1395,9 +1397,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       if (session?.status !== "waiting" || session.statusRevision !== before?.statusRevision) userResponseTracker.cancel();
     });
     let processingClipboardPaste = false;
+    const writeInteractiveInput = (data: string) =>
+      ptyInput(sessionId, data, term.textarea === document.activeElement && document.hasFocus());
 
-    // Send user input to PTY as-is. Control keys like Backspace may repeat rapidly,
-    // so deduplicating identical payloads here will make deletion feel laggy.
+    // 快速重复的退格和方向键可以合并写入，必须保留每次输入的字节和顺序。
     const handleTerminalData = (data: string) => {
       // xterm may emit focus-reporting sequences when tabs switch and we move focus
       // between mounted terminals. Those should not be forwarded into the PTY.
@@ -1413,23 +1416,29 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       const acknowledgeInput = interruptTracker.prepareInput(data);
       const acknowledgeUserResponse = userResponseTracker.prepareInput(data);
       const editingSession = getSession();
+      const editingInput = isTerminalEditingInput(data);
       // 只修复曾使用原生光标的 CLI；始终自行绘制插入点的 TUI 保留其光标策略。
       const restoreEditingCursor = canRestoreTerminalInputCursor(editingSession)
         && outputFrameGate.hasNativeCursor()
         && (/^[^\x00-\x1f\x7f]+$/u.test(data) || /^[\x08\x7f]$/.test(data)
           || /^\x1b\[(?:[CDFH]|3~)$/.test(data));
       const pasted = processingClipboardPaste;
+      const finishInput = (written: boolean) => {
+        if (written) activityTracker.written(data, pasted);
+        acknowledgeInput(written);
+        acknowledgeUserResponse(written);
+        if (written && !isTerminalDisposed && restoreEditingCursor && canRestoreTerminalInputCursor(getSession())) {
+          outputFrameGate.requestCursorRestore();
+        }
+      };
       const sendInput = async () => {
         try {
-          await activityTracker.write(data, () => ptyInput(sessionId, data), pasted);
-          acknowledgeInput(true);
-          acknowledgeUserResponse(true);
-          const latest = getSession();
-          if (!isTerminalDisposed && restoreEditingCursor && canRestoreTerminalInputCursor(latest)) {
-            outputFrameGate.requestCursorRestore();
-          }
+          await (!pasted && (data === "\r" || data === "\n")
+            ? writeInteractiveInput(data)
+            : ptyInput(sessionId, data));
         }
-        catch (error) { acknowledgeInput(false); acknowledgeUserResponse(false); throw error; }
+        catch (error) { finishInput(false); throw error; }
+        finishInput(true);
       };
       if (data === "\r" || data === "\n") outputFrameGate.cancelCursorRestore();
 
@@ -1475,8 +1484,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       captureInputForAutoTitleRef.current?.(data);
       if (processingClipboardPaste) {
         void enqueueInput(sendInput).catch(reportPasteError);
+      } else if (editingInput) {
+        void enqueueInput.write(data, writeInteractiveInput, finishInput, reportRuntimeInputError);
       } else {
-        // 系统语音会连续触发逐字输入；即使队列空闲也必须排队，避免并发 IPC 写入乱序。
         void enqueueInput(sendInput).catch(reportRuntimeInputError);
       }
     };
@@ -1496,7 +1506,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       error: reportPasteError,
     });
     pasteGateRef.current = pasteGate;
+    let imeComposition: ReturnType<typeof installTerminalImeComposition> | null = null;
     const inputDisposable = term.onData((data) => {
+      imeComposition?.notifyXtermData(data);
       if (!restoringTerminalOutput) pasteGate.input(data);
     });
     const handleNativePaste = (event: ClipboardEvent) => {
@@ -1586,10 +1598,16 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       // 使用一次 resize，避免窄/宽网格反复重排日志。
       term.resize(runnerOptionsRef.current.wordWrap ? size.cols : Math.max(1024, size.cols), size.rows);
     };
+    let syncedWidth = 0;
+    let syncedHeight = 0;
+    let needsSizeSync = true;
     const measureGrid = () => {
       if (isTerminalDisposed || restoringTerminalOutput || document.hidden || !intersectsViewport
         || container.clientWidth === 0 || container.clientHeight === 0) return null;
       fitGrid();
+      syncedWidth = container.clientWidth;
+      syncedHeight = container.clientHeight;
+      needsSizeSync = false;
       return { rows: term.rows, cols: term.cols };
     };
     const findLayoutSession = (state = useAppStore.getState()) =>
@@ -1628,18 +1646,28 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       const ready = Boolean(session?.active && session.status !== "starting");
       const wasReady = Boolean(before?.active && before.status !== "starting");
       if (ready !== wasReady) {
+        needsSizeSync = true;
         sizeReconciler.invalidate();
         if (ready) scheduleSync();
       }
     });
-    const handleWindowFocus = () => scheduleSync();
+    const handleWindowFocus = () => {
+      // 尺寸与可见性未变化且已收敛时跳过 Alt+Tab 切窗导致的整屏重绘与双次 PTY 尺寸探测。
+      if (!needsSizeSync && container.clientWidth === syncedWidth && container.clientHeight === syncedHeight) {
+        return;
+      }
+      scheduleSync();
+    };
     window.addEventListener("focus", handleWindowFocus);
 
     const syncRenderingVisibility = () => {
       const visible = !document.hidden && intersectsViewport
         && container.clientWidth > 0 && container.clientHeight > 0;
       rendering.setVisible(visible);
-      if (!visible) sizeReconciler.invalidate();
+      if (!visible) {
+        needsSizeSync = true;
+        sizeReconciler.invalidate();
+      }
     };
     syncRenderingVisibility();
     document.addEventListener("visibilitychange", syncRenderingVisibility);
@@ -1686,25 +1714,32 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         return formatTerminalVoicePaste(text, term.modes.bracketedPasteMode && !term.options.ignoreBracketedPasteMode);
       }).catch(reportPasteError);
     };
-    const onCompositionStart = () => {
-      imeOutputGate.compositionStart();
-    };
     const onCompositionEnd = () => {
       imeOutputGate.compositionEnd();
+    };
+    const onCompositionVisibilityChange = () => {
+      if (document.visibilityState === "hidden") onCompositionEnd();
     };
     if (textarea) {
       // 原生语音路由只调用实际持焦的 xterm 输入框，编辑器和搜索框保留系统输入。
       Object.assign(textarea, { krosnaPasteVoiceText: (text: string) => pasteVoiceText(text, true) });
-      textarea.addEventListener("compositionstart", onCompositionStart);
-      textarea.addEventListener("compositionend", onCompositionEnd);
-      // 窗口/标签切走时部分输入法不会发送 compositionend，仍须释放暂停输出。
-      textarea.addEventListener("blur", onCompositionEnd);
+      imeComposition = installTerminalImeComposition({
+        host: terminalHost,
+        textarea,
+        onCompositionStart: () => imeOutputGate.compositionStart(),
+        onCompositionEnd,
+        onFallbackCommit: (text) => {
+          if (!isTerminalDisposed && !restoringTerminalOutput && !term.options.disableStdin) {
+            pasteGate.input(text);
+          }
+        },
+        windowTarget: window,
+        documentTarget: document,
+      });
+    } else {
+      window.addEventListener("blur", onCompositionEnd);
+      document.addEventListener("visibilitychange", onCompositionVisibilityChange);
     }
-    const onCompositionVisibilityChange = () => {
-      if (document.visibilityState === "hidden") onCompositionEnd();
-    };
-    window.addEventListener("blur", onCompositionEnd);
-    document.addEventListener("visibilitychange", onCompositionVisibilityChange);
 
     // Listen for PTY output from Rust
     const outputPromise = listenPtyEvent(
@@ -1848,7 +1883,9 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       }
     });
 
+    const unregisterMemory = registerMemoryDiagnosticTerminal(term);
     return () => {
+      unregisterMemory();
       container.removeEventListener("mousedown", handleMouseShortcut, true);
       isTerminalDisposed = true;
       unregisterTerminalRecovery();
@@ -1876,14 +1913,14 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       document.removeEventListener("visibilitychange", syncRenderingVisibility);
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync as EventListener);
       // 清理 composition 事件监听器
+      imeComposition?.dispose();
+      imeComposition = null;
       if (textarea) {
         Reflect.deleteProperty(textarea, "krosnaPasteVoiceText");
-        textarea.removeEventListener("compositionstart", onCompositionStart);
-        textarea.removeEventListener("compositionend", onCompositionEnd);
-        textarea.removeEventListener("blur", onCompositionEnd);
+      } else {
+        window.removeEventListener("blur", onCompositionEnd);
+        document.removeEventListener("visibilitychange", onCompositionVisibilityChange);
       }
-      window.removeEventListener("blur", onCompositionEnd);
-      document.removeEventListener("visibilitychange", onCompositionVisibilityChange);
       imeOutputGate.dispose();
       unsubscribeSession();
       interruptTracker.dispose();

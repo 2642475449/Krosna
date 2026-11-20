@@ -10,12 +10,17 @@ use tauri::WebviewWindow;
 // 每个窗口的所有终端共用在途预算，覆盖 IPC 与 xterm 解析队列。
 pub const OUTPUT_WINDOW_BYTES: usize = 256 * 1024;
 const OUTPUT_WINDOW_MESSAGES: usize = 128;
+// 常规输出用尽窗口额度时，近期输入产生的短回显仍可进入 WebView。
+const INTERACTIVE_RESERVE_BYTES: usize = 32 * 1024;
+const INTERACTIVE_RESERVE_MESSAGES: usize = 16;
 
 #[derive(Default)]
 struct Pending {
     next_id: u64,
     bytes: usize,
-    messages: HashMap<u64, usize>,
+    messages: HashMap<u64, (usize, bool)>,
+    reserved_bytes: usize,
+    reserved_messages: usize,
     closed: bool,
 }
 
@@ -34,7 +39,7 @@ impl OutputFlow {
         }
     }
 
-    pub fn reserve(&self, bytes: usize, cancelled: &AtomicBool) -> Option<u64> {
+    pub fn reserve(&self, bytes: usize, interactive: bool, cancelled: &AtomicBool) -> Option<u64> {
         if bytes > OUTPUT_WINDOW_BYTES {
             return None;
         }
@@ -43,13 +48,22 @@ impl OutputFlow {
             if pending.closed || cancelled.load(Ordering::Acquire) {
                 return None;
             }
-            if pending.bytes + bytes <= OUTPUT_WINDOW_BYTES
-                && pending.messages.len() < OUTPUT_WINDOW_MESSAGES
-            {
+            let fits_regular = pending.bytes + bytes <= OUTPUT_WINDOW_BYTES
+                && pending.messages.len() - pending.reserved_messages < OUTPUT_WINDOW_MESSAGES;
+            let use_reserve = !fits_regular
+                && interactive
+                && pending.reserved_bytes + bytes <= INTERACTIVE_RESERVE_BYTES
+                && pending.reserved_messages < INTERACTIVE_RESERVE_MESSAGES;
+            if fits_regular || use_reserve {
                 pending.next_id += 1;
                 let id = pending.next_id;
-                pending.messages.insert(id, bytes);
-                pending.bytes += bytes;
+                pending.messages.insert(id, (bytes, use_reserve));
+                if use_reserve {
+                    pending.reserved_bytes += bytes;
+                    pending.reserved_messages += 1;
+                } else {
+                    pending.bytes += bytes;
+                }
                 return Some(id);
             }
             // 会话关闭不依赖 WebView 再回 ACK；最多 50ms 后结束此发送者的等待。
@@ -60,8 +74,13 @@ impl OutputFlow {
 
     pub fn acknowledge(&self, id: u64) {
         let mut pending = self.pending.lock();
-        if let Some(bytes) = pending.messages.remove(&id) {
-            pending.bytes -= bytes;
+        if let Some((bytes, reserved)) = pending.messages.remove(&id) {
+            if reserved {
+                pending.reserved_bytes -= bytes;
+                pending.reserved_messages -= 1;
+            } else {
+                pending.bytes -= bytes;
+            }
             self.available.notify_all();
         }
     }
@@ -71,13 +90,18 @@ impl OutputFlow {
         pending.closed = true;
         pending.messages.clear();
         pending.bytes = 0;
+        pending.reserved_bytes = 0;
+        pending.reserved_messages = 0;
         self.available.notify_all();
     }
 
     #[allow(dead_code)] // 独立 WebView 内存回归宿主读取，不向生产 IPC 暴露。
     fn pending_counts(&self) -> (usize, usize) {
         let pending = self.pending.lock();
-        (pending.bytes, pending.messages.len())
+        (
+            pending.bytes + pending.reserved_bytes,
+            pending.messages.len(),
+        )
     }
 }
 
@@ -148,10 +172,11 @@ impl OutputHub {
         &self,
         label: &str,
         bytes: usize,
+        interactive: bool,
         cancelled: &AtomicBool,
     ) -> Option<(Arc<OutputFlow>, u64)> {
         let flow = self.subscribers.lock().get(label).cloned()?;
-        let delivery_id = flow.reserve(bytes, cancelled)?;
+        let delivery_id = flow.reserve(bytes, interactive, cancelled)?;
         Some((flow, delivery_id))
     }
 
@@ -160,10 +185,11 @@ impl OutputHub {
         window: &WebviewWindow,
         session_id: &str,
         data: &str,
+        interactive: bool,
         cancelled: &AtomicBool,
     ) {
         let Some((flow, delivery_id)) =
-            self.reserve_window_output(window.label(), data.len(), cancelled)
+            self.reserve_window_output(window.label(), data.len(), interactive, cancelled)
         else {
             return;
         };
@@ -202,12 +228,12 @@ mod tests {
             .unwrap();
         let cancelled = AtomicBool::new(false);
         let (background, _) = hub
-            .reserve_window_output("project-b", OUTPUT_WINDOW_BYTES, &cancelled)
+            .reserve_window_output("project-b", OUTPUT_WINDOW_BYTES, false, &cancelled)
             .unwrap();
         let (sent, received) = mpsc::channel();
         let sender = hub.clone();
         let worker = std::thread::spawn(move || {
-            sent.send(sender.reserve_window_output("main", 1, &AtomicBool::new(false)))
+            sent.send(sender.reserve_window_output("main", 1, false, &AtomicBool::new(false)))
                 .unwrap();
         });
         let result = received.recv_timeout(Duration::from_secs(2));
@@ -219,11 +245,13 @@ mod tests {
         assert_eq!(foreground.subscription_id, "foreground");
         assert_eq!(foreground.pending_counts(), (1, 1));
         assert!(hub
-            .reserve_window_output("project-b", 1, &cancelled)
+            .reserve_window_output("project-b", 1, false, &cancelled)
             .is_none());
 
         hub.subscribe_output("main", "reloaded".into()).unwrap();
-        let (reloaded, _) = hub.reserve_window_output("main", 1, &cancelled).unwrap();
+        let (reloaded, _) = hub
+            .reserve_window_output("main", 1, false, &cancelled)
+            .unwrap();
         assert_eq!(reloaded.subscription_id, "reloaded");
         assert_eq!(foreground.pending_counts(), (0, 0));
     }
@@ -233,12 +261,12 @@ mod tests {
         let hub = OutputHub::default();
         hub.subscribe_output("main", "old".into()).unwrap();
         let old = hub.subscribers.lock()["main"].clone();
-        old.reserve(64, &AtomicBool::new(false)).unwrap();
+        old.reserve(64, false, &AtomicBool::new(false)).unwrap();
         hub.subscribe_output("main", "new".into()).unwrap();
         assert_eq!(old.pending_counts(), (0, 0));
-        assert_eq!(old.reserve(1, &AtomicBool::new(false)), None);
+        assert_eq!(old.reserve(1, false, &AtomicBool::new(false)), None);
         let current = hub.subscribers.lock()["main"].clone();
-        let id = current.reserve(64, &AtomicBool::new(false)).unwrap();
+        let id = current.reserve(64, false, &AtomicBool::new(false)).unwrap();
         hub.acknowledge_output("main", "old", id);
         hub.unsubscribe_output("main", Some("old"));
         assert_eq!(hub.pending_counts(), (64, 1));
@@ -256,7 +284,7 @@ mod tests {
         let worker = std::thread::spawn(move || {
             for _ in 0..4096 {
                 let id = producer
-                    .reserve(64 * 1024, &AtomicBool::new(false))
+                    .reserve(64 * 1024, false, &AtomicBool::new(false))
                     .unwrap();
                 assert!(producer.pending.lock().bytes <= OUTPUT_WINDOW_BYTES);
                 send.send(id).unwrap();
@@ -281,12 +309,13 @@ mod tests {
         for close_window in [true, false] {
             let flow = Arc::new(OutputFlow::new("window".into()));
             let cancelled = Arc::new(AtomicBool::new(false));
-            flow.reserve(OUTPUT_WINDOW_BYTES, &cancelled).unwrap();
+            flow.reserve(OUTPUT_WINDOW_BYTES, false, &cancelled)
+                .unwrap();
             let worker_flow = flow.clone();
             let worker_cancelled = cancelled.clone();
             let (send, receive) = mpsc::channel();
             let worker = std::thread::spawn(move || {
-                send.send(worker_flow.reserve(1, &worker_cancelled))
+                send.send(worker_flow.reserve(1, false, &worker_cancelled))
                     .unwrap();
             });
             if close_window {
@@ -305,11 +334,52 @@ mod tests {
     fn small_messages_are_bounded_and_unknown_ack_cannot_grant_credit() {
         let flow = OutputFlow::new("window".into());
         for _ in 0..OUTPUT_WINDOW_MESSAGES {
-            flow.reserve(1, &AtomicBool::new(false)).unwrap();
+            flow.reserve(1, false, &AtomicBool::new(false)).unwrap();
         }
         flow.acknowledge(u64::MAX);
         assert_eq!(flow.pending.lock().messages.len(), OUTPUT_WINDOW_MESSAGES);
         flow.close();
-        assert_eq!(flow.reserve(1, &AtomicBool::new(false)), None);
+        assert_eq!(flow.reserve(1, false, &AtomicBool::new(false)), None);
+    }
+
+    #[test]
+    fn interactive_echo_can_use_and_replenish_reserved_credit_during_bulk_output() {
+        let flow = Arc::new(OutputFlow::new("window".into()));
+        let regular = flow
+            .reserve(OUTPUT_WINDOW_BYTES, false, &AtomicBool::new(false))
+            .unwrap();
+        let worker_flow = flow.clone();
+        let (send, receive) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            for _ in 0..2 {
+                let id =
+                    worker_flow.reserve(INTERACTIVE_RESERVE_BYTES, true, &AtomicBool::new(false));
+                if send.send(id).is_err() {
+                    return;
+                }
+            }
+        });
+        let wait = Duration::from_secs(2);
+        let first = receive.recv_timeout(wait);
+        let before_ack = flow.pending_counts();
+        let second_waited_for_credit;
+        if let Ok(Some(id)) = first {
+            second_waited_for_credit = receive.recv_timeout(Duration::from_millis(80)).is_err();
+            flow.acknowledge(id);
+        } else {
+            second_waited_for_credit = false;
+        }
+        let second = receive.recv_timeout(wait);
+        flow.close();
+        worker.join().unwrap();
+        assert!(second_waited_for_credit);
+        assert_eq!(
+            before_ack,
+            (OUTPUT_WINDOW_BYTES + INTERACTIVE_RESERVE_BYTES, 2)
+        );
+        assert!(
+            matches!((first, second), (Ok(Some(first)), Ok(Some(second))) if regular < first && first < second)
+        );
+        assert_eq!(flow.pending_counts(), (0, 0));
     }
 }

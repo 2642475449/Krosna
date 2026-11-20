@@ -75,6 +75,9 @@ export function collectPetPlatforms(
   return platforms;
 }
 
+export const PET_FRAME_INTERVAL_MS = 80;
+const PET_MEASURE_INTERVAL_MS = 2000;
+
 export function PixelPetTrack() {
   const { t } = useTranslation();
   const visible = useAppStore((state) => state.pixelPetVisible);
@@ -88,6 +91,7 @@ export function PixelPetTrack() {
   const hitboxRef = useRef<HTMLButtonElement | null>(null);
   const platformsRef = useRef<PetPlatform[]>([]);
   const simRef = useRef<PetSimulationState | null>(null);
+  const wakeFrameRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -101,6 +105,7 @@ export function PixelPetTrack() {
     let dpr = 0;
     let active = false;
     let rafId: number | null = null;
+    let frameTimer: number | null = null;
     let lastFrame: number | null = null;
     let lastMeasurement = 0;
     let mood: PetCodingMood = "idle";
@@ -113,9 +118,47 @@ export function PixelPetTrack() {
     let lastPaint: {
       config: PixelPetConfig;
       frame: PixelSpriteFrame;
-      sim: PetSimulationState;
-      spriteTop: number;
+      roundedX: number;
+      roundedY: number;
+      facing: 1 | -1;
+      groundY: number;
+      climb: boolean;
+      bubbleText?: string;
     } | null = null;
+    let lastHitboxWidth = "";
+    let lastHitboxHeight = "";
+    let lastHitboxTransform = "";
+    let lastHitboxVisible = false;
+
+    const clearScheduledFrame = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (frameTimer !== null) {
+        window.clearTimeout(frameTimer);
+        frameTimer = null;
+      }
+    };
+
+    const scheduleFrame = (immediate: boolean) => {
+      if (!active) return;
+      if (immediate) {
+        if (frameTimer !== null) {
+          window.clearTimeout(frameTimer);
+          frameTimer = null;
+        }
+        if (rafId === null) rafId = window.requestAnimationFrame(renderFrame);
+        return;
+      }
+      if (frameTimer !== null || rafId !== null) return;
+      frameTimer = window.setTimeout(() => {
+        frameTimer = null;
+        if (active && rafId === null) {
+          rafId = window.requestAnimationFrame(renderFrame);
+        }
+      }, PET_FRAME_INTERVAL_MS);
+    };
 
     const measure = () => {
       width = Math.max(200, window.innerWidth);
@@ -142,8 +185,9 @@ export function PixelPetTrack() {
     };
 
     const renderFrame = (now: number) => {
+      rafId = null;
       if (!active) return;
-      if (now - lastMeasurement >= 500 || config !== configRef.current) measure();
+      if (now - lastMeasurement >= PET_MEASURE_INTERVAL_MS || config !== configRef.current) measure();
       const { sessions, activeSessionId } = useAppStore.getState();
       if (sessions !== moodSessions || activeSessionId !== moodSessionId) {
         mood = derivePetCodingMood(sessions, activeSessionId);
@@ -163,22 +207,49 @@ export function PixelPetTrack() {
       const submergePx = (config.submergeRows ?? 0) * Math.max(1, Math.round(config.pixelSize || 2));
       const waterline = !sim.climb && submergePx > 0 ? groundY : undefined;
       const spriteTop = groundY - dimensions.height + (sim.climb ? 0 : submergePx) - sim.y;
+      const roundedX = Math.round(sim.x);
+      const roundedY = Math.round(spriteTop);
       const frame = getPetSpriteFrame(sim.clip, sim.clipElapsedMs, config);
-      rafId = window.requestAnimationFrame(renderFrame);
-      // 空闲时模拟时钟继续推进，同一画面可以沿用上帧像素与命中区域。
-      if (lastPaint && lastPaint.config === config && lastPaint.frame === frame
-        && lastPaint.spriteTop === spriteTop && lastPaint.sim.x === sim.x
-        && lastPaint.sim.facing === sim.facing && lastPaint.sim.groundY === sim.groundY
-        && Boolean(lastPaint.sim.climb) === Boolean(sim.climb)
-        && lastPaint.sim.bubble?.text === sim.bubble?.text) return;
-      lastPaint = { config, frame, sim, spriteTop };
+      scheduleFrame(false);
+      // 像素宠按整数像素坐标采样，坐标与帧未变化时不重绘也不写入 DOM 样式，避免触发无效重排与合成器唤醒。
+      const isClimb = Boolean(sim.climb);
+      const bubbleText = sim.bubble?.text;
+      if (
+        lastPaint
+        && lastPaint.config === config
+        && lastPaint.frame === frame
+        && lastPaint.roundedX === roundedX
+        && lastPaint.roundedY === roundedY
+        && lastPaint.facing === sim.facing
+        && lastPaint.groundY === groundY
+        && lastPaint.climb === isClimb
+        && lastPaint.bubbleText === bubbleText
+      ) {
+        return;
+      }
+      lastPaint = { config, frame, roundedX, roundedY, facing: sim.facing, groundY, climb: isClimb, bubbleText };
 
       const hitbox = hitboxRef.current;
       if (hitbox) {
-        hitbox.style.width = `${dimensions.width}px`;
-        hitbox.style.height = `${dimensions.height}px`;
-        hitbox.style.transform = `translate3d(${Math.round(sim.x)}px, ${Math.round(spriteTop)}px, 0)`;
-        hitbox.style.visibility = "visible";
+        const nextWidth = `${dimensions.width}px`;
+        const nextHeight = `${dimensions.height}px`;
+        const nextTransform = `translate3d(${roundedX}px, ${roundedY}px, 0)`;
+        if (lastHitboxWidth !== nextWidth) {
+          hitbox.style.width = nextWidth;
+          lastHitboxWidth = nextWidth;
+        }
+        if (lastHitboxHeight !== nextHeight) {
+          hitbox.style.height = nextHeight;
+          lastHitboxHeight = nextHeight;
+        }
+        if (lastHitboxTransform !== nextTransform) {
+          hitbox.style.transform = nextTransform;
+          lastHitboxTransform = nextTransform;
+        }
+        if (!lastHitboxVisible) {
+          hitbox.style.visibility = "visible";
+          lastHitboxVisible = true;
+        }
       }
 
       // 先擦除上帧所有绘制区域，保留 1px 余量以覆盖小数 DPR 的边缘。
@@ -187,7 +258,7 @@ export function PixelPetTrack() {
       }
       painted.length = 0;
       const spriteBounds = drawPixelPetFrame(
-        ctx, frame, sim.x, spriteTop, sim.facing, config.pixelSize, config.palette, waterline,
+        ctx, frame, roundedX, roundedY, sim.facing, config.pixelSize, config.palette, waterline,
       );
       painted.push(spriteBounds);
       if (sim.bubble) {
@@ -195,25 +266,30 @@ export function PixelPetTrack() {
       }
     };
 
-    const onResize = () => { if (active) measure(); };
+    wakeFrameRef.current = () => scheduleFrame(true);
+    const onResize = () => {
+      if (!active) return;
+      measure();
+      scheduleFrame(true);
+    };
     window.addEventListener("resize", onResize);
     const stopObserving = observeWindowActivity((nextActive) => {
       active = nextActive;
       track.hidden = !active;
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
-      rafId = null;
+      clearScheduledFrame();
       lastFrame = null;
       if (active) {
         measure();
-        rafId = window.requestAnimationFrame(renderFrame);
+        scheduleFrame(true);
       }
     });
 
     return () => {
       active = false;
       track.hidden = true;
+      wakeFrameRef.current = null;
       stopObserving();
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      clearScheduledFrame();
       window.removeEventListener("resize", onResize);
       simRef.current = null;
     };
@@ -229,6 +305,7 @@ export function PixelPetTrack() {
       simRef.current,
       configRef.current.behavior,
     );
+    wakeFrameRef.current?.();
   };
 
   const handlePetDoubleClick = () => {
@@ -240,11 +317,15 @@ export function PixelPetTrack() {
     } else {
       simRef.current = triggerPetJump(sim, configRef.current.behavior);
     }
+    wakeFrameRef.current?.();
   };
 
   const handlePetContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    if (simRef.current) simRef.current = togglePetPaused(simRef.current);
+    if (simRef.current) {
+      simRef.current = togglePetPaused(simRef.current);
+      wakeFrameRef.current?.();
+    }
   };
 
   return (

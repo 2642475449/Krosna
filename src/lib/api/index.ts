@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { WebviewAllocations, WebviewMemorySample } from "@/lib/memoryDiagnostics";
 import type { RunnerOutputSnapshot } from "@/lib/runnerOutputSnapshot";
+
+export function sampleWebviewMemory(): Promise<WebviewMemorySample> {
+  return invoke("sample_webview_memory");
+}
+
+export function captureWebviewAllocations(): Promise<WebviewAllocations> {
+  return invoke("capture_webview_allocations");
+}
 
 export function getWorkspaceRestoreEnabled(): Promise<boolean> {
   return invoke("get_workspace_restore_enabled");
@@ -711,8 +720,8 @@ export async function saveClaudeMd(
   });
 }
 
-export async function ptyInput(sessionId: string, data: string): Promise<void> {
-  await invoke("pty_input", { sessionId, data });
+export async function ptyInput(sessionId: string, data: string, interactive = false): Promise<void> {
+  await invoke("pty_input", { sessionId, data, interactive });
 }
 
 export async function inferAgentUserResponse(

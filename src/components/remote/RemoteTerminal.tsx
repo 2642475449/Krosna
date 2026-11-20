@@ -7,6 +7,7 @@ import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
+import { registerMemoryDiagnosticTerminal } from "@/lib/memoryDiagnostics";
 import { attachRemoteTerminalClipboard } from "@/lib/remoteTerminalClipboard";
 import { decodeRemoteOutput, reconcileRemoteRead, remoteErrorText, type RemoteSession } from "@/lib/remote";
 import {
@@ -119,7 +120,9 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     };
     fitTerminal();
     void read();
+    const unregisterMemory = registerMemoryDiagnosticTerminal(term);
     return () => {
+      unregisterMemory();
       disposed = true;
       if (timer) clearTimeout(timer);
       observer.disconnect();
@@ -195,7 +198,9 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
     const observer = new ResizeObserver(fitTerminal);
     observer.observe(container);
     fitTerminal();
+    const unregisterMemory = registerMemoryDiagnosticTerminal(term);
     return () => {
+      unregisterMemory();
       detachClipboard();
       observer.disconnect();
       input.dispose();

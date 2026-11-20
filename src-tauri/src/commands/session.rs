@@ -188,10 +188,11 @@ pub fn set_runtime_runner_context(
 pub async fn pty_input(
     session_id: String,
     data: String,
+    interactive: Option<bool>,
     manager: State<'_, Arc<PtyManager>>,
 ) -> Result<(), String> {
     let (_, _, input) = manager.prepare_input(&session_id)?;
-    input.write_async(data).await
+    input.write_async(data, interactive.unwrap_or_default()).await
 }
 
 /// Clear a permission/input wait only when the renderer's baseline still

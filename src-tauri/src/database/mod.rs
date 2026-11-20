@@ -100,7 +100,7 @@ fn default_terminal_shell() -> String {
 }
 
 fn default_terminal_scrollback() -> i64 {
-    5_000
+    10_000
 }
 
 fn default_editor_font_size() -> i64 {
@@ -2134,10 +2134,14 @@ mod tests {
     }
 
     #[test]
-    fn persistent_settings_default_to_five_thousand_scrollback_rows() {
+    fn persistent_settings_default_to_ten_thousand_scrollback_rows() {
+        let database = Database::open_in_memory();
         assert_eq!(
-            PersistentSettingsRecord::default().terminal_scrollback,
-            5_000
+            database
+                .load_persistent_settings()
+                .unwrap()
+                .terminal_scrollback,
+            10_000
         );
     }
 
@@ -2148,7 +2152,7 @@ mod tests {
 
         let restored: PersistentSettingsRecord = serde_json::from_value(value).unwrap();
 
-        assert_eq!(restored.terminal_scrollback, 5_000);
+        assert_eq!(restored.terminal_scrollback, 10_000);
     }
 
     #[test]
@@ -2248,7 +2252,7 @@ mod tests {
     fn terminal_scrollback_preference_round_trips_through_the_database() {
         let database = Database::open_in_memory();
         let mut settings = PersistentSettingsRecord::default();
-        settings.terminal_scrollback = 20_000;
+        settings.terminal_scrollback = 5_000;
 
         database.save_persistent_settings(&settings).unwrap();
 
@@ -2257,7 +2261,7 @@ mod tests {
                 .load_persistent_settings()
                 .unwrap()
                 .terminal_scrollback,
-            20_000
+            5_000
         );
     }
 

@@ -19,6 +19,7 @@ import {
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
+import { revealExplorerPath } from "@/lib/explorer";
 import { inspectAgentClis } from "@/lib/api";
 import { getFileIconByName, isMarkdownFile } from "@/lib/fileIcon";
 import { useTranslation } from "react-i18next";
@@ -218,24 +219,43 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     else if (bounds.right > viewport.right) list.scrollLeft += bounds.right - viewport.right;
   }, []);
 
+  const tabLayoutKey = useMemo(
+    () => tabIds.map((id) => `${id}:${tabsById[id]?.pinned ? 1 : 0}`).join("\0"),
+    [tabIds, tabsById],
+  );
+  const hasOverflowRef = useRef(hasOverflow);
+  hasOverflowRef.current = hasOverflow;
+
   useLayoutEffect(() => {
     const list = tabListRef.current;
     const bar = tabBarRef.current;
     if (!list || !bar) return;
-    const update = () => {
+    let cachedMinimumWidth: number | null = null;
+    const measureMinimumWidth = () => {
       const tabs = list.querySelectorAll<HTMLElement>("[data-tab-id]");
-      const minimumWidth = Array.from(tabs).reduce((width, tab) =>
-        width + (Number.parseFloat(getComputedStyle(tab).minWidth) || tab.offsetWidth), 0);
-      // 计算不含下拉按钮的可用宽度，避免按钮本身导致临界宽度反复显隐。
+      let minWidth = 0;
+      for (const tab of tabs) {
+        minWidth += Number.parseFloat(getComputedStyle(tab).minWidth) || tab.offsetWidth;
+      }
+      return minWidth;
+    };
+    const update = () => {
+      if (cachedMinimumWidth === null || (tabIds.length > 0 && cachedMinimumWidth === 0 && list.clientWidth > 0)) {
+        cachedMinimumWidth = measureMinimumWidth();
+      }
+      // 计算不含下拉按钮的可用宽度并增加 1px 滞回，避免临界宽度反复显隐。
       const availableWidth = list.clientWidth + (overflowControlRef.current?.offsetWidth ?? 0);
-      setHasOverflow(minimumWidth > availableWidth + 1);
+      const next = hasOverflowRef.current
+        ? cachedMinimumWidth > availableWidth - 1
+        : cachedMinimumWidth > availableWidth + 1;
+      setHasOverflow((prev) => (prev === next ? prev : next));
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(bar);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [tabIds, tabsById, sessionById, hasOverflow]);
+  }, [tabLayoutKey]);
 
   useEffect(() => {
     if (!hasOverflow) setOverflowMenuOpen(false);
@@ -507,6 +527,11 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           icon: <ExportOutlined />,
         });
       }
+      items.push({
+        key: "reveal-in-explorer",
+        label: t("common.openInExplorer"),
+        icon: <FolderOpenFilled />,
+      });
     }
 
     return items;
@@ -534,6 +559,11 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     }
 
     switch (key) {
+      case "reveal-in-explorer":
+        if (targetPath) {
+          revealExplorerPath(targetPath, isFile || isDiff ? "file" : "directory");
+        }
+        return;
       case "restart":
         if (session) requestRestart(session.id);
         return;

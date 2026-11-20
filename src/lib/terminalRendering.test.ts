@@ -42,6 +42,51 @@ describe("terminal rendering resources", () => {
     expect(target.repaint).toHaveBeenCalledTimes(1);
   });
 
+  it("releases a hidden context after 30 seconds and recreates it when revealed", () => {
+    vi.useFakeTimers();
+    try {
+      const target = resource();
+      const terminal = createTerminalRenderingPool().register(target);
+      terminal.setVisible(true);
+      terminal.setVisible(false);
+
+      vi.advanceTimersByTime(29_999);
+      terminal.setVisible(false);
+      expect(target.disposeWebgl).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(target.disposeWebgl).toHaveBeenCalledTimes(1);
+
+      terminal.setVisible(true);
+      expect(target.attachWebgl).toHaveBeenCalledTimes(2);
+      expect(target.refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels the eviction timer when a terminal is revealed or disposed", () => {
+    vi.useFakeTimers();
+    try {
+      const target = resource();
+      const terminal = createTerminalRenderingPool().register(target);
+      terminal.setVisible(true);
+      terminal.setVisible(false);
+      vi.advanceTimersByTime(20_000);
+
+      terminal.setVisible(true);
+      vi.advanceTimersByTime(10_000);
+      expect(target.disposeWebgl).not.toHaveBeenCalled();
+      expect(target.attachWebgl).toHaveBeenCalledTimes(1);
+
+      terminal.setVisible(false);
+      terminal.dispose();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(target.disposeWebgl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("evicts the least recently hidden context and recreates it on reveal", () => {
     const pool = createTerminalRenderingPool(1);
     const a = resource();

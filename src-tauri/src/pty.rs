@@ -19,6 +19,7 @@ use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, WebviewWindow};
+use tokio::sync::Notify;
 
 mod output_flow;
 mod output_transport;
@@ -100,6 +101,37 @@ const PTY_OUTPUT_BATCH_BYTES: usize = 64 * 1024;
 const PTY_OUTPUT_BATCH_DELAY: Duration = Duration::from_millis(5);
 // 读线程与发送线程之间使用有界队列，避免发送繁忙时无限积攒原始输出。
 const PTY_OUTPUT_QUEUE_CHUNKS: usize = 32;
+const PTY_INTERACTIVE_WINDOW: Duration = Duration::from_millis(100);
+const PTY_INTERACTIVE_OUTPUT_BYTES: usize = 16 * 1024;
+
+#[derive(Default)]
+struct InteractiveOutput {
+    last_input: Option<Instant>,
+    remaining: usize,
+}
+
+impl InteractiveOutput {
+    fn mark_input(&mut self, now: Instant) {
+        self.last_input = Some(now);
+        self.remaining = PTY_INTERACTIVE_OUTPUT_BYTES;
+    }
+
+    fn claim(&mut self, bytes: usize, now: Instant) -> bool {
+        if self
+            .last_input
+            .is_none_or(|last_input| now.duration_since(last_input) >= PTY_INTERACTIVE_WINDOW)
+        {
+            return false;
+        }
+        if bytes > self.remaining {
+            // 连续大块输出交回常规批处理，直到下一次交互输入。
+            self.remaining = 0;
+            return false;
+        }
+        self.remaining -= bytes;
+        true
+    }
+}
 
 // 在途写入和等待写入共用预算，防止背压期间把输入无限堆积在进程中。
 const PTY_INPUT_MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -111,7 +143,9 @@ const PTY_INPUT_QUEUE_FULL: &str = "pty-input-queue-full";
 #[derive(Default)]
 struct PtyInputCompletion {
     result: Mutex<Option<Result<(), String>>>,
+    #[cfg(test)]
     ready: Condvar,
+    ready_async: Notify,
 }
 
 impl PtyInputCompletion {
@@ -120,10 +154,13 @@ impl PtyInputCompletion {
         // 关闭优先于随后返回的 OS 写入结果，不能把已取消的写入报告为成功。
         if current.is_none() {
             *current = Some(result);
+            #[cfg(test)]
             self.ready.notify_all();
+            self.ready_async.notify_one();
         }
     }
 
+    #[cfg(test)]
     fn wait(&self) -> Result<(), String> {
         let mut result = self.result.lock();
         while result.is_none() {
@@ -131,10 +168,20 @@ impl PtyInputCompletion {
         }
         result.clone().ok_or_else(|| PTY_INPUT_CLOSED.to_string())?
     }
+
+    async fn wait_async(&self) -> Result<(), String> {
+        // notify_one 会保留许可，覆盖 writer 先于 IPC 等待者完成的情况。
+        self.ready_async.notified().await;
+        self.result
+            .lock()
+            .clone()
+            .ok_or_else(|| PTY_INPUT_CLOSED.to_string())?
+    }
 }
 
 struct PtyInputRequest {
     data: Vec<u8>,
+    interactive: bool,
     completion: Arc<PtyInputCompletion>,
 }
 
@@ -150,6 +197,7 @@ struct PtyInputState {
 struct PtyInputShared {
     state: Mutex<PtyInputState>,
     available: Condvar,
+    interactive_output: Mutex<InteractiveOutput>,
 }
 
 impl PtyInputShared {
@@ -214,6 +262,9 @@ impl PtyInput {
                         request
                     };
                     // 该 writer 只属于此 PTY 实例；不持有全局会话锁或队列锁。
+                    if request.interactive {
+                        worker.interactive_output.lock().mark_input(Instant::now());
+                    }
                     let result = writer
                         .write_all(&request.data)
                         .map_err(|error| format!("写入失败: {error}"));
@@ -241,7 +292,11 @@ impl PtyInput {
         })
     }
 
-    fn enqueue(&self, data: &[u8]) -> Result<Arc<PtyInputCompletion>, String> {
+    fn enqueue_request(
+        &self,
+        data: Vec<u8>,
+        interactive: bool,
+    ) -> Result<Arc<PtyInputCompletion>, String> {
         let completion = Arc::new(PtyInputCompletion::default());
         if data.is_empty() {
             completion.complete(Ok(()));
@@ -262,7 +317,8 @@ impl PtyInput {
         }
         state.buffered_bytes += data.len();
         state.pending.push_back(PtyInputRequest {
-            data: data.to_vec(),
+            data,
+            interactive,
             completion: completion.clone(),
         });
         self.owner.shared.available.notify_one();
@@ -270,20 +326,18 @@ impl PtyInput {
     }
 
     #[cfg(test)]
+    fn enqueue(&self, data: &[u8]) -> Result<Arc<PtyInputCompletion>, String> {
+        self.enqueue_request(data.to_vec(), false)
+    }
+
+    #[cfg(test)]
     fn write(&self, data: &[u8]) -> Result<(), String> {
         self.enqueue(data)?.wait()
     }
 
-    pub(crate) async fn write_async(self, data: String) -> Result<(), String> {
-        // 在进入阻塞池之前完成有界入队，不能让池内等待任务绕过字节/请求预算。
-        let completion = self.enqueue(data.as_bytes())?;
-        drop(data);
-        tauri::async_runtime::spawn_blocking(move || {
-            let _input = self;
-            completion.wait()
-        })
-        .await
-        .map_err(|error| format!("终端输入任务失败: {error}"))?
+    pub(crate) async fn write_async(self, data: String, interactive: bool) -> Result<(), String> {
+        let completion = self.enqueue_request(data.into_bytes(), interactive)?;
+        completion.wait_async().await
     }
 
     fn cancel(&self) {
@@ -314,7 +368,11 @@ fn read_pty_output(mut reader: impl Read, mut send: impl FnMut(String) -> bool) 
 }
 
 /// 短窗口合并 IPC 事件；持续输出也必须按首块的截止时间发送，不能不断推迟。
-fn forward_pty_output(receiver: Receiver<String>, mut emit: impl FnMut(String) -> bool) {
+fn forward_pty_output(
+    receiver: Receiver<String>,
+    mut prioritize: impl FnMut(usize) -> bool,
+    mut emit: impl FnMut(String, bool) -> bool,
+) {
     let mut pending = String::new();
     let mut deadline: Option<Instant> = None;
     loop {
@@ -335,29 +393,31 @@ fn forward_pty_output(receiver: Receiver<String>, mut emit: impl FnMut(String) -
                         remaining = &remaining[end..];
                         deadline.get_or_insert_with(|| Instant::now() + PTY_OUTPUT_BATCH_DELAY);
                     }
-                    if end == 0 || pending.len() == PTY_OUTPUT_BATCH_BYTES {
-                        if !emit(std::mem::take(&mut pending)) {
+                    let full = end == 0 || pending.len() == PTY_OUTPUT_BATCH_BYTES;
+                    let interactive = prioritize(pending.len()) && !full;
+                    if full || interactive {
+                        if !emit(std::mem::take(&mut pending), interactive) {
                             return;
                         }
                         deadline = None;
                     }
                 }
                 if deadline.is_some_and(|at| Instant::now() >= at) {
-                    if !emit(std::mem::take(&mut pending)) {
+                    if !emit(std::mem::take(&mut pending), false) {
                         return;
                     }
                     deadline = None;
                 }
             }
             Err(RecvTimeoutError::Timeout) => {
-                if !pending.is_empty() && !emit(std::mem::take(&mut pending)) {
+                if !pending.is_empty() && !emit(std::mem::take(&mut pending), false) {
                     return;
                 }
                 deadline = None;
             }
             Err(RecvTimeoutError::Disconnected) => {
                 if !pending.is_empty() {
-                    emit(pending);
+                    emit(pending, false);
                 }
                 return;
             }
@@ -576,6 +636,7 @@ impl PtyManager {
             runtime_metadata,
         );
         let output_cancelled = Arc::new(AtomicBool::new(false));
+        let input_shared = input.owner.shared.clone();
         let session = PtySession {
             instance_id,
             output_cancelled: output_cancelled.clone(),
@@ -633,14 +694,29 @@ impl PtyManager {
         let manager = Arc::clone(self);
         let sid = session_id.clone();
         std::thread::spawn(move || {
-            forward_pty_output(output_receiver, |data| {
-                if !manager.is_session_instance_current(&sid, instance_id) {
-                    return false;
-                }
-                output_log.lock().append(&data);
-                manager.output.send_output(&window, &sid, &data, &output_cancelled);
-                !output_cancelled.load(Ordering::Acquire)
-            });
+            forward_pty_output(
+                output_receiver,
+                |bytes| {
+                    input_shared
+                        .interactive_output
+                        .lock()
+                        .claim(bytes, Instant::now())
+                },
+                |data, interactive| {
+                    if !manager.is_session_instance_current(&sid, instance_id) {
+                        return false;
+                    }
+                    output_log.lock().append(&data);
+                    manager.output.send_output(
+                        &window,
+                        &sid,
+                        &data,
+                        interactive,
+                        &output_cancelled,
+                    );
+                    !output_cancelled.load(Ordering::Acquire)
+                },
+            );
             let Some(mut exited_session) = manager.take_session_instance(&sid, instance_id) else {
                 return;
             };
@@ -1552,13 +1628,21 @@ mod tests {
     async fn async_input_reserves_budget_before_waiting_and_close_wakes_its_ack() {
         let gate = InputTestGate::default();
         let (input, started) = gate.input();
-        let writing = tokio::spawn(input.clone().write_async("a".repeat(PTY_INPUT_MAX_BYTES)));
+        let writing = tokio::spawn(
+            input
+                .clone()
+                .write_async("a".repeat(PTY_INPUT_MAX_BYTES), false),
+        );
         tokio::task::spawn_blocking(move || started.recv_timeout(Duration::from_secs(2)))
             .await
             .unwrap()
             .unwrap();
         assert_eq!(
-            input.clone().write_async("b".into()).await.unwrap_err(),
+            input
+                .clone()
+                .write_async("b".into(), false)
+                .await
+                .unwrap_err(),
             PTY_INPUT_QUEUE_FULL
         );
         input.cancel();
@@ -1569,7 +1653,11 @@ mod tests {
             .unwrap_err();
         assert_eq!(error, PTY_INPUT_CLOSED);
         assert_eq!(
-            input.clone().write_async("old".into()).await.unwrap_err(),
+            input
+                .clone()
+                .write_async("old".into(), false)
+                .await
+                .unwrap_err(),
             PTY_INPUT_CLOSED
         );
     }
@@ -1706,10 +1794,14 @@ mod tests {
         }
         drop(sender);
         let mut events = Vec::new();
-        forward_pty_output(receiver, |data| {
-            events.push(data);
-            true
-        });
+        forward_pty_output(
+            receiver,
+            |_| false,
+            |data, _| {
+                events.push(data);
+                true
+            },
+        );
         events.push("EXIT".to_string());
         assert_eq!(events.last().map(String::as_str), Some("EXIT"));
         // 系统调度可能跨过合并窗口；块数可变，但内容和退出顺序不能改变。
@@ -1730,12 +1822,16 @@ mod tests {
         sender.send(expected.clone()).expect("send fixture");
         drop(sender);
         let mut batches = Vec::new();
-        forward_pty_output(receiver, |data| {
-            assert!(data.len() <= PTY_OUTPUT_BATCH_BYTES);
-            assert!(!data.is_empty());
-            batches.push(data);
-            true
-        });
+        forward_pty_output(
+            receiver,
+            |_| false,
+            |data, _| {
+                assert!(data.len() <= PTY_OUTPUT_BATCH_BYTES);
+                assert!(!data.is_empty());
+                batches.push(data);
+                true
+            },
+        );
         assert_eq!(batches.concat(), expected);
         assert!(batches.len() >= 3);
     }
@@ -1746,7 +1842,7 @@ mod tests {
         let (delivered, output) = sync_channel(1);
         sender.send("prompt> ".to_string()).expect("send fixture");
         let worker = std::thread::spawn(move || {
-            forward_pty_output(receiver, |data| delivered.send(data).is_ok());
+            forward_pty_output(receiver, |_| false, |data, _| delivered.send(data).is_ok());
         });
         // sender 仍存活，证明刷新由截止时间触发，而非 EOF 或下一次读取。
         assert_eq!(
@@ -1760,6 +1856,46 @@ mod tests {
     }
 
     #[test]
+    fn short_echo_bypasses_batching_and_preserves_stream_order() {
+        let (sender, receiver) = sync_channel(3);
+        let echo = "回显".to_string();
+        let bulk = "b".repeat(PTY_OUTPUT_BATCH_BYTES);
+        for data in [echo.clone(), bulk.clone(), "tail".into()] {
+            sender.send(data).unwrap();
+        }
+        drop(sender);
+        let mut priority = InteractiveOutput::default();
+        let now = Instant::now();
+        priority.mark_input(now);
+        let mut sent = Vec::new();
+        forward_pty_output(
+            receiver,
+            |bytes| priority.claim(bytes, now),
+            |data, interactive| {
+                sent.push((data, interactive));
+                true
+            },
+        );
+        assert_eq!(sent, [(echo, true), (bulk, false), ("tail".into(), false)]);
+    }
+
+    #[test]
+    fn interactive_output_expires_and_has_a_byte_budget_per_write() {
+        let now = Instant::now();
+        let mut priority = InteractiveOutput::default();
+        assert!(!priority.claim(1, now));
+        priority.mark_input(now);
+        assert!(priority.claim(1, now));
+        assert!(priority.claim(PTY_INTERACTIVE_OUTPUT_BYTES - 1, now));
+        assert!(!priority.claim(1, now));
+        priority.mark_input(now);
+        assert!(!priority.claim(PTY_INTERACTIVE_OUTPUT_BYTES + 1, now));
+        assert!(!priority.claim(1, now));
+        priority.mark_input(now);
+        assert!(!priority.claim(1, now + PTY_INTERACTIVE_WINDOW));
+    }
+
+    #[test]
     fn pty_output_stops_forwarding_when_session_is_replaced() {
         let (sender, receiver) = sync_channel(1);
         sender
@@ -1767,10 +1903,14 @@ mod tests {
             .expect("send fixture");
         drop(sender);
         let mut calls = 0;
-        forward_pty_output(receiver, |_| {
-            calls += 1;
-            false
-        });
+        forward_pty_output(
+            receiver,
+            |_| false,
+            |_, _| {
+                calls += 1;
+                false
+            },
+        );
         assert_eq!(calls, 1);
     }
 
@@ -1791,7 +1931,11 @@ mod tests {
     fn pty_output_does_not_emit_empty_batches_on_disconnect() {
         let (sender, receiver) = sync_channel(1);
         drop(sender);
-        forward_pty_output(receiver, |_| panic!("empty output must not be emitted"));
+        forward_pty_output(
+            receiver,
+            |_| false,
+            |_, _| panic!("empty output must not be emitted"),
+        );
     }
 
     #[test]

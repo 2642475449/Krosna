@@ -34,17 +34,22 @@ export function createTerminalRevealRepaint(options: {
   };
 }
 
-// 只保存渲染资源句柄；会话与标签业务状态仍由 store 管理。
+const HIDDEN_WEBGL_RETENTION_MS = 30_000;
+
+// 短时间切换标签时复用 WebGL。长时间隐藏的终端释放图形资源，保留终端实例与回滚缓冲。
 export function createTerminalRenderingPool(maxHiddenContexts = 1) {
-  const hidden = new Set<() => void>();
+  const hidden = new Map<() => void, ReturnType<typeof setTimeout>>();
+
+  function forget(release: () => void) {
+    clearTimeout(hidden.get(release));
+    hidden.delete(release);
+  }
 
   function retain(release: () => void) {
-    hidden.delete(release);
-    hidden.add(release);
+    hidden.set(release, setTimeout(release, HIDDEN_WEBGL_RETENTION_MS));
     while (hidden.size > maxHiddenContexts) {
-      const oldest = hidden.values().next().value;
+      const oldest = hidden.keys().next().value;
       if (!oldest) break;
-      hidden.delete(oldest);
       oldest();
     }
   }
@@ -55,7 +60,7 @@ export function createTerminalRenderingPool(maxHiddenContexts = 1) {
       let attached = false;
       let disposed = false;
       const release = () => {
-        hidden.delete(release);
+        forget(release);
         if (!attached) return;
         attached = false;
         resource.disposeWebgl();
@@ -67,7 +72,7 @@ export function createTerminalRenderingPool(maxHiddenContexts = 1) {
           const revealed = visible === false;
           const retained = attached;
           visible = next;
-          hidden.delete(release);
+          forget(release);
           resource.setCursorBlink(next && resource.cursorBlink);
           if (next) {
             if (!attached) attached = resource.attachWebgl();

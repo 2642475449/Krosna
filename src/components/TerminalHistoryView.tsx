@@ -10,6 +10,7 @@ import { loadTerminalRecovery, retainTerminalRecovery, terminalRecoveryKey, useT
 import { restoreRunnerOutputSnapshot } from "@/lib/runnerOutputSnapshot";
 import { getTerminalTheme, TERMINAL_FONT_FAMILY } from "@/lib/terminalTheme";
 import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
+import { registerMemoryDiagnosticTerminal } from "@/lib/memoryDiagnostics";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalHistoryViewProps {
@@ -62,7 +63,8 @@ export function TerminalHistoryView({ session, onResume, onReturn }: TerminalHis
     }).catch((error: unknown) => {
       if (!lifetime.signal.aborted) console.warn("Failed to display terminal history:", error);
     });
-    return () => { lifetime.abort(); observer.disconnect(); terminal.dispose(); };
+    const unregisterMemory = registerMemoryDiagnosticTerminal(terminal);
+    return () => { unregisterMemory(); lifetime.abort(); observer.disconnect(); terminal.dispose(); };
   }, [snapshot, fontSize, themeMode]);
 
   return (

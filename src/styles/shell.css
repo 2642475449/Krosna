@@ -142,9 +142,150 @@
 
   .app-window-control:focus-visible,
   .app-titlebar-search:focus-visible,
-  .app-titlebar-project:focus-visible {
+  .app-titlebar-project:focus-visible,
+  .app-statusbar-task:focus-visible,
+  .app-bg-tasks-cancel-btn:focus-visible,
+  .app-bg-tasks-btn-primary:focus-visible,
+  .app-bg-tasks-btn-default:focus-visible {
     outline: 2px solid var(--cs-focus-ring);
-    outline-offset: -2px;
+    outline-offset: 1px;
+  }
+
+  /* 后台任务状态栏触发器与浮层 */
+  .app-statusbar-task {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    border-radius: var(--cs-radius-control);
+  }
+
+  .app-statusbar-task:hover .app-statusbar-task-label {
+    color: var(--cs-text-primary);
+  }
+
+  .app-statusbar-task-label {
+    color: var(--cs-text-secondary);
+    transition: color 140ms ease;
+  }
+
+  .app-statusbar-task-meta {
+    color: var(--cs-text-tertiary);
+    font-family: var(--font-mono);
+  }
+
+  .app-statusbar-task-track {
+    background: color-mix(in srgb, var(--cs-border) 48%, transparent);
+  }
+
+  .app-statusbar-task-fill {
+    background: var(--cs-primary);
+  }
+
+  .app-statusbar-task-fill[data-error="true"] {
+    background: var(--cs-danger);
+  }
+
+  .app-bg-tasks-popover {
+    width: min(520px, calc(100vw - 24px));
+  }
+
+  .app-bg-tasks-header {
+    border-bottom: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent);
+  }
+
+  .app-bg-tasks-title {
+    color: var(--cs-text-primary);
+  }
+
+  .app-bg-tasks-meta {
+    color: var(--cs-text-tertiary);
+  }
+
+  .app-bg-tasks-status {
+    color: var(--cs-text-tertiary);
+  }
+
+  .app-bg-tasks-status[data-error="true"] {
+    color: var(--cs-danger);
+  }
+
+  .app-bg-tasks-icon {
+    color: var(--cs-primary);
+  }
+
+  .app-bg-tasks-icon[data-error="true"] {
+    color: var(--cs-danger);
+  }
+
+  .app-bg-tasks-item-divider {
+    border-top: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent);
+  }
+
+  .app-bg-tasks-progress-track {
+    background: color-mix(in srgb, var(--cs-border) 72%, transparent);
+  }
+
+  .app-bg-tasks-progress-fill {
+    background: var(--cs-primary);
+  }
+
+  .app-bg-tasks-error-box {
+    color: var(--cs-text-primary);
+    background: color-mix(in srgb, var(--cs-danger) 8%, var(--cs-bg-card-solid));
+    border: 1px solid color-mix(in srgb, var(--cs-danger) 28%, transparent);
+  }
+
+  .app-bg-tasks-btn-primary {
+    background: var(--cs-primary);
+    color: var(--cs-text-on-primary);
+    border: 1px solid var(--cs-primary);
+    border-radius: var(--cs-radius-control);
+    transition: filter 140ms ease, transform 120ms ease;
+  }
+
+  .app-bg-tasks-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  .app-bg-tasks-btn-primary:active:not(:disabled),
+  .app-bg-tasks-btn-default:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .app-bg-tasks-btn-default {
+    background: var(--cs-bg-card-solid);
+    color: var(--cs-text-primary);
+    border: 1px solid var(--cs-border);
+    border-radius: var(--cs-radius-control);
+    transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease;
+  }
+
+  .app-bg-tasks-btn-default:hover:not(:disabled) {
+    background: var(--cs-bg-hover);
+    border-color: var(--cs-primary);
+  }
+
+  .app-bg-tasks-cancel-btn {
+    color: var(--cs-text-tertiary);
+    background: transparent;
+    border: 0;
+    border-radius: var(--cs-radius-control);
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  .app-bg-tasks-cancel-btn:hover:not(:disabled) {
+    background: var(--cs-bg-hover);
+    color: var(--cs-text-primary);
+  }
+
+  .app-bg-tasks-cancel-btn:disabled {
+    opacity: 0.45;
+    cursor: wait;
+  }
+
+  .app-bg-tasks-hint {
+    color: var(--cs-text-tertiary);
+    border-top: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {

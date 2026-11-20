@@ -254,6 +254,8 @@ pub fn run() {
             commands::workspace_recovery::save_workspace_recovery,
             commands::workspace_recovery::read_terminal_recovery,
             commands::workspace_recovery::save_terminal_recovery,
+            commands::memory_diagnostics::sample_webview_memory,
+            commands::memory_diagnostics::capture_webview_allocations,
             commands::remote_hosts::list_remote_hosts,
             commands::remote_hosts::save_remote_host,
             commands::remote_hosts::delete_remote_host,

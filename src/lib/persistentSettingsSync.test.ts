@@ -85,6 +85,16 @@ it("flushes a pending local field again when a newer broadcast overtakes its sav
   expect(sync.changes(current)).toEqual({});
 });
 
+it("stops cleanly instead of looping when write returns an already-superseded revision with no new edits", async () => {
+  const sync = new PersistentSettingsSync<typeof initial>();
+  sync.initialize(initial);
+  sync.receive({ voiceShortcut: "F8" }, initial, 5);
+  const current = { ...initial, voiceShortcut: "F7" };
+  const write = vi.fn().mockResolvedValue(1);
+  await sync.save(() => current, write);
+  expect(write).toHaveBeenCalledTimes(1);
+});
+
 it("accepts only bounded numeric revisions", () => {
   expect(persistentSettingsRevision({ revision: 3 })).toBe(3);
   for (const value of [null, {}, { revision: -1 }, { revision: Infinity }, { revision: "3" }]) {

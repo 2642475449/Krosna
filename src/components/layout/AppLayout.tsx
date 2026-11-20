@@ -553,8 +553,12 @@ function AppLayout() {
       }
     };
     migratePermissions();
-    // SQLite 设置可能晚于首屏载入；沿用现有双轨持久化，不改写主 store。
-    return useAppStore.subscribe(migratePermissions);
+    // SQLite 设置可能晚于首屏载入；仅在 Codex 默认权限变化时迁移，避免每次 store 更新全量检查。
+    return useAppStore.subscribe((state, previous) => {
+      if (state.agentPermissionDefaults.codex !== previous.agentPermissionDefaults.codex) {
+        migratePermissions();
+      }
+    });
   }, []);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);

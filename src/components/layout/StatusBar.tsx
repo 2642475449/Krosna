@@ -8,10 +8,12 @@ import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
 import { getPetSpriteFrame } from "@/lib/pixelPetSprites";
 import { FileStatusDetails, FileStatusPath } from "./FileStatusBar";
+import { MemoryDiagnosticsPopover } from "./MemoryDiagnosticsPopover";
 import { QuotaUsageRing } from "./QuotaUsageRing";
 import { QuotaUsageStatus } from "./QuotaUsageStatus";
 import { WorkbenchFeedback } from "./WorkbenchFeedback";
-import { getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis } from "@/lib/api";
+import { getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis, rebuildProjectIndex } from "@/lib/api";
+import { openSettingsPage } from "@/lib/settingsNavigation";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
 import {
   shouldLoadClaudeRateLimits,
@@ -51,6 +53,7 @@ function StatusBar() {
   const removeGitCloneTask = useAppStore((state) => state.removeGitCloneTask);
   const [agentVersion, setAgentVersion] = useState<string | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<string[]>([]);
+  const [rebuildingIndex, setRebuildingIndex] = useState(false);
   const [searchIndexStatus, setSearchIndexStatus] = useState<ProjectSearchIndexStatus | null>(null);
   const [searchIndexStatusProjectPath, setSearchIndexStatusProjectPath] = useState<string | null>(null);
   const [searchIndexStatusError, setSearchIndexStatusError] = useState<string | null>(null);
@@ -289,106 +292,149 @@ function StatusBar() {
     };
   }, [openProject, removeGitCloneTask, upsertGitCloneTask]);
 
+  const indexHasError = Boolean(visibleSearchIndexStatusError)
+    || visibleSearchIndexStatus?.state === "failed"
+    || visibleSearchIndexStatus?.state === "unsupported";
+  const indexErrorDetail = visibleSearchIndexStatusError
+    || visibleSearchIndexStatus?.error
+    || (indexHasError ? t("statusBar.backgroundTasks.unknownError") : null);
   const indexStateLabel = visibleSearchIndexStatusError
     ? t("statusBar.backgroundTasks.unavailable")
     : t(`statusBar.backgroundTasks.${visibleSearchIndexStatus?.state ?? "unavailable"}`, {
         defaultValue: visibleSearchIndexStatus?.state ?? "unavailable",
       });
-  const indexMetaLabel = visibleSearchIndexStatusError
-    ? visibleSearchIndexStatusError
-    : visibleSearchIndexStatus?.totalFiles != null
-      ? t("statusBar.backgroundTasks.files", {
-          processed: visibleSearchIndexStatus.processedFiles,
-          total: visibleSearchIndexStatus.totalFiles,
+  const indexMetaLabel = visibleSearchIndexStatus?.totalFiles != null
+    ? t("statusBar.backgroundTasks.files", {
+        processed: visibleSearchIndexStatus.processedFiles,
+        total: visibleSearchIndexStatus.totalFiles,
+      })
+    : visibleSearchIndexStatus
+      ? t("statusBar.backgroundTasks.discoveredFiles", {
+          count: visibleSearchIndexStatus.processedFiles,
         })
-      : visibleSearchIndexStatus
-        ? t("statusBar.backgroundTasks.discoveredFiles", {
-            count: visibleSearchIndexStatus.processedFiles,
-          })
-        : t("statusBar.backgroundTasks.unavailable");
+      : t("statusBar.backgroundTasks.unavailable");
   const cloneCompactProgress = activeCloneTask?.progressPercent != null
     ? `${activeCloneTask.progressPercent}%`
     : t("statusBar.backgroundTasks.pending");
-  const indexCompactProgress = backgroundTaskSummary.indexProgressPercent != null
+  const indexCompactProgress = !indexHasError && backgroundTaskSummary.indexProgressPercent != null
     ? `${backgroundTaskSummary.indexProgressPercent}%`
     : indexStateLabel;
   const compactTaskMeta = backgroundTaskSummary.totalCount > 1
     ? null : activeCloneTask ? cloneCompactProgress : indexCompactProgress;
-  const indexHasError = Boolean(visibleSearchIndexStatusError)
-    || visibleSearchIndexStatus?.state === "failed"
-    || visibleSearchIndexStatus?.state === "unsupported";
+  const indexTargetName = currentProject?.name ?? t("statusBar.backgroundTasks.searchIndex");
+  const indexTaskTitle = indexHasError
+    ? t("statusBar.backgroundTasks.indexFailed", { name: indexTargetName })
+    : t("statusBar.backgroundTasks.indexing", { name: indexTargetName });
   const compactTaskTitle = backgroundTaskSummary.totalCount > 1
     ? t("statusBar.backgroundTasks.multiple", { count: backgroundTaskSummary.totalCount })
     : activeCloneTask
       ? t("projectLauncher.backgroundCloning", { name: activeCloneTask.directoryName })
-      : t("statusBar.backgroundTasks.indexing", {
-          name: currentProject?.name ?? t("statusBar.backgroundTasks.searchIndex"),
-        });
+      : indexTaskTitle;
+  const handleRetrySearchIndex = () => {
+    const projectPath = currentProject?.path;
+    if (!projectPath || rebuildingIndex) return;
+    setRebuildingIndex(true);
+    setSearchIndexStatusError(null);
+    setSearchIndexListenerError(null);
+    void rebuildProjectIndex(projectPath)
+      .then((status) => {
+        setSearchIndexStatus(status);
+        setSearchIndexStatusProjectPath(projectPath);
+      })
+      .catch((error) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        setSearchIndexStatusProjectPath(projectPath);
+        setSearchIndexStatusError(detail);
+        message.error(detail);
+      })
+      .finally(() => {
+        setRebuildingIndex(false);
+      });
+  };
   const backgroundTaskPopoverContent = backgroundTaskSummary.totalCount > 0 ? (
-    <div
-      className="app-overlay-surface w-[520px] overflow-hidden"
-    >
-      <div
-        className="flex items-center justify-between px-3 py-2"
-        style={{ borderBottom: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)" }}
-      >
-        <span className="text-[12px] font-medium" style={{ color: "var(--cs-text-primary)" }}>
+    <div className="app-bg-tasks-popover overflow-hidden">
+      <div className="app-bg-tasks-header flex items-center justify-between px-3 py-2">
+        <span className="app-bg-tasks-title text-[12px] font-medium">
           {t("statusBar.backgroundTasks.title")}
         </span>
-        <span className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
+        <span className="app-bg-tasks-meta text-[12px]">
           {t("statusBar.backgroundTasks.count", { count: backgroundTaskSummary.totalCount })}
         </span>
       </div>
       <div className="max-h-[420px] overflow-y-auto px-3 py-2">
         {backgroundTaskSummary.indexVisible ? (
-          <div className="px-1 py-3">
+          <div className="px-1 py-2.5">
             <div className="flex items-center gap-2">
               {indexHasError ? (
-                <WarningOutlined style={{ color: "var(--cs-warning, #d89614)", fontSize: 11 }} />
+                <WarningOutlined className="app-bg-tasks-icon text-[12px]" data-error="true" />
               ) : (
-                <DatabaseOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+                <DatabaseOutlined className="app-bg-tasks-icon text-[12px]" />
               )}
               <span
-                className="min-w-0 flex-1 truncate text-[13px] font-medium"
-                style={{ color: "var(--cs-text-primary)" }}
+                className="app-bg-tasks-title min-w-0 flex-1 truncate text-[13px] font-medium"
                 title={currentProject?.path}
               >
-                {t("statusBar.backgroundTasks.indexing", {
-                  name: currentProject?.name ?? t("statusBar.backgroundTasks.searchIndex"),
-                })}
+                {indexTaskTitle}
               </span>
-              <span className="shrink-0 text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              <span
+                className="app-bg-tasks-status shrink-0 text-[12px]"
+                data-error={indexHasError ? "true" : undefined}
+              >
                 {indexStateLabel}
               </span>
             </div>
             {!indexHasError ? (
-              <div
-                className="mt-2 h-[3px] overflow-hidden rounded-full"
-                style={{ background: "color-mix(in srgb, var(--cs-border) 72%, transparent)" }}
-              >
+              <div className="app-bg-tasks-progress-track mt-2 h-[3px] overflow-hidden rounded-full">
                 <div
-                  className="h-full rounded-full transition-[width] duration-150"
-                  style={{
-                    width: `${Math.max(backgroundTaskSummary.indexProgressPercent ?? 8, 8)}%`,
-                    background: "var(--cs-primary)",
-                  }}
+                  className="app-bg-tasks-progress-fill h-full rounded-full transition-[width] duration-150"
+                  style={{ width: `${Math.max(backgroundTaskSummary.indexProgressPercent ?? 8, 8)}%` }}
                 />
               </div>
             ) : null}
-            <div
-              className="mt-2 truncate text-[11px]"
-              style={{ color: indexHasError ? "var(--cs-warning, #d89614)" : "var(--cs-text-tertiary)" }}
-              title={indexMetaLabel}
-            >
-              {indexMetaLabel}
-            </div>
+            {indexHasError && indexErrorDetail ? (
+              <div
+                className="app-bg-tasks-error-box mt-2 rounded-[6px] px-2.5 py-2 text-[12px] leading-snug break-words"
+                title={indexErrorDetail}
+              >
+                {indexErrorDetail}
+              </div>
+            ) : null}
+            {!visibleSearchIndexStatusError ? (
+              <div
+                className="app-bg-tasks-meta mt-2 truncate text-[12px]"
+                title={indexMetaLabel}
+              >
+                {indexMetaLabel}
+              </div>
+            ) : null}
             {currentProject?.path ? (
               <div
-                className="mt-1 truncate text-[11px]"
-                style={{ color: "var(--cs-text-quaternary, var(--cs-text-tertiary))" }}
+                className="app-bg-tasks-meta mt-1 truncate font-mono text-[12px]"
                 title={currentProject.path}
               >
                 {currentProject.path}
+              </div>
+            ) : null}
+            {indexHasError ? (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {currentProject?.path && visibleSearchIndexStatus?.state !== "unsupported" ? (
+                  <button
+                    type="button"
+                    className="app-bg-tasks-btn-primary inline-flex min-h-[24px] items-center gap-1.5 px-2.5 text-[12px] font-medium disabled:opacity-50"
+                    disabled={rebuildingIndex}
+                    onClick={handleRetrySearchIndex}
+                  >
+                    <ReloadOutlined spin={rebuildingIndex} className="text-[12px]" />
+                    <span>{t("statusBar.backgroundTasks.retryIndex")}</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="app-bg-tasks-btn-default inline-flex min-h-[24px] items-center px-2.5 text-[12px]"
+                  onClick={() => openSettingsPage("searchIndex")}
+                >
+                  {t("statusBar.backgroundTasks.openIndexSettings")}
+                </button>
               </div>
             ) : null}
           </div>
@@ -404,40 +450,29 @@ function StatusBar() {
             task.speed,
           ].filter(Boolean).join(" · ");
           const taskSource = simplifyRemoteUrl(task.remoteUrl) || task.projectPath;
+          const showTopDivider = !(index === 0 && !backgroundTaskSummary.indexVisible);
 
           return (
             <div
               key={task.taskId}
-              className="px-1 py-3"
-              style={{
-                borderTop: index === 0 && !backgroundTaskSummary.indexVisible
-                  ? "none"
-                  : "1px solid color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent)",
-              }}
+              className={`px-1 py-2.5${showTopDivider ? " app-bg-tasks-item-divider" : ""}`}
             >
               <div className="flex items-center gap-2">
-                <LoadingOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+                <LoadingOutlined className="app-bg-tasks-icon text-[12px]" />
                 <span
-                  className="min-w-0 flex-1 truncate text-[13px] font-medium"
-                  style={{ color: "var(--cs-text-primary)" }}
+                  className="app-bg-tasks-title min-w-0 flex-1 truncate text-[13px] font-medium"
                   title={task.directoryName}
                 >
                   {task.directoryName}
                 </span>
-                <span className="shrink-0 text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
+                <span className="app-bg-tasks-status shrink-0 text-[12px]">
                   {taskStageLabel}
                 </span>
                 <button
                   type="button"
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] transition-colors"
-                  style={{
-                    color: "var(--cs-text-tertiary)",
-                    background: "transparent",
-                    border: "0",
-                    opacity: cancellingTaskIds.includes(task.taskId) ? 0.45 : 1,
-                    cursor: cancellingTaskIds.includes(task.taskId) ? "wait" : "pointer",
-                  }}
+                  className="app-bg-tasks-cancel-btn flex h-6 w-6 shrink-0 items-center justify-center"
                   disabled={cancellingTaskIds.includes(task.taskId)}
+                  aria-label={t("projectLauncher.cancelTask")}
                   title={t("projectLauncher.cancelTask")}
                   onClick={(event) => {
                     event.preventDefault();
@@ -451,27 +486,20 @@ function StatusBar() {
                     });
                   }}
                 >
-                  <CloseOutlined style={{ fontSize: 10 }} />
+                  <CloseOutlined className="text-[12px]" />
                 </button>
               </div>
-              <div
-                className="mt-2 h-[3px] overflow-hidden rounded-full"
-                style={{ background: "color-mix(in srgb, var(--cs-border) 72%, transparent)" }}
-              >
+              <div className="app-bg-tasks-progress-track mt-2 h-[3px] overflow-hidden rounded-full">
                 <div
-                  className="h-full rounded-full transition-[width] duration-150"
-                  style={{
-                    width: `${Math.max(task.progressPercent ?? 8, 8)}%`,
-                    background: "var(--cs-primary)",
-                  }}
+                  className="app-bg-tasks-progress-fill h-full rounded-full transition-[width] duration-150"
+                  style={{ width: `${Math.max(task.progressPercent ?? 8, 8)}%` }}
                 />
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
+              <div className="app-bg-tasks-meta mt-2 flex items-center gap-2 text-[12px]">
                 <span className="truncate">{taskMetaLabel || t("projectLauncher.cloning")}</span>
               </div>
               <div
-                className="mt-1 truncate text-[11px]"
-                style={{ color: "var(--cs-text-quaternary, var(--cs-text-tertiary))" }}
+                className="app-bg-tasks-meta mt-1 truncate font-mono text-[12px]"
                 title={taskSource}
               >
                 {t("projectLauncher.cloneSource")}: {taskSource}
@@ -481,13 +509,7 @@ function StatusBar() {
         })}
       </div>
       {backgroundTaskSummary.concurrent ? (
-        <div
-          className="px-3 py-2 text-[11px]"
-          style={{
-            color: "var(--cs-text-tertiary)",
-            borderTop: "1px solid color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent)",
-          }}
-        >
+        <div className="app-bg-tasks-hint px-3 py-2 text-[12px]">
           {t("statusBar.backgroundTasks.concurrentHint")}
         </div>
       ) : null}
@@ -522,82 +544,60 @@ function StatusBar() {
             placement="topRight"
             content={backgroundTaskPopoverContent}
             arrow={false}
-
-            styles={{ container: { padding: 0, background: "transparent", boxShadow: "none", border: 0 } }}
+            styles={{ container: { padding: 0 } }}
             getPopupContainer={() => document.body}
           >
             <button
               type="button"
-              className="app-statusbar-task flex h-5 min-w-0 items-center gap-2 px-0 text-left transition-colors"
-              style={{
-                background: "transparent",
-                border: "0",
-                boxShadow: "none",
-              }}
+              className="app-statusbar-task flex min-h-[24px] min-w-0 items-center gap-2 px-1 text-left transition-colors"
+              aria-label={compactTaskMeta ? `${compactTaskTitle} (${compactTaskMeta})` : compactTaskTitle}
               title={backgroundTaskSummary.concurrent
                 ? t("statusBar.backgroundTasks.concurrentHint")
                 : activeCloneTask?.remoteUrl || activeCloneTask?.projectPath || currentProject?.path}
             >
               {indexHasError && !activeCloneTask ? (
-                <WarningOutlined style={{ color: "var(--cs-warning, #d89614)", fontSize: 11 }} />
+                <WarningOutlined className="app-bg-tasks-icon text-[12px]" data-error="true" />
               ) : backgroundTaskSummary.indexVisible && !activeCloneTask ? (
-                <DatabaseOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+                <DatabaseOutlined className="app-bg-tasks-icon text-[12px]" />
               ) : (
-                <LoadingOutlined style={{ color: "var(--cs-primary)", fontSize: 11 }} />
+                <LoadingOutlined className="app-bg-tasks-icon text-[12px]" />
               )}
               <div className="flex min-w-0 flex-1 flex-col justify-center">
                 <div className="flex min-w-0 items-center gap-2 leading-none">
-                  <span className="truncate" style={{ color: "var(--cs-text-secondary)" }}>
+                  <span className="app-statusbar-task-label truncate">
                     {compactTaskTitle}
                   </span>
-
                 </div>
-                <div
-                  className="mt-1 flex h-[2px] gap-[2px] overflow-hidden rounded-full"
-                >
+                <div className="mt-1 flex h-[2px] gap-[2px] overflow-hidden rounded-full">
                   {activeCloneTask ? (
-                    <div
-                      className="h-full flex-1 overflow-hidden rounded-full"
-                      style={{ background: "color-mix(in srgb, var(--cs-border) 48%, transparent)" }}
-                    >
+                    <div className="app-statusbar-task-track h-full flex-1 overflow-hidden rounded-full">
                       <div
-                        className="h-full rounded-full transition-[width] duration-150"
-                        style={{
-                          width: `${Math.max(activeCloneTask.progressPercent ?? 8, 8)}%`,
-                          background: "var(--cs-primary)",
-                        }}
+                        className="app-statusbar-task-fill h-full rounded-full transition-[width] duration-150"
+                        style={{ width: `${Math.max(activeCloneTask.progressPercent ?? 8, 8)}%` }}
                       />
                     </div>
                   ) : null}
                   {backgroundTaskSummary.indexVisible ? (
-                    <div
-                      className="h-full flex-1 overflow-hidden rounded-full"
-                      style={{ background: "color-mix(in srgb, var(--cs-border) 48%, transparent)" }}
-                    >
+                    <div className="app-statusbar-task-track h-full flex-1 overflow-hidden rounded-full">
                       <div
-                        className="h-full rounded-full transition-[width] duration-150"
-                        style={{
-                          width: `${indexHasError ? 100 : Math.max(backgroundTaskSummary.indexProgressPercent ?? 8, 8)}%`,
-                          background: indexHasError ? "var(--cs-warning, #d89614)" : "var(--cs-primary)",
-                        }}
+                        className="app-statusbar-task-fill h-full rounded-full transition-[width] duration-150"
+                        data-error={indexHasError ? "true" : undefined}
+                        style={{ width: `${indexHasError ? 100 : Math.max(backgroundTaskSummary.indexProgressPercent ?? 8, 8)}%` }}
                       />
                     </div>
                   ) : null}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className="max-w-[96px] truncate text-[10px] leading-none"
-                  style={{ color: "var(--cs-text-tertiary)" }}
-                >
+              {compactTaskMeta ? (
+                <span className="app-statusbar-task-meta max-w-[96px] truncate text-[12px] leading-none">
                   {compactTaskMeta}
                 </span>
-
-              </div>
+              ) : null}
             </button>
           </Popover>
         ) : null}
         {backgroundTaskSummary.totalCount > 0 && (fileTab || versionLabel) ? <span className="app-statusbar-divider" aria-hidden="true" /> : null}
+        <MemoryDiagnosticsPopover />
         {fileTab ? <FileStatusDetails tabId={fileTab.id} path={fileTab.resourceId} /> : <span
           className="min-w-0 max-w-[360px] truncate text-[12px]"
           title={versionLabel}

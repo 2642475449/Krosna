@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store";
 import * as pet from "@/lib/pixelPet";
 import * as activity from "@/lib/windowActivity";
-import { collectPetPlatforms, PixelPetTrack } from "./PixelPetTrack";
+import { collectPetPlatforms, PET_FRAME_INTERVAL_MS, PixelPetTrack } from "./PixelPetTrack";
 
 function surface(name: string, rect: { left?: number; top: number; width: number; height: number }) {
   const element = document.createElement("div");
@@ -98,6 +98,7 @@ it("falls back to the titlebar edge when the workspace surface is unavailable", 
 });
 
 it("stops background frames and measurements, then resumes the existing pet without advancing its clock", async () => {
+  vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const frames = new Map<number, FrameRequestCallback>();
   let nextId = 0;
@@ -141,15 +142,20 @@ it("stops background frames and measurements, then resumes the existing pet with
     drawFrame(now);
     expect(canvas.closest("[hidden]")).toBeNull();
     expect(button.closest("[hidden]")).toBeNull();
-    drawFrame(now + 16);
+    // 在节流间隔内不重复排队 60fps rAF，到达间隔后才恢复下一帧。
+    expect(frames.size).toBe(0);
+    vi.advanceTimersByTime(16);
+    expect(frames.size).toBe(0);
+    vi.advanceTimersByTime(PET_FRAME_INTERVAL_MS);
+    drawFrame(now + PET_FRAME_INTERVAL_MS);
     expect(clearRect).not.toHaveBeenCalled();
 
-    // 暂停动作产生气泡，下一次动作应擦除精灵与气泡各自占用的区域。
+    // 暂停动作产生气泡，立即唤醒重绘并擦除精灵与气泡各自占用的区域。
     button.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    drawFrame(now + 32);
+    drawFrame(now + PET_FRAME_INTERVAL_MS + 16);
     clearRect.mockClear();
     button.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    drawFrame(now + 48);
+    drawFrame(now + PET_FRAME_INTERVAL_MS + 32);
     expect(clearRect).toHaveBeenCalledTimes(2);
     for (const [, , width, height] of clearRect.mock.calls) {
       expect(width).toBeLessThan(200);
@@ -202,6 +208,7 @@ it("stops background frames and measurements, then resumes the existing pet with
     window.dispatchEvent(new Event("focus"));
     expect(frames.size).toBe(0);
     useAppStore.setState({ pixelPetVisible: wasVisible });
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }

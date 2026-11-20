@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-20T10:27:00+08:00",
+  "title": "Design System: Krosna",
+  "extensions": {
+    "colorMeta": {
+      "cobalt-signal": {
+        "role": "primary",
+        "displayName": "清朗钴蓝 (light-glass)",
+        "canonical": "#4263eb",
+        "tonalRamp": ["#0c1640", "#16266b", "#223996", "#314ec2", "#4263eb", "#6c87f0", "#9db0f5", "#dce3fc"]
+      },
+      "warm-terracotta": {
+        "role": "primary",
+        "displayName": "暖木赤陶 (light-warm)",
+        "canonical": "#a75d2b",
+        "tonalRamp": ["#2e1708", "#4d2810", "#6e3a19", "#8c4c22", "#a75d2b", "#c57f4e", "#dfa881", "#f6e3d4"]
+      },
+      "starlight-periwinkle": {
+        "role": "primary",
+        "displayName": "星夜矢车菊 (dark-starry)",
+        "canonical": "#8198ff",
+        "tonalRamp": ["#151c3d", "#243069", "#374999", "#5469cc", "#8198ff", "#a1b2ff", "#c4cfff", "#e8ecff"]
+      },
+      "mocha-amber": {
+        "role": "primary",
+        "displayName": "摩卡琥珀 (dark-mocha)",
+        "canonical": "#f5bd69",
+        "tonalRamp": ["#38260b", "#5c3f14", "#855b1f", "#b37c2d", "#dc9e46", "#f5bd69", "#f8d39a", "#fdefd8"]
+      },
+      "light-canvas": {
+        "role": "neutral",
+        "displayName": "清朗基底灰蓝",
+        "canonical": "#f1f3f7",
+        "tonalRamp": ["#20242c", "#3a4252", "#596b88", "#8391a8", "#adb7c7", "#d3d9e4", "#e9edf4", "#f1f3f7"]
+      },
+      "warm-canvas": {
+        "role": "neutral",
+        "displayName": "暖木纸感基底",
+        "canonical": "#f3eee6",
+        "tonalRamp": ["#30271f", "#4d3e31", "#705c49", "#947e69", "#b8a490", "#ddd1c1", "#eee5d8", "#f3eee6"]
+      },
+      "starry-canvas": {
+        "role": "neutral",
+        "displayName": "星夜深空基底",
+        "canonical": "#15181f",
+        "tonalRamp": ["#15181f", "#1e232d", "#282f3c", "#343d4d", "#4b576d", "#7485a3", "#9eafc9", "#e4edf9"]
+      },
+      "mocha-canvas": {
+        "role": "neutral",
+        "displayName": "摩卡深棕基底",
+        "canonical": "#211c19",
+        "tonalRamp": ["#211c19", "#2b2521", "#37302a", "#493d32", "#695747", "#947c67", "#baa18a", "#f3e5d6"]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Title",
+        "purpose": "弹窗标题、设置分组标题与激活态工作区标签页。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "桌面工作台正文、列表项与常规操作说明。"
+      },
+      "label": {
+        "displayName": "Label / Mono",
+        "purpose": "文件路径、快捷键提示、状态栏与时间戳等高对齐元信息。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-floating",
+        "value": "0 8px 28px var(--cs-shadow-overlay)",
+        "purpose": "轻量浮动控件与气泡提示。"
+      },
+      {
+        "name": "overlay-shadow",
+        "value": "0 12px 32px var(--cs-shadow-overlay)",
+        "purpose": "模态弹窗、抽屉、下拉菜单与 Popover 浮层阴影。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "motion-fast",
+        "value": "150ms cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "标签内容显隐、侧边栏透明度切换与按钮微交互。"
+      },
+      {
+        "name": "motion-normal",
+        "value": "220ms cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "面板与分组内容入场过渡。"
+      },
+      {
+        "name": "motion-spring",
+        "value": "cubic-bezier(0.34, 1.36, 0.64, 1)",
+        "purpose": "图标微动效与弹性反馈。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "desktop-compact",
+        "value": "960px"
+      },
+      {
+        "name": "desktop-standard",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主操作按钮，成对使用主题主色与高对比前景色，带 0.96 按压微缩。",
+      "html": "<button class=\"ds-btn-primary\">新建会话</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 14px; border: 1px solid var(--cs-primary, #4263eb); border-radius: var(--cs-radius-control, 6px); background: var(--cs-primary, #4263eb); color: var(--cs-text-on-primary, #ffffff); font-size: 13px; font-weight: 500; cursor: pointer; transition: filter 140ms ease, transform 120ms ease; } .ds-btn-primary:hover { filter: brightness(1.06); } .ds-btn-primary:focus-visible { outline: 2px solid var(--cs-focus-ring, #4263eb); outline-offset: 2px; } .ds-btn-primary:active { transform: scale(0.96); }"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "次级实色按钮，默认无阴影，悬停切换背景并高亮主色边框。",
+      "html": "<button class=\"ds-btn-default\">取消</button>",
+      "css": ".ds-btn-default { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 14px; border: 1px solid var(--cs-border, #d3d9e4); border-radius: var(--cs-radius-control, 6px); background: var(--cs-bg-card-solid, #ffffff); color: var(--cs-text-primary, #20242c); font-size: 13px; font-weight: 400; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease; } .ds-btn-default:hover { background: var(--cs-bg-hover, #e9edf4); border-color: var(--cs-primary, #4263eb); } .ds-btn-default:focus-visible { outline: 2px solid var(--cs-focus-ring, #4263eb); outline-offset: 2px; } .ds-btn-default:active { background: var(--cs-bg-active, #e5eafa); transform: scale(0.96); }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "标准文本输入框，聚焦时呈现主色边框与 2px 半透焦点光晕。",
+      "html": "<input class=\"ds-input-field\" type=\"text\" placeholder=\"输入项目路径或搜索命令...\" />",
+      "css": ".ds-input-field { width: 260px; height: 32px; padding: 4px 10px; border: 1px solid var(--cs-border, #d3d9e4); border-radius: var(--cs-radius-control, 6px); background: var(--cs-bg-card-solid, #ffffff); color: var(--cs-text-primary, #20242c); font-size: 13px; outline: none; transition: border-color 140ms ease, box-shadow 140ms ease; } .ds-input-field::placeholder { color: var(--cs-text-tertiary, #596b88); } .ds-input-field:hover { border-color: var(--cs-primary, #4263eb); } .ds-input-field:focus-visible { border-color: var(--cs-primary, #4263eb); box-shadow: 0 0 0 2px var(--cs-primary-light, rgba(66, 99, 235, 0.09)); }"
+    },
+    {
+      "name": "Titlebar Search Trigger",
+      "kind": "custom",
+      "refersTo": "titlebar-search",
+      "description": "标题栏 30px 紧凑搜索入口，内含等宽快捷键提示。",
+      "html": "<button class=\"ds-titlebar-search\" type=\"button\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><span>快速搜索...</span><kbd class=\"ds-kbd\">Ctrl K</kbd></button>",
+      "css": ".ds-titlebar-search { min-width: 168px; height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--cs-border, #d3d9e4); border-radius: var(--cs-radius-control, 6px); background: var(--cs-bg-card-solid, #ffffff); color: var(--cs-text-secondary, #4f5f79); font-size: 12px; cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease; } .ds-titlebar-search:hover, .ds-titlebar-search:focus-visible { border-color: var(--cs-primary, #4263eb); outline: none; } .ds-kbd { margin-left: auto; font-family: var(--font-mono, monospace); font-size: 11px; color: var(--cs-text-tertiary, #596b88); }"
+    },
+    {
+      "name": "Session List Item",
+      "kind": "nav",
+      "refersTo": "session-list-item",
+      "description": "侧边栏会话条目，激活态带微弱主色边框与高辨识底色。",
+      "html": "<div class=\"ds-session-item\" tabindex=\"0\"><div class=\"ds-session-title\">Claude Code · 重构主题系统</div><div class=\"ds-session-meta\">2 分钟前 · main</div></div>",
+      "css": ".ds-session-item { min-height: 48px; padding: 7px 10px; border: 1px solid transparent; border-radius: var(--cs-radius-overlay, 8px); background: transparent; cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 2px; transition: background-color 140ms ease, border-color 140ms ease; } .ds-session-item:hover { background: var(--cs-bg-hover, #e9edf4); } .ds-session-item:focus-visible { outline: none; background: var(--cs-bg-active, #e5eafa); border-color: var(--cs-primary, #4263eb); } .ds-session-title { font-size: 13px; font-weight: 500; color: var(--cs-text-primary, #20242c); } .ds-session-meta { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--cs-text-tertiary, #596b88); }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "description": "工作台实色容器卡片，扁平无投影，依靠 1px 描边分层。",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Git 状态</div><div class=\"ds-card-desc\">3 个已修改文件待暂存</div></div>",
+      "css": ".ds-card { padding: 14px 16px; border: 1px solid var(--cs-border-card, #e0e5ed); border-radius: var(--cs-panel-radius, 10px); background: var(--cs-bg-card-solid, #ffffff); color: var(--cs-text-primary, #20242c); } .ds-card-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; } .ds-card-desc { font-size: 12px; color: var(--cs-text-secondary, #4f5f79); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Workbench",
+    "overview": "Krosna 是一套面向高频开发者的桌面工作台视觉系统：温润纸感与深邃夜色并存，以高信息密度承载多智能体会话、终端与 Git 状态，同时在视觉上保持克制、不喧宾夺主。界面主体摒弃玻璃拟态与多余阴影，依靠实色阶层、1px 细描边与精准的 2px 状态指示线组织空间，让用户的注意力始终停留在终端输出与代码本身。\n\n整套系统以四套可切换主题（清朗蓝白 `light-glass`、暖木书房 `light-warm`、星空沉浸 `dark-starry`、摩卡棕夜 `dark-mocha`）共享同一套结构尺寸与语义变量（`--cs-*`），所有配色组合均受 WCAG AA 对比度门禁保护，确保长时间编码与多语言（简中、英、日）界面下依然清晰可读。",
+    "keyCharacteristics": [
+      "四套主题共享结构尺寸，通过 `--cs-*` 语义变量统一切换实色阶层与主色角色。",
+      "主体工作区默认扁平（无投影、无毛玻璃），仅弹窗、抽屉与菜单等浮层使用环境阴影。",
+      "高信息密度桌面控件（40px 标题栏、30px 搜索框、32px 标准控件高度）配合干脆的 `0.96` 按压反馈。",
+      "所有前景与背景颜色必须成对配置，禁止单边覆盖导致深浅主题对比度失效。"
+    ],
+    "rules": [
+      {
+        "name": "The Paired Contrast Rule",
+        "body": "覆盖任何 Ant Design token 或自定义组件配色时，前景色与背景色必须成对声明并在 `src/lib/antdTheme.ts` 集中管理，严禁只改文字色或只改背景色；正文与浮层对比度必须 ≥ 4.5:1，实心主色控件对比度必须 ≥ 3.5:1。",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Hardcoded-Color Rule",
+        "body": "组件与样式表禁止直接写死十六进制颜色值，所有颜色必须通过 `--cs-*` CSS 变量或集中导出的主题常量引用。",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono-For-Telemetry Rule",
+        "body": "文件路径、命令行参数、快捷键提示与终端/状态栏计数优先使用 `--font-mono` 等宽字体，确保数字与路径在高频扫视时不发生横向抖动。",
+        "section": "typography"
+      },
+      {
+        "name": "The Zero-PTY-Reflow Rule",
+        "body": "侧边栏折叠与面板切换通过显隐与透明度过渡完成，禁止在过渡动画中反复改变主舞台宽度，防止嵌入式 PTY 终端字符网格频繁重排。",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "主工作区面板、卡片、终端表面与工具栏默认 `box-shadow: none` 且不使用 `backdrop-filter` 毛玻璃，阴影仅属于浮层（Modal / Popover / Dropdown / Drawer / Tooltip）。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "在 `src/lib/antdTheme.ts` 中成对配置所有前景色与背景色 token，并确保修改 `themes.css` 后同步更新全部 4 套主题。",
+      "使用 `--cs-*` CSS 变量、Tailwind CSS 类名与 i18next 翻译键编写界面，保持样式与文案的多主题、三语一致性。",
+      "在浮层（Modal、Drawer、Popover、Dropdown、Tooltip）中沿用 `overlays.css` 的统一 `--cs-overlay-*` 变量，保证跨主题边缘清晰度。",
+      "尊重 `prefers-reduced-motion` 并仅将动效应用于外壳层与指示器，不干扰终端渲染性能。"
+    ],
+    "donts": [
+      "单边覆盖 AntD 的文字色或背景色 token（如只设 `colorTextLightSolid` 不设 `colorBgSpotlight`），避免深色主题出现“灰底深字”对比度事故。",
+      "在主体工作区卡片、工具栏或终端表面重新引入毛玻璃（`backdrop-filter`）或常驻投影（`box-shadow`）。",
+      "在组件中使用 inline style 或硬编码颜色值、用户可见字符串。",
+      "在侧边栏或面板切换动画中对主内容区执行宽度插值过渡，以免触发 PTY 终端网格频繁重排。"
+    ]
+  }
+}

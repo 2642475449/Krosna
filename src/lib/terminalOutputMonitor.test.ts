@@ -46,14 +46,18 @@ describe("terminal output backlog", () => {
   });
 
   it("detects a small write waiting too long without treating idle terminals as stalled", () => {
-    const { monitor, writer, callbacks, onPressureChange } = setup();
+    const { monitor, writer, callbacks, onPressureChange, onSnapshot } = setup();
     vi.advanceTimersByTime(2000);
+    expect(onSnapshot).not.toHaveBeenCalled();
     expect(onPressureChange).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
     monitor.write("x", writer);
     vi.advanceTimersByTime(1000);
     expect(monitor.snapshot()).toMatchObject({ oldestWriteMs: 1000, overloaded: true });
     callbacks[0]();
     expect(monitor.snapshot()).toMatchObject({ oldestWriteMs: 0, overloaded: false });
+    vi.advanceTimersByTime(1000);
+    expect(vi.getTimerCount()).toBe(0);
     monitor.dispose();
   });
 

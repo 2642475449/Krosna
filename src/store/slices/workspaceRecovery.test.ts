@@ -227,3 +227,26 @@ it("serializes saves so the newest layout is written after the pending older sna
   await flushWorkspaceRecovery();
   expect(mocks.saveWorkspace).toHaveBeenCalledTimes(3);
 });
+
+it("ignores unrelated store mutations when scheduling automatic recovery saves", async () => {
+  vi.useFakeTimers();
+  try {
+    mocks.readWorkspace.mockResolvedValue(payload());
+    await initializeRecoverableWindowContext(context());
+    stopSync = startWorkspaceRecoverySync();
+    await vi.advanceTimersByTimeAsync(1000);
+    const baselineCalls = mocks.saveWorkspace.mock.calls.length;
+
+    // 仅更新语言或用量等无关状态，不应触发捕获或落盘计时器。
+    useAppStore.setState({ language: "en" });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mocks.saveWorkspace).toHaveBeenCalledTimes(baselineCalls);
+
+    // 布局变化仍应正常防抖保存。
+    useAppStore.getState().setWorkspaceSplitRatio([], 0.72);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(mocks.saveWorkspace).toHaveBeenCalledTimes(baselineCalls + 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});

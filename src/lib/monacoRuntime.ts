@@ -32,6 +32,10 @@ import 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneGot
 import 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess.js';
 import 'monaco-editor/esm/vs/editor/standalone/browser/referenceSearch/standaloneReferenceSearch.js';
 import 'monaco-editor/esm/vs/editor/standalone/browser/toggleHighContrast/toggleHighContrast.js';
+import { editor } from "monaco-editor/esm/vs/editor/editor.api.js";
+import { registerMemoryDiagnosticEditors } from "./memoryDiagnostics";
+
+registerMemoryDiagnosticEditors(editor.getModels);
 export * from "monaco-editor/esm/vs/editor/editor.api.js";
 
 

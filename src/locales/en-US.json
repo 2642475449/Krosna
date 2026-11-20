@@ -331,6 +331,7 @@
     "paste": "Paste",
     "openInFileManager": "Open in File Manager",
     "openInAssociatedApp": "Open in Associated Application",
+    "openInExplorer": "Open in Explorer",
     "create": "Create",
     "save": "Save",
     "refresh": "Refresh",
@@ -407,8 +408,16 @@
   "statusBar": {
     "pixelPet": {
       "daimao": {
-        "cheerBubbles": ["Ready, boss!", "One dango?", "Chow time!"],
-        "workBubbles": ["On lookout!", "Pawprints!", "...Dango?"]
+        "cheerBubbles": [
+          "Ready, boss!",
+          "One dango?",
+          "Chow time!"
+        ],
+        "workBubbles": [
+          "On lookout!",
+          "Pawprints!",
+          "...Dango?"
+        ]
       },
       "show": "Show pixel pet",
       "hide": "Hide pixel pet",
@@ -450,6 +459,10 @@
       "multiple": "{{count}} background tasks running",
       "searchIndex": "Code Search Index",
       "indexing": "Indexing {{name}}",
+      "indexFailed": "Indexing failed for {{name}}",
+      "retryIndex": "Retry",
+      "openIndexSettings": "Index Settings",
+      "unknownError": "Index build failed. Check index settings or retry.",
       "cloneCompact": "Clone",
       "indexCompact": "Index",
       "pending": "Pending",
@@ -1526,6 +1539,7 @@
     "downloadFailed": "Failed to download the update",
     "installFailed": "Failed to install the update",
     "downloadFromMirror": "Download installer from China mirror",
+    "downloadFromMirrorDesc": "Download the Windows installer directly from the China mirror",
     "manualDownload": "Open GitHub Releases",
     "releaseNotes": "Release Notes",
     "noReleaseNotes": "No release notes are available for this version.",
@@ -1534,7 +1548,21 @@
     "runningTurnsWarning": "{{count}} agent turn(s) are still running.",
     "dirtyTabsWarning": "{{count}} tab(s) still contain unsaved changes.",
     "installAnyway": "Restart and Install Anyway",
-    "installedSuccessfully": "Krosna was updated successfully to v{{version}}."
+    "installedSuccessfully": "Krosna was updated successfully to v{{version}}.",
+    "updateAvailableTitle": "Update Available",
+    "currentVersionLabel": "Current version v{{currentVersion}}",
+    "versionTransition": "v{{currentVersion}} → v{{version}}",
+    "checkingTitle": "Checking for updates…",
+    "checkingHint": "Fetching the latest release information from GitHub.",
+    "preparingDownloadHint": "Your update download will start in the background shortly.",
+    "recoveryHint": "Review the technical details below. You can adjust your network settings and retry, or download the installer manually.",
+    "installErrorHint": "Unable to launch the installer. You can retry the installation or inspect the technical details below.",
+    "showErrorDetails": "Show error details",
+    "hideErrorDetails": "Hide error details",
+    "copyErrorDetails": "Copy error",
+    "openNetworkSettings": "Configure network & proxy",
+    "openNetworkSettingsDesc": "Configure system or custom proxy and test GitHub connectivity",
+    "manualDownloadDesc": "Open the release page in your browser to get the installer"
   },
   "settings": {
     "loading": "Loading settings…",
@@ -3037,6 +3065,72 @@
       "legacy": "Includes {{size}} of older images with unknown ownership, kept for compatibility.",
       "failed": "Unable to read or clear the screenshot cache. Please retry.",
       "syncFailed": "Session reference sync failed. Images are kept while retrying; manual cleanup is temporarily unavailable."
+    },
+    "memoryDiagnostics": {
+      "title": "Memory diagnostics",
+      "renderer": "Workspace renderer",
+      "sampling": "Samples every {{seconds}} seconds and keeps the last {{hours}} hours. Recording continues when this card closes and clears when the window closes.",
+      "start": "Start recording",
+      "stop": "Pause recording",
+      "clear": "Clear history",
+      "copy": "Copy summary",
+      "copied": "Copied",
+      "pausedGap": "Paused gap",
+      "workspaceSummary": "{{terminals}} terminals · {{rows}} scrollback rows · {{editors}} editors",
+      "trendSrSummary": "{{count}} samples from {{start}} to {{end}}; latest private working set {{resident}}.",
+      "ready": "Start recording to track memory in this window.",
+      "recording": "Recording",
+      "paused": "Recording paused",
+      "unsupported": "WebView2 memory sampling is unavailable on this platform.",
+      "sampleError": "This sample failed. Recording will retry automatically.",
+      "emptyTrend": "No memory samples to plot yet",
+      "mib": "{{value}} MiB",
+      "process": "PID {{pid}} · {{count}} associated frames",
+      "updated": "Updated at {{time}}",
+      "allocations": "Chromium allocation snapshots",
+      "allocationNote": "Capture allocations for this renderer on demand. Allocation sizes use a different measure from private working set and may overlap.",
+      "capture": "Capture snapshot",
+      "captureStatus": {
+        "busy": "Another window is capturing a snapshot. Try again shortly.",
+        "error": "Allocation details are currently unavailable for this renderer."
+      },
+      "captureInfo": "PID {{pid}} · {{time}}",
+      "emptyCapture": "Capture twice to compare allocation changes in the same process.",
+      "category": "Category",
+      "size": "Reported size",
+      "change": "Since last capture",
+      "workspace": "Workspace objects",
+      "workspaceNote": "The current WebView reports JS heap and DOM metrics. Terminal and editor counts come from this window.",
+      "metrics": {
+        "resident": "Private working set",
+        "commit": "Private commit",
+        "heap": "JS heap used",
+        "workingSet": "Working set (including shared pages)",
+        "heapTotal": "JS heap capacity",
+        "embedderHeap": "Embedder heap used",
+        "backingStorage": "JS buffer backing storage",
+        "documents": "Documents",
+        "nodes": "DOM nodes",
+        "listeners": "JS event listeners",
+        "terminals": "Mounted terminal views",
+        "alternateTerminals": "Terminals on alternate screen",
+        "scrollbackRows": "Normal scrollback rows",
+        "editorModels": "Editor models",
+        "editorCodeUnits": "Model text UTF-16 units"
+      },
+      "categories": {
+        "v8": "V8",
+        "blink": "Blink GC",
+        "partitionAlloc": "PartitionAlloc",
+        "malloc": "Native allocator",
+        "mallocObjects": "Live native allocations",
+        "gpu": "GPU-related allocations",
+        "skia": "Skia",
+        "canvas": "Canvas",
+        "shared": "Shared memory",
+        "discardable": "Discardable memory",
+        "webCache": "Web resource cache"
+      }
     },
     "usageData": {
       "title": "Data & Privacy",

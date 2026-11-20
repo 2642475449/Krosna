@@ -49,7 +49,7 @@ async fn probe_output(
         let chunk = format!("{}\r\n", "x".repeat(65534));
         let cancelled = AtomicBool::new(false);
         for _ in 0..chunks {
-            hub.send_output(&window, "memory-probe-terminal", &chunk, &cancelled);
+            hub.send_output(&window, "memory-probe-terminal", &chunk, false, &cancelled);
         }
         hub.send_exit(
             &window,

@@ -20,13 +20,21 @@ export function ApplicationUpdateBadge() {
       : phase === "error"
         ? t("updater.badgeError")
         : t("updater.badgeAvailable");
+
+  const statusDotClass = phase === "error"
+    ? "bg-[var(--cs-danger)]"
+    : phase === "ready"
+      ? "bg-[var(--cs-success)]"
+      : "bg-[var(--cs-primary)]";
+
   return (
     <Tooltip title={t("updater.openDetails")}>
       <button
         type="button"
-        className="mx-1 flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--cs-border-subtle)] bg-[var(--cs-bg-tertiary)] px-2 text-xs text-[var(--cs-text-secondary)] transition-colors hover:bg-[var(--cs-bg-hover)] hover:text-[var(--cs-text-primary)]"
+        className="mx-1 flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-[var(--cs-border-card)] bg-[var(--cs-bg-card-solid)] px-2.5 text-xs text-[var(--cs-text-secondary)] transition-colors hover:border-[var(--cs-border)] hover:bg-[var(--cs-bg-hover)] hover:text-[var(--cs-text-primary)]"
         onClick={openModal}
       >
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass}`} aria-hidden="true" />
         <CloudDownloadOutlined />
         <span>{label}</span>
       </button>

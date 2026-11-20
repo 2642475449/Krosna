@@ -48,18 +48,31 @@ export function createTerminalOutputMonitor(options: OutputMonitorOptions) {
     };
   };
 
-  const timer = setInterval(() => {
+  let intervalTimer: ReturnType<typeof setInterval> | null = null;
+
+  const tick = () => {
     const current = snapshot();
     options.onSnapshot(current);
     if (current.overloaded !== overloaded) {
       overloaded = current.overloaded;
       options.onPressureChange(current);
     }
-  }, options.intervalMs ?? 1000);
+    // 终端空闲且背压已解除后停止轮询，直到下次写入重新启动。
+    if (pending.size === 0 && current.bufferedChars === 0 && !overloaded && intervalTimer !== null) {
+      clearInterval(intervalTimer);
+      intervalTimer = null;
+    }
+  };
+
+  const ensureTimer = () => {
+    if (disposed || intervalTimer !== null) return;
+    intervalTimer = setInterval(tick, options.intervalMs ?? 1000);
+  };
 
   return {
     write(data: string, writer: (data: string, onParsed: () => void) => void) {
       if (disposed || !data) return;
+      ensureTimer();
       const token = {};
       pending.set(token, { chars: data.length, startedAt: now() });
       pendingChars += data.length;
@@ -80,7 +93,10 @@ export function createTerminalOutputMonitor(options: OutputMonitorOptions) {
     snapshot,
     dispose() {
       disposed = true;
-      clearInterval(timer);
+      if (intervalTimer !== null) {
+        clearInterval(intervalTimer);
+        intervalTimer = null;
+      }
       pending.clear();
       pendingChars = 0;
     },

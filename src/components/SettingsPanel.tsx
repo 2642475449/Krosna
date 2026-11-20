@@ -1,4 +1,10 @@
 import { getHookCommandName, getHookSource, groupHooksBySource, isKrosnaHook } from "@/lib/hookPresentation";
+import {
+  consumePendingSettingsPage,
+  readPendingSettingsPage,
+  SETTINGS_NAVIGATE_EVENT,
+  type SettingsPage,
+} from "@/lib/settingsNavigation";
 import { SkillsSettingsPage } from "./settings/SkillsSettingsPage";
 import { PixelPetSettingsPage } from "./settings/PixelPetSettingsPage";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -126,8 +132,6 @@ import {
 } from "@/lib/agents";
 
 
-
-type SettingsPage = "general" | "network" | "notifications" | "agents" | "git" | "terminal" | "voiceRecognition" | "shortcuts" | "pixelPet" | "skills" | "hooks" | "mcpServers" | "commands" | "quickCommands" | "claudeMd" | "searchIndex" | "dataPrivacy" | "archived" | "about";
 
 interface SettingsMenuItem {
   key: SettingsPage;
@@ -3214,8 +3218,19 @@ const pageComponents: Record<SettingsPage, React.FC> = {
 /* ────────────── Main Settings Panel ────────────── */
 function SettingsPanel() {
   const { t } = useTranslation();
-  const [activePage, setActivePage] = useState<SettingsPage>(() => { const pending = sessionStorage.getItem("krosna.settings.pendingPage"); return pending === "agents" ? "agents" : "general"; });
-  useEffect(() => { const navigate = () => { if (sessionStorage.getItem("krosna.settings.pendingPage") === "agents") { sessionStorage.removeItem("krosna.settings.pendingPage"); setActivePage("agents"); } }; navigate(); window.addEventListener("settings:navigate", navigate); return () => window.removeEventListener("settings:navigate", navigate); }, []);
+  const [activePage, setActivePage] = useState<SettingsPage>(() => readPendingSettingsPage(sessionStorage) ?? "general");
+  useEffect(() => {
+    const navigate = () => {
+      const pending = consumePendingSettingsPage(sessionStorage);
+      if (pending) {
+        contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+        setActivePage(pending);
+      }
+    };
+    navigate();
+    window.addEventListener(SETTINGS_NAVIGATE_EVENT, navigate);
+    return () => window.removeEventListener(SETTINGS_NAVIGATE_EVENT, navigate);
+  }, []);
   const [menuSearch, setMenuSearch] = useState("");
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const PageComponent = pageComponents[activePage];

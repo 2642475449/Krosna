@@ -50,16 +50,25 @@ export class PersistentSettingsSync<T extends object> {
   save(read: () => T, write: (snapshot: T, fields: (keyof T)[]) => Promise<number>): Promise<T | undefined> {
     const task = this.saving.then(async () => {
       let saved: T | undefined;
-      while (true) {
+      for (let pass = 0; pass < 8; pass += 1) {
         const snapshot = read();
         const patch = this.changes(snapshot);
         const fields = Object.keys(patch) as (keyof T)[];
         if (!fields.length) return saved;
+        const beforeRevisions = fields.map((field) => this.revisions.get(field) ?? 0);
+        const beforeSerialized = JSON.stringify(patch);
         const revision = await write(snapshot, fields);
+        const advancedByRemote = fields.some((field, index) => (this.revisions.get(field) ?? 0) > beforeRevisions[index]);
         this.acknowledge(patch, revision);
         saved = snapshot;
-        // 保存途中仍可能编辑或收到更高修订号；继续落库剩余修改，不能只等下一次 UI 变更。
+        // 保存途中仍可能编辑或收到更高修订号；仅在期间确有变化时继续落库，防止过期修订号触发死循环。
+        const nextPatch = this.changes(read());
+        if (!Object.keys(nextPatch).length) return saved;
+        if (!advancedByRemote && JSON.stringify(nextPatch) === beforeSerialized) {
+          return saved;
+        }
       }
+      return saved;
     });
     // 一次失败不能阻塞后续保存；失败字段仍保留在 changes 中。
     this.saving = task.catch(() => {});

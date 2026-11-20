@@ -1370,22 +1370,22 @@ describe("terminal scrollback settings", () => {
     applyPersistentSettingsToStore(originalSettings);
   });
 
-  it("round-trips a selected scrollback size", () => {
+  it.each([5_000, 20_000, 50_000])("round-trips a selected scrollback size of %i rows", (rows) => {
     applyPersistentSettingsToStore({
       ...originalSettings,
-      terminalScrollback: 20_000,
+      terminalScrollback: rows,
     });
 
-    expect(getPersistentSettingsSnapshot().terminalScrollback).toBe(20_000);
+    expect(getPersistentSettingsSnapshot().terminalScrollback).toBe(rows);
   });
 
-  it("falls back to 5,000 rows for unsupported values", () => {
+  it("falls back to 10,000 rows for unsupported values", () => {
     applyPersistentSettingsToStore({
       ...originalSettings,
       terminalScrollback: 12_345,
     });
 
-    expect(getPersistentSettingsSnapshot().terminalScrollback).toBe(5_000);
+    expect(getPersistentSettingsSnapshot().terminalScrollback).toBe(10_000);
   });
 });
 
