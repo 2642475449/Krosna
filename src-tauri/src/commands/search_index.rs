@@ -19,6 +19,7 @@ use crate::database::{Database, SearchIndexStorageSettings};
 use crate::path_utils::{display_path, normalize_input_path};
 
 mod scheduling;
+mod short_queries;
 use scheduling::{ProjectRuntime, SearchActivityGuard, UpdateBatch};
 
 // Schema v2 retains a row for non-text candidates.  That makes a watcher-driven
@@ -171,6 +172,7 @@ enum TextEncoding {
 }
 
 pub(crate) enum IndexCandidateLookup {
+    Unavailable,
     Ready {
         paths: Vec<PathBuf>,
         generation: u64,
@@ -419,10 +421,11 @@ fn has_active_build(state: &SearchIndexState) -> bool {
     building
         || state.runtimes.lock().ok().is_some_and(|runtimes| {
             runtimes.values().any(|runtime| {
-                runtime
-                    .changes
-                    .lock()
-                    .map_or(true, |changes| changes.writing)
+                runtime.short_query_upgrade.load(Ordering::Relaxed)
+                    || runtime
+                        .changes
+                        .lock()
+                        .map_or(true, |changes| changes.writing)
             })
         })
 }
@@ -433,10 +436,11 @@ fn project_has_active_index_write(state: &SearchIndexState, key: &str) -> bool {
     });
     building
         || state.runtime(key).is_ok_and(|runtime| {
-            runtime
-                .changes
-                .lock()
-                .map_or(true, |changes| changes.writing)
+            runtime.short_query_upgrade.load(Ordering::Relaxed)
+                || runtime
+                    .changes
+                    .lock()
+                    .map_or(true, |changes| changes.writing)
         })
 }
 
@@ -1378,6 +1382,7 @@ fn apply_incremental_updates(
     let transaction = connection
         .transaction()
         .map_err(|error| format!("Failed to start incremental index transaction: {error}"))?;
+    let has_bigrams = short_queries::ready(&transaction);
     let mut seen = HashSet::new();
     for path in paths {
         let Some(relative_path) = path
@@ -1400,6 +1405,10 @@ fn apply_incremental_updates(
             .ok();
         if let Some((row_id, status)) = old {
             if status == IndexedFileStatus::Indexed.as_str() {
+                if has_bigrams {
+                    short_queries::remove(&transaction, row_id)
+                        .map_err(|error| error.to_string())?;
+                }
                 transaction
                     .execute("DELETE FROM content_fts WHERE rowid = ?1", [row_id])
                     .map_err(|error| format!("Failed to remove outdated FTS row: {error}"))?;
@@ -1432,6 +1441,10 @@ fn apply_incremental_updates(
                         format!("Failed to insert incremental index entry: {error}")
                     })?;
                 let row_id = transaction.last_insert_rowid();
+                if has_bigrams {
+                    short_queries::insert(&transaction, row_id, &content)
+                        .map_err(|error| error.to_string())?;
+                }
                 transaction
                     .execute(
                         "INSERT INTO content_fts(rowid, content) VALUES (?1, ?2)",
@@ -1507,6 +1520,7 @@ where
         .map_err(|error| format!("FTS5 is unavailable or could not initialize: {error}"))?;
 
     let built_at = now_ms();
+    short_queries::create(&connection).map_err(|error| error.to_string())?;
     let transaction = connection
         .transaction()
         .map_err(|error| format!("Failed to start index transaction: {error}"))?;
@@ -1548,6 +1562,8 @@ where
                             format!("Failed to index {}: {error}", candidate.relative_path)
                         })?;
                     let row_id = transaction.last_insert_rowid();
+                    short_queries::insert(&transaction, row_id, &content)
+                        .map_err(|error| error.to_string())?;
                     fts_statement
                         .execute(params![row_id, content])
                         .map_err(|error| {
@@ -1585,6 +1601,7 @@ where
         return Ok(());
     }
     let metadata = [
+        ("cjk_bigrams_version", "1".to_string()),
         ("schema_version", INDEX_SCHEMA_VERSION.to_string()),
         ("project_path", project.display_path.clone()),
         ("project_key", project.preference_key.clone()),
@@ -1854,6 +1871,7 @@ fn restore_project_index(
         },
     );
     drop(entries);
+    schedule_short_query_upgrade(app, state, project);
     let _ = app.emit("search-index-status", status.clone());
     Ok(Some(status))
 }
@@ -1862,11 +1880,183 @@ fn quote_fts5_literal(query: &str) -> String {
     format!("\"{}\"", query.replace('"', "\"\""))
 }
 
+// 向 v2 索引追加双字表，保留现有路径、三元词和文件 ID；不重新发现目录。
+fn upgrade_short_query_database(
+    path: &Path,
+    project: &ResolvedProject,
+    cancel: &AtomicBool,
+) -> Result<(), String> {
+    let mut connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .map_err(|error| error.to_string())?;
+    connection
+        .busy_timeout(Duration::from_secs(2))
+        .map_err(|error| error.to_string())?;
+    if short_queries::ready(&connection) {
+        return Ok(());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    short_queries::create(&transaction).map_err(|error| error.to_string())?;
+    let rows = {
+        let mut statement = transaction
+            .prepare("SELECT id, relative_path FROM indexed_files WHERE status = 'indexed'")
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|error| error.to_string())?
+    };
+    for (id, relative) in rows {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("Index upgrade cancelled".into());
+        }
+        if !Path::new(&relative)
+            .components()
+            .all(|part| matches!(part, std::path::Component::Normal(_)))
+        {
+            continue;
+        }
+        if let Ok((content, _)) = read_text_file(&project.path.join(relative)) {
+            short_queries::insert(&transaction, id, &content).map_err(|error| error.to_string())?;
+        }
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Err("Index upgrade cancelled".into());
+    }
+    short_queries::mark_ready(&transaction).map_err(|error| error.to_string())?;
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn schedule_short_query_upgrade(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+) {
+    let Ok(runtime) = state.runtime(&project.preference_key) else {
+        return;
+    };
+    if runtime.short_query_upgrade.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let active = state
+        .entries
+        .lock()
+        .ok()
+        .and_then(|entries| entries.get(&project.preference_key).cloned());
+    let Some(active) = active else {
+        runtime.short_query_upgrade.store(false, Ordering::Relaxed);
+        return;
+    };
+    let app = app.clone();
+    let state = state.clone();
+    let project = project.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| -> Result<u64, String> {
+            let _writer = runtime
+                .writer
+                .lock()
+                .map_err(|_| "Failed to lock index writer".to_string())?;
+            if active.cancel.load(Ordering::Relaxed) {
+                return Ok(0);
+            }
+            let path = index_directory(&app, &project)?.join("index.sqlite3");
+            upgrade_short_query_database(&path, &project, &active.cancel)?;
+            Ok(fs::metadata(path)
+                .map(|metadata| metadata.len())
+                .unwrap_or(0))
+        })();
+        runtime.short_query_upgrade.store(false, Ordering::Relaxed);
+        if active.cancel.load(Ordering::Relaxed) {
+            return;
+        }
+        let status = state.entries.lock().ok().and_then(|mut entries| {
+            let entry = entries.get_mut(&project.preference_key)?;
+            if entry.job_id != active.job_id {
+                return None;
+            }
+            match result {
+                Ok(size) => {
+                    entry.status.index_size_bytes = size;
+                    entry.status.error = None;
+                }
+                Err(error) => entry.status.error = Some(error),
+            }
+            Some(entry.status.clone())
+        });
+        if let Some(status) = status {
+            let _ = app.emit("search-index-status", status);
+        }
+    });
+}
+
+pub(crate) fn search_project_entry_index(
+    app: &AppHandle,
+    project_path: &str,
+    query: &str,
+) -> Result<Vec<super::file_tree::FileTreeEntry>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    with_project_entry_index(app, project_path, |connection, project| {
+        super::file_tree::search_indexed_project_entries(connection, &project.path, query)
+    })
+}
+
+pub(super) fn terminal_entry_index(
+    app: &AppHandle,
+    project_path: &str,
+    root: &Path,
+    name: &str,
+) -> Result<super::terminal_links::TerminalLinkResolution, String> {
+    with_project_entry_index(app, project_path, |connection, _| {
+        super::terminal_links::search_indexed_exact_name(connection, root, name, 32)
+    })
+}
+
+fn with_project_entry_index<T>(
+    app: &AppHandle,
+    project_path: &str,
+    query: impl FnOnce(&Connection, &ResolvedProject) -> Result<T, String>,
+) -> Result<T, String> {
+    let project = resolve_project(project_path)?;
+    let database = app.state::<Arc<Database>>();
+    if !database.load_project_search_index_enabled(&project.preference_key)? {
+        return Err("search-index-unavailable".into());
+    }
+    // 查询只读已建成的索引，不触发建库、完整性扫描、监听器或目录遍历。
+    let path = index_directory(app, &project)?.join("index.sqlite3");
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "search-index-unavailable".to_string())?;
+    connection
+        .busy_timeout(Duration::from_millis(50))
+        .map_err(|error| error.to_string())?;
+    let compatible: bool = connection
+        .query_row(
+            "SELECT (SELECT value FROM index_meta WHERE key = 'schema_version') = ?1
+            AND (SELECT value FROM index_meta WHERE key = 'project_key') = ?2
+            AND (SELECT value FROM index_meta WHERE key = 'state') = 'ready'",
+            params![INDEX_SCHEMA_VERSION.to_string(), project.preference_key],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !compatible {
+        return Err("search-index-unavailable".into());
+    }
+    query(&connection, &project)
+}
+
 fn query_candidate_relative_paths(
     connection: &Connection,
     query: &str,
     limit: usize,
 ) -> rusqlite::Result<Vec<String>> {
+    if let Some(token) = short_queries::token(query) {
+        return short_queries::query(connection, &token, limit);
+    }
     let mut statement = connection.prepare(
         "SELECT indexed_files.relative_path
          FROM content_fts
@@ -1927,6 +2117,31 @@ pub(crate) fn lookup_index_candidates(
     query: &str,
     use_regex: bool,
 ) -> IndexCandidateLookup {
+    let lookup = lookup_index_candidates_inner(app, project_path, query, use_regex);
+    enforce_short_query_index(query, use_regex, lookup)
+}
+
+fn enforce_short_query_index(
+    query: &str,
+    use_regex: bool,
+    lookup: IndexCandidateLookup,
+) -> IndexCandidateLookup {
+    // 两字中文的索引尚不可用时明确等待，绝不能悄悄退回目录扫描。
+    if !use_regex
+        && short_queries::token(query.trim()).is_some()
+        && matches!(lookup, IndexCandidateLookup::Fallback { .. })
+    {
+        return IndexCandidateLookup::Unavailable;
+    }
+    lookup
+}
+
+fn lookup_index_candidates_inner(
+    app: &AppHandle,
+    project_path: &str,
+    query: &str,
+    use_regex: bool,
+) -> IndexCandidateLookup {
     let query = query.trim();
     if use_regex || query.contains('\n') || query.contains('\r') {
         return IndexCandidateLookup::Fallback {
@@ -1939,7 +2154,8 @@ pub(crate) fn lookup_index_candidates(
             index_state: "not_applicable".to_string(),
         };
     }
-    if query.chars().count() < 3 || query.contains('\0') {
+    if (query.chars().count() < 3 && short_queries::token(query).is_none()) || query.contains('\0')
+    {
         return IndexCandidateLookup::Fallback {
             reason: "query_too_short".to_string(),
             index_state: "not_applicable".to_string(),
@@ -2040,6 +2256,10 @@ pub(crate) fn lookup_index_candidates(
         };
     }
     const CANDIDATE_LIMIT: usize = 50_000;
+    if short_queries::token(query).is_some() && !short_queries::ready(&connection) {
+        schedule_short_query_upgrade(app, state.inner(), &project);
+        return IndexCandidateLookup::Unavailable;
+    }
     let relative_paths = match query_candidate_relative_paths(&connection, query, CANDIDATE_LIMIT) {
         Ok(paths) => paths,
         Err(error) if sqlite_is_busy(&error) => {
@@ -2438,6 +2658,151 @@ mod tests {
             preference_key: display.replace('\\', "/").to_lowercase(),
             display_path: display,
         }
+    }
+
+    #[test]
+    fn chinese_bigrams_upgrade_in_place_and_follow_incremental_changes() {
+        let root = tempdir().unwrap();
+        let project = test_project(root.path());
+        let first = root.path().join("first.txt");
+        let second = root.path().join("second.txt");
+        fs::write(&first, "问题").unwrap();
+        fs::write(&second, "这是一个问题").unwrap();
+        let database_path = root.path().join("index.sqlite3");
+        let candidates = discover_candidates(
+            &project,
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        )
+        .unwrap();
+        write_index_database(
+            &database_path,
+            &project,
+            &candidates,
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+            |_, _, _, _| {},
+        )
+        .unwrap();
+        {
+            let connection = Connection::open(&database_path).unwrap();
+            assert_eq!(
+                query_candidate_relative_paths(&connection, "问题", 10)
+                    .unwrap()
+                    .len(),
+                2
+            );
+            // 模拟升级前的 v2 数据库，既有路径、rowid 和 trigram 表必须保留。
+            connection.execute_batch("DROP TABLE content_cjk_bigrams; DELETE FROM index_meta WHERE key = 'cjk_bigrams_version';").unwrap();
+        }
+        let unindexed = root.path().join("unindexed.txt");
+        fs::write(&unindexed, "问题").unwrap();
+        assert!(
+            upgrade_short_query_database(&database_path, &project, &AtomicBool::new(true)).is_err()
+        );
+        assert!(!short_queries::ready(
+            &Connection::open(&database_path).unwrap()
+        ));
+        upgrade_short_query_database(&database_path, &project, &AtomicBool::new(false)).unwrap();
+        let connection = Connection::open(&database_path).unwrap();
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "问题", 10)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "一个问", 10).unwrap(),
+            vec!["second.txt"]
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM indexed_files", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+        drop(connection);
+        let renamed = root.path().join("renamed.txt");
+        fs::rename(&first, &renamed).unwrap();
+        fs::write(&second, "答案").unwrap();
+        apply_incremental_updates(
+            &database_path,
+            &project,
+            &[first, renamed.clone(), second.clone()],
+        )
+        .unwrap();
+        let connection = Connection::open(&database_path).unwrap();
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "问题", 10).unwrap(),
+            vec!["renamed.txt"]
+        );
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "答案", 10).unwrap(),
+            vec!["second.txt"]
+        );
+        drop(connection);
+        fs::remove_file(&renamed).unwrap();
+        apply_incremental_updates(&database_path, &project, &[renamed]).unwrap();
+        let connection = Connection::open(&database_path).unwrap();
+        assert!(query_candidate_relative_paths(&connection, "问题", 10)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn two_chinese_characters_never_turn_an_unavailable_index_into_a_directory_scan() {
+        for reason in [
+            "index_disabled",
+            "index_not_ready",
+            "index_busy",
+            "index_reconciling",
+            "too_many_index_candidates",
+        ] {
+            let plan = enforce_short_query_index(
+                "问题",
+                false,
+                IndexCandidateLookup::Fallback {
+                    reason: reason.into(),
+                    index_state: "unavailable".into(),
+                },
+            );
+            assert!(
+                matches!(plan, IndexCandidateLookup::Unavailable),
+                "{reason}"
+            );
+        }
+        let plan = enforce_short_query_index(
+            "问题",
+            false,
+            IndexCandidateLookup::Ready {
+                paths: Vec::new(),
+                generation: 1,
+            },
+        );
+        assert!(matches!(plan, IndexCandidateLookup::Ready { .. }));
+        let plan = enforce_short_query_index(
+            "问题",
+            true,
+            IndexCandidateLookup::Fallback {
+                reason: "regex_query".into(),
+                index_state: "not_applicable".into(),
+            },
+        );
+        assert!(matches!(plan, IndexCandidateLookup::Fallback { .. }));
+    }
+
+    #[test]
+    fn short_query_upgrade_is_treated_as_an_active_index_write() {
+        let state = SearchIndexState::default();
+        let runtime = state.runtime("project").unwrap();
+        assert!(!has_active_build(&state));
+        runtime.short_query_upgrade.store(true, Ordering::Relaxed);
+        assert!(has_active_build(&state));
+        assert!(project_has_active_index_write(&state, "project"));
+        runtime.short_query_upgrade.store(false, Ordering::Relaxed);
+        assert!(!project_has_active_index_write(&state, "project"));
     }
 
     #[test]

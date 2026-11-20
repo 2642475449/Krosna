@@ -14,7 +14,7 @@ import {
 
 function sample(at: number, pid: number, resident: number | null): MemorySample {
   return {
-    at, supported: true, heap: null, dom: null,
+    at, supported: true, activeTerminals: 0, heap: null, dom: null,
     renderer: { pid, workingSetBytes: 500, privateWorkingSetBytes: resident, privateCommitBytes: 600, frameCount: 1 },
     terminals: { mounted: 0, alternate: 0, scrollbackRows: 0 },
     editorModels: 0, editorCodeUnits: 0,

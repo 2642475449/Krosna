@@ -236,6 +236,7 @@ function MemoryDiagnosticsCard({ id, panel, dismiss, onEscape }: {
     { metric: "documents", value: formatCount(latest?.dom?.documents) },
     { metric: "nodes", value: formatCount(latest?.dom?.nodes) },
     { metric: "listeners", value: formatCount(latest?.dom?.jsEventListeners) },
+    { metric: "activeTerminals", value: formatCount(latest?.activeTerminals) },
     { metric: "terminals", value: formatCount(latest?.terminals.mounted) },
     { metric: "alternateTerminals", value: formatCount(latest?.terminals.alternate) },
     { metric: "scrollbackRows", value: formatCount(latest?.terminals.scrollbackRows) },
@@ -249,7 +250,8 @@ function MemoryDiagnosticsCard({ id, panel, dismiss, onEscape }: {
       ...(renderer ? [t("settings.memoryDiagnostics.process", { pid: renderer.pid, count: renderer.frameCount })] : []),
       ...MEMORY_SERIES.map(({ key, value }) => `${t(`settings.memoryDiagnostics.metrics.${key}`)}: ${formatBytes(latest ? value(latest) : null)}`),
       ...(latest ? [t("settings.memoryDiagnostics.workspaceSummary", {
-        terminals: number.format(latest.terminals.mounted),
+        terminals: number.format(latest.activeTerminals),
+        mounted: number.format(latest.terminals.mounted),
         rows: number.format(latest.terminals.scrollbackRows),
         editors: number.format(latest.editorModels),
       })] : []),
@@ -322,7 +324,8 @@ function MemoryDiagnosticsCard({ id, panel, dismiss, onEscape }: {
           {latest && (
             <div className="app-memory-diagnostics__workspace-strip">
               {t("settings.memoryDiagnostics.workspaceSummary", {
-                terminals: number.format(latest.terminals.mounted),
+                terminals: number.format(latest.activeTerminals),
+                mounted: number.format(latest.terminals.mounted),
                 rows: number.format(latest.terminals.scrollbackRows),
                 editors: number.format(latest.editorModels),
               })}

@@ -78,6 +78,7 @@ function TitleBarQuickSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QuickSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
   const [fallbackState, setFallbackState] = useState<{
@@ -192,6 +193,7 @@ function TitleBarQuickSearch() {
     setQuery("");
     setResults([]);
     setSearching(false);
+    setSearchError(false);
     setActiveIndex(0);
   }, []);
 
@@ -224,6 +226,7 @@ function TitleBarQuickSearch() {
     if (!open || !currentProject) return;
 
     const trimmedQuery = deferredQuery.trim();
+    setSearchError(false);
     if (!trimmedQuery) {
       setResults([]);
       setSearching(false);
@@ -257,6 +260,7 @@ function TitleBarQuickSearch() {
         .catch(() => {
           if (!cancelled) {
             setResults([]);
+            setSearchError(true);
           }
         })
         .finally(() => {
@@ -432,7 +436,9 @@ function TitleBarQuickSearch() {
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
-                    query.trim()
+                    searchError
+                      ? t("titleBar.quickSearchIndexUnavailable")
+                      : query.trim()
                       ? t("titleBar.quickSearchEmpty")
                       : t("titleBar.quickSearchRecentEmpty")
                   }

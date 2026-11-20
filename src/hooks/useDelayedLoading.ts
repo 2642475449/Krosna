@@ -14,12 +14,12 @@ export function useDelayedLoading(loading: boolean, delayMs = DEFAULT_LOADING_DE
       return;
     }
 
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       setVisible(true);
     }, delayMs);
 
     return () => {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
     };
   }, [delayMs, loading]);
 

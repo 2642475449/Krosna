@@ -2,6 +2,7 @@ import type { Terminal } from "@xterm/xterm";
 
 export interface WebviewMemorySample {
   supported: boolean;
+  activeTerminals: number;
   renderer: {
     pid: number;
     workingSetBytes: number;

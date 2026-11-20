@@ -113,13 +113,40 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.useFakeTimers();
   mocks.theme = "light-glass";
   mocks.language = "zh-CN";
   mocks.cells = [];
   props = { projectPath: "C:/project", path: "C:/project/report.docx", modifiedAtMs: 100, sizeBytes: 8 };
   vi.mocked(readProjectOfficePreview).mockResolvedValue(new Uint8Array([1, 2, 3]));
 });
-afterEach(() => { for (const cell of mocks.cells) cell.cleanup?.(); });
+afterEach(() => {
+  for (const cell of mocks.cells) cell.cleanup?.();
+  vi.useRealTimers();
+});
+
+it("delays the loading spinner and cancels its timer after the document loads", async () => {
+  const read = deferred<Uint8Array>();
+  vi.mocked(readProjectOfficePreview).mockReturnValue(read.promise);
+  expect(findElement(render(), Spin)).toBeUndefined();
+  vi.advanceTimersByTime(199);
+  expect(findElement(render(), Spin)).toBeUndefined();
+  vi.advanceTimersByTime(1);
+  expect(findElement(render(), Spin)).toBeDefined();
+  read.resolve(new Uint8Array([1, 2, 3]));
+  const loaded = await settleRead();
+  expect(findElement(loaded, FileViewer)).toBeDefined();
+  expect(findElement(loaded, Spin)).toBeUndefined();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("clears the loading delay when a document loads before the spinner appears", async () => {
+  render();
+  expect(vi.getTimerCount()).toBe(1);
+  const loaded = await settleRead();
+  expect(findElement(loaded, FileViewer)).toBeDefined();
+  expect(vi.getTimerCount()).toBe(0);
+});
 
 it.each([
   ["light-glass", "light"], ["light-warm", "light"],
@@ -172,6 +199,8 @@ it("allows external opening and retry after a renderer failure", async () => {
   expect(openInAssociatedApplication).toHaveBeenCalledWith(props.path);
   retry.props.onClick?.({} as Parameters<NonNullable<typeof retry.props.onClick>>[0]);
   render();
+  expect(findElement(render(), Spin)).toBeUndefined();
+  vi.advanceTimersByTime(200);
   expect(findElement(render(), Spin)).toBeDefined();
   const restored = findElement<ViewerProps>(await settleRead(), FileViewer)!;
   expect(restored.props.buffer).not.toBe(viewer.buffer);
@@ -181,6 +210,8 @@ it("allows external opening and retry after a renderer failure", async () => {
 it.each([{ modifiedAtMs: 101 }, { sizeBytes: 42 }])("reloads bytes when file metadata changes: %o", async (metadata) => {
   const first = await loadViewer();
   render(metadata);
+  expect(findElement(render(), Spin)).toBeUndefined();
+  vi.advanceTimersByTime(200);
   expect(findElement(render(), Spin)).toBeDefined();
   const next = findElement<ViewerProps>(await settleRead(), FileViewer)!.props;
   expect(next.buffer).not.toBe(first.buffer);

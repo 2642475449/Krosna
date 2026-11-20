@@ -32,6 +32,7 @@ struct DomCounters {
 #[serde(rename_all = "camelCase")]
 pub struct WebviewMemorySample {
     supported: bool,
+    active_terminals: usize,
     renderer: Option<RendererMemory>,
     heap: Option<JsHeap>,
     dom: Option<DomCounters>,
@@ -52,15 +53,23 @@ pub struct WebviewAllocations {
 }
 
 #[tauri::command]
-pub async fn sample_webview_memory(window: WebviewWindow) -> Result<WebviewMemorySample, String> {
+pub async fn sample_webview_memory(
+    window: WebviewWindow,
+    manager: tauri::State<'_, std::sync::Arc<crate::pty::PtyManager>>,
+) -> Result<WebviewMemorySample, String> {
     #[cfg(windows)]
     {
-        webview2::sample(&window).await
+        let mut sample = webview2::sample(&window).await?;
+        sample.active_terminals = manager.active_session_count();
+        Ok(sample)
     }
     #[cfg(not(windows))]
     {
         let _ = window;
-        Ok(WebviewMemorySample::default())
+        Ok(WebviewMemorySample {
+            active_terminals: manager.active_session_count(),
+            ..WebviewMemorySample::default()
+        })
     }
 }
 
@@ -159,6 +168,7 @@ mod webview2 {
         };
         Ok(WebviewMemorySample {
             supported: true,
+            active_terminals: 0,
             renderer,
             heap,
             dom,

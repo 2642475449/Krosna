@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -10,6 +11,7 @@ pub(super) const MAX_PENDING_PATHS: usize = 1_024;
 
 #[derive(Default)]
 pub(super) struct ProjectRuntime {
+    pub short_query_upgrade: AtomicBool,
     pub changes: Mutex<PendingChanges>,
     // 手动重建与后台增量写入必须串行，搜索仍可读取已提交的数据库。
     pub writer: Mutex<()>,

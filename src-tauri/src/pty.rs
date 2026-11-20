@@ -858,6 +858,11 @@ impl PtyManager {
         }
     }
 
+    /// 所有项目、所有窗口共享的活动 PTY 数，不受前端视图挂载影响。
+    pub fn active_session_count(&self) -> usize {
+        self.sessions.lock().len()
+    }
+
     /// Check if a session is currently active
     pub fn is_session_active(&self, session_id: &str) -> bool {
         self.sessions.lock().contains_key(session_id)
@@ -1522,6 +1527,25 @@ mod tests {
         );
         input.cancel();
         assert_eq!(first.wait().unwrap_err(), PTY_INPUT_CLOSED);
+    }
+
+    #[test]
+    fn active_session_count_includes_all_projects_and_updates_on_close() {
+        let manager = input_test_manager();
+        assert_eq!(manager.active_session_count(), 0);
+        for (id, project) in [("first", "project-a"), ("second", "project-b")] {
+            let gate = InputTestGate::default();
+            gate.release();
+            let (input, _) = gate.input();
+            let mut session = input_test_session(1, input);
+            session.project_path = project.into();
+            manager.sessions.lock().insert(id.into(), session);
+        }
+        assert_eq!(manager.active_session_count(), 2);
+        manager.close_project_sessions("project-a");
+        assert_eq!(manager.active_session_count(), 1);
+        manager.close("second");
+        assert_eq!(manager.active_session_count(), 0);
     }
 
     #[test]

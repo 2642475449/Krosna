@@ -9,7 +9,7 @@ it("records without a mounted view and discards in-flight samples when paused", 
   vi.useFakeTimers();
   let completePrevious = (_sample: WebviewMemorySample) => {};
   const previous = new Promise<WebviewMemorySample>((resolve) => { completePrevious = resolve; });
-  const native: WebviewMemorySample = { supported: true, renderer: null, dom: null, heap: null };
+  const native: WebviewMemorySample = { supported: true, activeTerminals: 12, renderer: null, dom: null, heap: null };
   mock.sample.mockReturnValueOnce(previous).mockResolvedValue(native);
   try {
     useMemoryDiagnosticsStore.getState().setRecording(true);
@@ -21,6 +21,8 @@ it("records without a mounted view and discards in-flight samples when paused", 
     useMemoryDiagnosticsStore.getState().setRecording(true);
     await vi.advanceTimersByTimeAsync(15_000);
     expect(useMemoryDiagnosticsStore.getState().samples).toHaveLength(2);
+    expect(useMemoryDiagnosticsStore.getState().samples.at(-1)?.activeTerminals).toBe(12);
+    expect(useMemoryDiagnosticsStore.getState().samples.at(-1)?.terminals.mounted).toBe(0);
     useMemoryDiagnosticsStore.getState().setRecording(false);
     await vi.advanceTimersByTimeAsync(15_000);
     expect(useMemoryDiagnosticsStore.getState().samples).toHaveLength(2);

@@ -250,6 +250,7 @@ fn run_content_search(
         request.use_regex,
     );
     let (candidate_paths, backend, fallback_reason, index_generation, index_state) = match lookup {
+        IndexCandidateLookup::Unavailable => return Err("short-query-index-unavailable".into()),
         IndexCandidateLookup::Ready { paths, generation } => (
             Some(paths),
             "index".to_string(),

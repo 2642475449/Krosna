@@ -973,20 +973,36 @@ mod tests {
             .expect("test child should start")
     }
 
-    #[cfg(windows)]
+    // 用测试子进程直接写两条管道，避免 shell 启动配置和逐行 echo 的耗时干扰。
     fn large_output_child() -> Child {
-        piped_child(Command::new("cmd").args([
-            "/C",
-            "for /L %i in (1,1,5000) do @echo Receiving objects: 012345678901234567890123456789",
-        ]))
+        piped_child(
+            Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "commands::git::remote::tests::large_output_child_fixture",
+                    "--nocapture",
+                ])
+                .env("KROSNA_TEST_REMOTE_OUTPUT_CHILD", "1"),
+        )
     }
 
-    #[cfg(not(windows))]
-    fn large_output_child() -> Child {
-        piped_child(Command::new("sh").args([
-            "-c",
-            "i=0; while [ $i -lt 5000 ]; do echo 'Receiving objects: 012345678901234567890123456789'; i=$((i+1)); done",
-        ]))
+    #[test]
+    #[ignore = "subprocess fixture for the large-output pipe regression test"]
+    fn large_output_child_fixture() {
+        if std::env::var("KROSNA_TEST_REMOTE_OUTPUT_CHILD").as_deref() != Ok("1") {
+            return;
+        }
+        use std::io::Write;
+        let payload = vec![b'x'; 256 * 1024];
+        std::io::stdout()
+            .lock()
+            .write_all(&payload)
+            .expect("stdout payload");
+        std::io::stderr()
+            .lock()
+            .write_all(&payload)
+            .expect("stderr payload");
     }
 
     #[cfg(windows)]
@@ -1010,7 +1026,8 @@ mod tests {
             .expect("large output should not block on a full pipe");
 
         assert!(output.status.success());
-        assert!(output.stdout.len() > 64 * 1024);
+        assert!(output.stdout.len() >= 256 * 1024);
+        assert!(output.stderr.len() >= 256 * 1024);
     }
 
     #[test]

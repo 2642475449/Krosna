@@ -7,6 +7,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+mod entry_search;
+
 const MAX_EDITABLE_TEXT_FILE_BYTES: u64 = 1024 * 1024;
 const MAX_PREVIEWABLE_TEXT_FILE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_PREVIEWABLE_IMAGE_FILE_BYTES: u64 = 16 * 1024 * 1024;
@@ -249,33 +251,22 @@ pub fn resolve_project_link(
 
 #[tauri::command]
 pub async fn search_project_entries(
+    app: tauri::AppHandle,
     project_path: String,
     query: String,
 ) -> Result<Vec<FileTreeEntry>, String> {
     crate::commands::run_background_task("search_project_entries", move || {
-        search_project_entries_blocking(project_path, query)
+        crate::commands::search_index::search_project_entry_index(&app, &project_path, &query)
     })
     .await
 }
 
-pub fn search_project_entries_blocking(
-    project_path: String,
-    query: String,
+pub(crate) fn search_indexed_project_entries(
+    connection: &rusqlite::Connection,
+    root_path: &Path,
+    query: &str,
 ) -> Result<Vec<FileTreeEntry>, String> {
-    let root_path = normalize_input_path(&project_path);
-    if !root_path.exists() {
-        return Err("项目目录不存在".to_string());
-    }
-
-    let keyword = query.trim().to_lowercase().replace('\\', "/");
-    if keyword.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut matches = Vec::new();
-    collect_search_matches(&root_path, &root_path, &keyword, &mut matches)?;
-    matches.sort_by(compare_search_matches);
-    Ok(matches.into_iter().map(|result| result.entry).collect())
+    entry_search::search(connection, root_path, query)
 }
 
 #[tauri::command]
@@ -1375,20 +1366,6 @@ fn matches_text_extension(path: &Path) -> bool {
     )
 }
 
-const IGNORED_DIRS: &[&str] = &[
-    "node_modules",
-    "target",
-    ".git",
-    ".svn",
-    "dist",
-    "build",
-    ".next",
-    ".nuxt",
-    "coverage",
-    "__pycache__",
-    ".cache",
-    "vendor",
-];
 const MAX_SEARCH_RESULTS: usize = 200;
 
 #[derive(Debug)]
@@ -1455,75 +1432,13 @@ fn push_search_match(
     results: &mut Vec<ProjectEntrySearchMatch>,
     candidate: ProjectEntrySearchMatch,
 ) {
-    if results.len() < MAX_SEARCH_RESULTS {
-        results.push(candidate);
+    // 保持前 200 项有序，避免每个候选都线性查找最差结果。
+    let index = results.partition_point(|entry| compare_search_matches(entry, &candidate).is_le());
+    if index >= MAX_SEARCH_RESULTS {
         return;
     }
-
-    let Some((worst_index, worst)) = results
-        .iter()
-        .enumerate()
-        .max_by(|(_, left), (_, right)| compare_search_matches(left, right))
-    else {
-        return;
-    };
-
-    if compare_search_matches(&candidate, worst).is_lt() {
-        results[worst_index] = candidate;
-    }
-}
-
-fn collect_search_matches(
-    root_path: &Path,
-    path: &Path,
-    keyword: &str,
-    results: &mut Vec<ProjectEntrySearchMatch>,
-) -> Result<(), String> {
-    for entry in fs::read_dir(path).map_err(|e| format!("读取目录失败: {}", e))? {
-        let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
-        let child_path = entry.path();
-        let metadata = entry
-            .metadata()
-            .map_err(|e| format!("读取文件元数据失败: {}", e))?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        let kind = if metadata.is_dir() {
-            FileTreeEntryKind::Directory
-        } else {
-            FileTreeEntryKind::File
-        };
-
-        let relative_path = child_path
-            .strip_prefix(root_path)
-            .unwrap_or(&child_path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if let Some(score) = project_entry_match_score(&name, &relative_path, keyword) {
-            push_search_match(
-                results,
-                ProjectEntrySearchMatch {
-                    entry: FileTreeEntry {
-                        name: name.clone(),
-                        path: display_path(&child_path),
-                        kind: kind.clone(),
-                        has_children: matches!(kind, FileTreeEntryKind::Directory)
-                            && directory_has_children(&child_path).unwrap_or(false),
-                        ignored: false,
-                    },
-                    score,
-                    depth: relative_path.matches('/').count(),
-                },
-            );
-        }
-
-        if metadata.is_dir() {
-            if IGNORED_DIRS.contains(&name.as_str()) {
-                continue;
-            }
-            collect_search_matches(root_path, &child_path, keyword, results)?;
-        }
-    }
-
-    Ok(())
+    results.insert(index, candidate);
+    results.truncate(MAX_SEARCH_RESULTS);
 }
 
 fn compare_entries(left: &FileTreeEntry, right: &FileTreeEntry) -> Ordering {
@@ -1721,6 +1636,22 @@ mod tests {
             "tbqs"
         )
         .is_some());
+    }
+
+    #[test]
+    fn project_search_keeps_best_results_after_reaching_limit() {
+        let mut results = Vec::new();
+        for score in (0..300).rev() {
+            push_search_match(&mut results, ProjectEntrySearchMatch {
+                entry: FileTreeEntry {
+                    name: format!("file-{score}"), path: String::new(),
+                    kind: FileTreeEntryKind::File, has_children: false, ignored: false,
+                }, score, depth: 0,
+            });
+        }
+        assert_eq!(results.len(), MAX_SEARCH_RESULTS);
+        assert_eq!(results.iter().map(|entry| entry.score).collect::<Vec<_>>(),
+            (0..MAX_SEARCH_RESULTS).collect::<Vec<_>>());
     }
 
     #[test]

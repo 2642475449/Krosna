@@ -37,6 +37,7 @@ vi.mock("react", async (importOriginal) => ({
   useMemo: (factory: () => unknown) => factory(),
   useRef: (value: unknown) => ({ current: value }),
   useEffect: () => {},
+  useLayoutEffect: () => {},
   useState: (initial: unknown) => {
     const index = mocks.cursor++;
     if (!(index in mocks.slots)) mocks.slots[index] = initial;

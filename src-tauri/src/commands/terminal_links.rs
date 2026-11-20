@@ -1,10 +1,11 @@
 use crate::commands::file_tree::FileTreeEntryKind;
 use crate::path_utils::{display_path, normalize_path_buf};
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::time::{Duration, Instant};
 
+#[cfg(test)]
 const IGNORED_SEARCH_DIRECTORIES: &[&str] = &[
     ".git",
     ".svn",
@@ -37,28 +38,10 @@ pub struct TerminalLinkResolution {
     pub truncated: bool,
 }
 
-#[derive(Clone, Copy)]
-struct SearchLimits {
-    entries: usize,
-    depth: usize,
-    results: usize,
-    duration: Duration,
-}
-
-impl Default for SearchLimits {
-    fn default() -> Self {
-        Self {
-            entries: 20_000,
-            depth: 32,
-            results: 32,
-            duration: Duration::from_millis(250),
-        }
-    }
-}
-
 /// 终端链接只解析文件位置；项目外文件交由系统打开，不放宽项目读写接口的边界。
 #[tauri::command]
 pub async fn resolve_terminal_link(
+    app: tauri::AppHandle,
     project_path: String,
     working_directory: String,
     path: String,
@@ -69,7 +52,9 @@ pub async fn resolve_terminal_link(
             &working_directory,
             &path,
             dirs_next::home_dir().as_deref(),
-            SearchLimits::default(),
+            &|root, name| {
+                super::search_index::terminal_entry_index(&app, &project_path, root, name)
+            },
         )
     })
     .await
@@ -159,7 +144,7 @@ fn resolve_terminal_link_blocking(
     working_directory: &str,
     path: &str,
     home: Option<&Path>,
-    limits: SearchLimits,
+    lookup: &dyn Fn(&Path, &str) -> Result<TerminalLinkResolution, String>,
 ) -> Result<TerminalLinkResolution, String> {
     let text = path.trim();
     if text.is_empty() || text.contains(['\0', '\r', '\n']) || text.contains("://") {
@@ -217,83 +202,73 @@ fn resolve_terminal_link_blocking(
     if !is_bare_name(input, text) {
         return Ok(TerminalLinkResolution::default());
     }
-    Ok(search_exact_name(&root, text, limits))
+    Ok(
+        lookup(&root, text).unwrap_or_else(|_| TerminalLinkResolution {
+            targets: Vec::new(),
+            truncated: true,
+        }),
+    )
 }
 
-fn search_exact_name(root: &Path, name: &str, limits: SearchLimits) -> TerminalLinkResolution {
-    let started = Instant::now();
+// 仅从共享路径索引中寻找精确文件名；只验证命中的少量路径，不遍历目录。
+pub(super) fn search_indexed_exact_name(
+    connection: &rusqlite::Connection,
+    root: &Path,
+    name: &str,
+    limit: usize,
+) -> Result<TerminalLinkResolution, String> {
+    let mut statement = connection
+        .prepare("SELECT relative_path FROM indexed_files ORDER BY relative_path")
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+    let mut seen = HashSet::new();
     let mut result = TerminalLinkResolution::default();
-    let mut pending = vec![(root.to_path_buf(), 0)];
-    let mut inspected_entries = 0;
-    while let Some((directory, depth)) = pending.pop() {
-        if started.elapsed() >= limits.duration {
-            result.truncated = true;
-            break;
-        }
-        // 不跟随链接目录，也避免规范化后位于项目之外的路径进入递归。
-        let Some(canonical_directory) = canonical_path(&directory) else {
-            result.truncated = true;
-            continue;
-        };
-        if !is_within_project(&canonical_directory, root) {
-            result.truncated = true;
+    let mut verified = 0;
+    'rows: for relative in rows {
+        let relative = relative.map_err(|error| error.to_string())?;
+        if relative.is_empty()
+            || relative.contains('\\')
+            || !Path::new(&relative)
+                .components()
+                .all(|part| matches!(part, Component::Normal(_)))
+        {
             continue;
         }
-        let entries = match fs::read_dir(canonical_directory) {
-            Ok(entries) => entries,
-            Err(_) => {
-                result.truncated = true;
-                continue;
-            }
-        };
-        for entry in entries {
-            if inspected_entries >= limits.entries || started.elapsed() >= limits.duration {
-                result.truncated = true;
-                pending.clear();
-                break;
-            }
-            inspected_entries += 1;
-            let Ok(entry) = entry else {
-                result.truncated = true;
-                continue;
-            };
-            let Ok(kind) = entry.file_type() else {
-                result.truncated = true;
-                continue;
-            };
-            if kind.is_symlink() || (!kind.is_file() && !kind.is_dir()) {
-                continue;
-            }
-            let entry_name = entry.file_name().to_string_lossy().into_owned();
-            if name_matches(&entry_name, name) {
-                if let Some(target) = inspect_target(&entry.path(), Some(root)) {
-                    if target.in_project && !result.targets.contains(&target) {
-                        if result.targets.len() >= limits.results {
+        let mut path = relative.as_str();
+        loop {
+            if name_matches(path.rsplit('/').next().unwrap_or(path), name)
+                && seen.insert(path.to_string())
+            {
+                // 大批陈旧索引项也不能导致无限量磁盘验证。
+                if verified >= 256 {
+                    result.truncated = true;
+                    break 'rows;
+                }
+                verified += 1;
+                if let Some(target) =
+                    inspect_target(&root.join(path), Some(root)).filter(|target| target.in_project)
+                {
+                    if !result.targets.contains(&target) {
+                        if result.targets.len() >= limit {
                             result.truncated = true;
-                            pending.clear();
-                            break;
+                            break 'rows;
                         }
                         result.targets.push(target);
                     }
                 }
             }
-            if kind.is_dir()
-                && !IGNORED_SEARCH_DIRECTORIES
-                    .iter()
-                    .any(|ignored| name_matches(&entry_name, ignored))
-            {
-                if depth >= limits.depth {
-                    result.truncated = true;
-                } else {
-                    pending.push((entry.path(), depth + 1));
-                }
-            }
+            let Some((parent, _)) = path.rsplit_once('/') else {
+                break;
+            };
+            path = parent;
         }
     }
     result
         .targets
         .sort_by(|left, right| left.path.cmp(&right.path));
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -308,13 +283,72 @@ mod tests {
         canonical_path(&path).expect("canonical fixture")
     }
 
+    // 测试夹具模拟后台索引器；生产解析函数没有目录遍历。
+    fn fixture_index(root: &Path) -> rusqlite::Connection {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("CREATE TABLE indexed_files(relative_path TEXT);")
+            .unwrap();
+        let mut pending = vec![root.to_path_buf()];
+        while let Some(directory) = pending.pop() {
+            for child in fs::read_dir(directory).unwrap().flatten() {
+                let kind = child.file_type().unwrap();
+                let name = child.file_name().to_string_lossy().into_owned();
+                if kind.is_symlink() {
+                    continue;
+                }
+                if kind.is_dir() {
+                    if !IGNORED_SEARCH_DIRECTORIES.contains(&name.as_str()) {
+                        pending.push(child.path());
+                    }
+                } else {
+                    let relative = child
+                        .path()
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    connection
+                        .execute("INSERT INTO indexed_files VALUES (?1)", [relative])
+                        .unwrap();
+                }
+            }
+        }
+        connection
+    }
+
+    fn fixture_index_lookup(root: &Path, name: &str) -> Result<TerminalLinkResolution, String> {
+        search_indexed_exact_name(&fixture_index(root), root, name, 32)
+    }
+
+    #[test]
+    fn explicit_paths_bypass_index_and_stale_or_escaping_entries_are_rejected() {
+        let root = tempdir().unwrap();
+        let file = write_file(root.path(), "nested/report.txt");
+        let direct = resolve_terminal_link_blocking(
+            &display_path(root.path()),
+            &display_path(root.path()),
+            "nested/report.txt",
+            None,
+            &|_, _| panic!("explicit paths must not query index"),
+        )
+        .unwrap();
+        assert_eq!(direct.targets[0].path, display_path(file));
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection.execute_batch("CREATE TABLE indexed_files(relative_path TEXT);
+            INSERT INTO indexed_files VALUES ('../outside/report.txt'), ('a-deleted/report.txt'), ('b-deleted/report.txt'), ('nested/report.txt');").unwrap();
+        let results = search_indexed_exact_name(&connection, root.path(), "report.txt", 1).unwrap();
+        assert_eq!(results.targets.len(), 1);
+        assert!(!results.truncated);
+    }
+
     fn resolve(root: &TempDir, cwd: &Path, text: &str) -> TerminalLinkResolution {
         resolve_terminal_link_blocking(
             &display_path(root.path()),
             &display_path(cwd),
             text,
             None,
-            SearchLimits::default(),
+            &fixture_index_lookup,
         )
         .expect("resolve link")
     }
@@ -441,7 +475,7 @@ mod tests {
             &display_path(root.path()),
             "~/Documents/测试.txt",
             Some(home.path()),
-            SearchLimits::default(),
+            &fixture_index_lookup,
         )
         .expect("home file");
         assert_eq!(result.targets[0].path, display_path(file));
@@ -449,35 +483,43 @@ mod tests {
     }
 
     #[test]
-    fn exhausting_entry_depth_result_or_time_budgets_is_reported() {
-        let root = tempdir().expect("root");
+    fn result_limit_and_unavailable_index_are_reported_without_scanning() {
+        let root = tempdir().unwrap();
         write_file(root.path(), "a/report.mp3");
         write_file(root.path(), "b/report.mp3");
-        for limits in [
-            SearchLimits {
-                entries: 0,
-                ..SearchLimits::default()
+        let result = resolve_terminal_link_blocking(
+            &display_path(root.path()),
+            &display_path(root.path()),
+            "report.mp3",
+            None,
+            &|root, name| {
+                let connection = fixture_index(root);
+                search_indexed_exact_name(&connection, root, name, 1)
             },
-            SearchLimits {
-                depth: 0,
-                ..SearchLimits::default()
-            },
-            SearchLimits {
-                results: 1,
-                ..SearchLimits::default()
-            },
-            SearchLimits {
-                duration: Duration::ZERO,
-                ..SearchLimits::default()
-            },
-        ] {
-            let result = search_exact_name(
-                &canonical_path(root.path()).expect("canonical root"),
-                "report.mp3",
-                limits,
-            );
-            assert!(result.truncated);
-        }
+        )
+        .unwrap();
+        assert!(result.truncated);
+        assert_eq!(result.targets.len(), 1);
+        let result = resolve_terminal_link_blocking(
+            &display_path(root.path()),
+            &display_path(root.path()),
+            "report.mp3",
+            None,
+            &|_, _| Err("index unavailable".into()),
+        )
+        .unwrap();
+        assert!(result.truncated);
+        assert!(result.targets.is_empty());
+        let empty = rusqlite::Connection::open_in_memory().unwrap();
+        empty
+            .execute_batch("CREATE TABLE indexed_files(relative_path TEXT);")
+            .unwrap();
+        assert!(
+            search_indexed_exact_name(&empty, root.path(), "report.mp3", 32)
+                .unwrap()
+                .targets
+                .is_empty()
+        );
     }
 
     #[test]
@@ -546,7 +588,7 @@ mod tests {
                 &display_path(root.path()),
                 text,
                 None,
-                SearchLimits::default(),
+                &fixture_index_lookup,
             )
             .is_err());
         }
@@ -580,7 +622,7 @@ mod tests {
             &display_path(root.path()),
             "nested/Voice.MP3",
             None,
-            SearchLimits::default(),
+            &fixture_index_lookup,
         )
         .expect("resolve case variant");
         assert_eq!(
@@ -636,7 +678,7 @@ mod tests {
             &display_path(&alias),
             "nested/report.txt",
             None,
-            SearchLimits::default(),
+            &fixture_index_lookup,
         )
         .expect("resolve aliased project");
         assert_eq!(resolution.targets[0].path, display_path(file));

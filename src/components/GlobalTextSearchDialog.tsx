@@ -275,7 +275,9 @@ function GlobalTextSearchDialog({
         .catch((nextError: unknown) => {
           settled = true;
           if (disposed || activeSearchIdRef.current !== searchId) return;
-          setError(nextError instanceof Error ? nextError.message : String(nextError));
+          const errorMessage = nextError instanceof Error ? nextError.message : String(nextError);
+          setError(errorMessage === "short-query-index-unavailable"
+            ? t("globalSearch.shortQueryIndexUnavailable") : errorMessage);
         })
         .finally(() => {
           if (activeSearchIdRef.current === searchId) {
@@ -305,6 +307,7 @@ function GlobalTextSearchDialog({
     initialScopePath,
     useRegex,
     wholeWord,
+    t,
   ]);
 
   const handleOpenMatch = useCallback(
