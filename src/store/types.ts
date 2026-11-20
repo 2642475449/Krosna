@@ -5,6 +5,7 @@ import type {
 } from "@/types";
 import type { AttentionItem } from "@/lib/attention";
 import type { PixelPetConfig } from "@/lib/pixelPetConfig";
+
 import type {
   AgentHookDiagnostic, AttentionDiagnostics, AttentionEventDiagnostic,
   NotificationDeliveryDiagnostic,
@@ -19,6 +20,13 @@ import type { VoicePolishSlice } from "./slices/voicePolish";
 import type { ProjectInfo, RecentProjectEntry } from "./utils/recentProjects";
 import type { RemoteAgentId, RemoteConnection, RemoteHost, RemoteHostDraft, RemoteInspection, RemoteSession, RemoteSessionTab } from "@/lib/remote";
 import type { ShortcutAction, ShortcutOverrides } from "@/constants/shortcuts";
+
+/** 所有项目窗口共享的宠物外观、行为及角色文件。 */
+export interface PixelPetSettings {
+  visible: boolean;
+  config: PixelPetConfig;
+  filePath: string | null;
+}
 
 export interface GitConflictDraft {
   detail: import("@/types").GitConflictDetail;

@@ -1,10 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { getPersistentSettings } from "@/lib/api";
 import { persistentSettingsRevision } from "@/lib/persistentSettingsSync";
-import { applyPersistentSettingsToStore } from "@/store";
 import type { PersistentSettings } from "@/types";
 import { useAuxiliaryDockStore } from "../auxiliaryDock";
-import { getRuntimePersistentSettingsSnapshot, persistentSettingsSync } from "./persistentSettingsRuntime";
+import { applyRuntimePersistentSettings, getRuntimePersistentSettingsSnapshot, persistentSettingsSync } from "./persistentSettingsRuntime";
 import { useShortcutStore } from "./shortcutSlice";
 
 const RUNTIME_OWNED_FIELDS = new Set(["lastProjectPath", "explorerContextMenuEnabled", "terminalQuickCommands"]);
@@ -15,7 +14,7 @@ function applyPatch(settings: Partial<PersistentSettings>, revision?: number): v
     key in snapshot && !RUNTIME_OWNED_FIELDS.has(key))) as Partial<PersistentSettings>;
   const applied = persistentSettingsSync.receive(patch, snapshot, revision);
   if (!Object.keys(applied).length) return;
-  applyPersistentSettingsToStore({ ...snapshot, ...applied });
+  applyRuntimePersistentSettings({ ...snapshot, ...applied });
   if (applied.keyboardShortcuts !== undefined) useShortcutStore.getState().setPersistedOverrides(applied.keyboardShortcuts);
   if (applied.auxiliaryDockWidths !== undefined) useAuxiliaryDockStore.getState().restoreWidths(applied.auxiliaryDockWidths);
 }

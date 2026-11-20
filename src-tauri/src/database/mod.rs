@@ -215,6 +215,8 @@ fn infer_asr_auth_mode(api_key: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct PersistentSettingsRecord {
     #[serde(default)]
+    pub pixel_pet_settings: Option<serde_json::Value>,
+    #[serde(default)]
     pub auxiliary_dock_width: Option<f64>,
     #[serde(default)]
     pub auxiliary_dock_widths: Option<BTreeMap<String, f64>>,
@@ -310,6 +312,7 @@ pub struct PersistentSettingsRecord {
 impl Default for PersistentSettingsRecord {
     fn default() -> Self {
         Self {
+            pixel_pet_settings: None,
             auxiliary_dock_width: None,
             auxiliary_dock_widths: None,
             light_theme: "light-glass".into(),
@@ -1047,6 +1050,7 @@ impl Database {
             read_setting(&conn, "voice.inputTarget")?.unwrap_or(settings.voice_input_target);
         settings.voice_trigger_visible =
             read_setting(&conn, "voice.triggerVisible")?.unwrap_or(settings.voice_trigger_visible);
+        settings.pixel_pet_settings = read_setting(&conn, "pixelPet.settings")?;
         settings.terminal_quick_commands = read_setting(&conn, "quickCommands.terminalCommands")?
             .unwrap_or(settings.terminal_quick_commands);
         settings.default_agent_id =
@@ -1371,6 +1375,9 @@ impl Database {
         write_setting(&conn, "voice.shortcut", &settings.voice_shortcut)?;
         write_setting(&conn, "keyboard.shortcuts", &settings.keyboard_shortcuts)?;
         write_setting(&conn, "voice.inputTarget", &settings.voice_input_target)?;
+        if let Some(pet) = &settings.pixel_pet_settings {
+            write_setting(&conn, "pixelPet.settings", pet)?;
+        }
         write_setting(
             &conn,
             "voice.triggerVisible",
@@ -1788,6 +1795,46 @@ mod tests {
         ScheduledTaskRecord, ScheduledTaskRunCompletion, ScheduledTaskRunStatus,
         ScheduledTaskSchedule,
     };
+
+    #[test]
+    fn pixel_pet_settings_are_shared_and_survive_unrelated_window_saves() -> Result<(), String> {
+        let database = Database::open_in_memory();
+        assert!(database
+            .load_persistent_settings()?
+            .pixel_pet_settings
+            .is_none());
+        let stale_window = database.load_persistent_settings()?;
+        let pet = serde_json::json!({
+            "visible": false,
+            "config": {"id": "custom", "pixelSize": 3, "behavior": {"speed": 2}},
+            "filePath": "D:/pets/shared.json"
+        });
+        let settings = PersistentSettingsRecord {
+            pixel_pet_settings: Some(pet.clone()),
+            ..PersistentSettingsRecord::default()
+        };
+        database.save_general_persistent_settings_patch(&settings, &["pixelPetSettings".into()])?;
+        let restored = database.load_persistent_settings()?;
+        assert_eq!(restored.pixel_pet_settings, Some(pet.clone()));
+        database
+            .save_general_persistent_settings_patch(&stale_window, &["terminalFontSize".into()])?;
+        assert_eq!(
+            database.load_persistent_settings()?.pixel_pet_settings,
+            Some(pet)
+        );
+
+        let unlinked = serde_json::json!({"visible": true, "config": {"id": "preset", "pixelSize": 1}, "filePath": null});
+        let settings = PersistentSettingsRecord {
+            pixel_pet_settings: Some(unlinked.clone()),
+            ..restored
+        };
+        database.save_general_persistent_settings_patch(&settings, &["pixelPetSettings".into()])?;
+        assert_eq!(
+            database.load_persistent_settings()?.pixel_pet_settings,
+            Some(unlinked)
+        );
+        Ok(())
+    }
 
     #[test]
     fn default_terminal_shell_round_trips_and_supports_legacy_settings() -> Result<(), String> {

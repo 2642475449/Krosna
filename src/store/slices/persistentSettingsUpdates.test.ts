@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyPersistentSettingsToStore, createAppStore, useAppStore } from "@/store";
 import type { PersistentSettings } from "@/types";
-import { getRuntimePersistentSettingsSnapshot, persistentSettingsSync } from "./persistentSettingsRuntime";
+import { applyRuntimePersistentSettings, getRuntimePersistentSettingsSnapshot, persistentSettingsSync } from "./persistentSettingsRuntime";
 import { applyPersistentSettingsUpdate, startPersistentSettingsUpdates } from "./persistentSettingsUpdates";
 import { useShortcutStore } from "./shortcutSlice";
 
@@ -23,7 +23,7 @@ beforeEach(() => {
   persistentSettingsSync.initialize(initial);
 });
 afterEach(() => {
-  applyPersistentSettingsToStore(initial);
+  applyRuntimePersistentSettings(initial);
   useShortcutStore.getState().setOverrides(initial.keyboardShortcuts);
 });
 
@@ -36,6 +36,45 @@ it("applies global notification, language, font, and shell changes to an already
   });
   expect(persistentSettingsSync.changes(getRuntimePersistentSettingsSnapshot())).not.toHaveProperty("notificationEnabled");
   expect(persistentSettingsSync.changes(getRuntimePersistentSettingsSnapshot())).not.toHaveProperty("language");
+});
+
+it("synchronizes the complete pet across project windows without echoing the update", () => {
+  const state = useAppStore.getState();
+  const revision = state.pixelPetFileRevision;
+  const pet = { visible: !state.pixelPetVisible,
+    config: { ...state.pixelPetConfig, pixelSize: 3 as const, name: "Shared pet" },
+    filePath: "D:/pets/shared.json" };
+  applyPersistentSettingsUpdate({ revision: 1, settings: { pixelPetSettings: pet } });
+  expect(getRuntimePersistentSettingsSnapshot().pixelPetSettings).toEqual(pet);
+  expect(useAppStore.getState()).toMatchObject({
+    pixelPetFileRevision: revision + 1, pixelPetFileSnapshot: null, pixelPetFileError: null,
+  });
+  expect(persistentSettingsSync.changes(getRuntimePersistentSettingsSnapshot())).not.toHaveProperty("pixelPetSettings");
+  applyPersistentSettingsUpdate({ revision: 0, settings: { pixelPetSettings: initial.pixelPetSettings } });
+  expect(getRuntimePersistentSettingsSnapshot().pixelPetSettings).toEqual(pet);
+});
+
+it("keeps local pet edits atomic while receiving unrelated global settings", () => {
+  const local = { ...useAppStore.getState().pixelPetConfig, name: "Unsaved pet", pixelSize: 1 as const };
+  useAppStore.getState().setPixelPetConfig(local);
+  applyPersistentSettingsUpdate({ revision: 1, settings: {
+    pixelPetSettings: { ...initial.pixelPetSettings!, visible: false }, language: "en",
+  } });
+  expect(useAppStore.getState().pixelPetConfig).toBe(local);
+  expect(useAppStore.getState().pixelPetVisible).toBe(initial.pixelPetSettings!.visible);
+  expect(useAppStore.getState().language).toBe("en");
+  expect(persistentSettingsSync.changes(getRuntimePersistentSettingsSnapshot())).toHaveProperty("pixelPetSettings.config", local);
+});
+
+it("migrates a legacy local pet and restores the shared pet when a new project window initializes", () => {
+  const local = { ...useAppStore.getState().pixelPetConfig, name: "Legacy pet" };
+  useAppStore.getState().setPixelPetConfig(local);
+  applyRuntimePersistentSettings({ ...initial, pixelPetSettings: null });
+  expect(useAppStore.getState().pixelPetConfig).toBe(local);
+  persistentSettingsSync.initialize({ ...initial, pixelPetSettings: null });
+  expect(persistentSettingsSync.changes(getRuntimePersistentSettingsSnapshot())).toHaveProperty("pixelPetSettings.config", local);
+  applyRuntimePersistentSettings(initial);
+  expect(getRuntimePersistentSettingsSnapshot().pixelPetSettings).toEqual(initial.pixelPetSettings);
 });
 
 it("preserves local unsaved settings while applying unrelated fields and rejects stale revisions", () => {

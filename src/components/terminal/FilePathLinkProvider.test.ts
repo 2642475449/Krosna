@@ -599,9 +599,9 @@ describe("terminal file path links", () => {
         },
       },
     } as unknown as Terminal;
-    const activated: Array<{ path: string; openDirectly: boolean }> = [];
-    const provider = new FilePathLinkProvider(terminal, (path, openDirectly) => {
-      activated.push({ path: path.filePath, openDirectly });
+    const activated: Array<{ path: string; openDirectly: boolean; clientX?: number }> = [];
+    const provider = new FilePathLinkProvider(terminal, (path, openDirectly, event) => {
+      activated.push({ path: path.filePath, openDirectly, clientX: event?.clientX });
     });
     let providedLinks: Parameters<Parameters<typeof provider.provideLinks>[1]>[0];
 
@@ -612,9 +612,9 @@ describe("terminal file path links", () => {
     const link = providedLinks?.[0];
     expect(link).toBeDefined();
 
-    link?.activate({ button: 0, ctrlKey: false } as MouseEvent, link.text);
-    link?.activate({ button: 1, ctrlKey: true } as MouseEvent, link.text);
-    expect(activated).toEqual([{ path: "src/Terminal.tsx", openDirectly: false }]);
+    link?.activate({ button: 0, ctrlKey: false, clientX: 312 } as MouseEvent, link.text);
+    link?.activate({ button: 1, ctrlKey: true, clientX: 400 } as MouseEvent, link.text);
+    expect(activated).toEqual([{ path: "src/Terminal.tsx", openDirectly: false, clientX: 312 }]);
   });
 
   it("marks Ctrl or Cmd left clicks for direct opening", async () => {

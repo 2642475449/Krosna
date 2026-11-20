@@ -4,10 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
 import jaJP from "antd/locale/ja_JP";
-import {
-  applyPersistentSettingsToStore,
-  useAppStore,
-} from "./store";
+import { useAppStore } from "./store";
 import {
   isPersistentThemeUpdate,
   PERSISTENT_THEME_UPDATED_EVENT,
@@ -16,7 +13,7 @@ import {
 } from "./lib/persistentTheme";
 import type { NetworkProxyMode } from "./types";
 import { persistentSettingsRevision } from "./lib/persistentSettingsSync";
-import { persistentSettingsSync, getRuntimePersistentSettingsSnapshot as getPersistentSettingsSnapshot } from "./store/slices/persistentSettingsRuntime";
+import { applyRuntimePersistentSettings, persistentSettingsSync, getRuntimePersistentSettingsSnapshot as getPersistentSettingsSnapshot } from "./store/slices/persistentSettingsRuntime";
 import { useShortcutStore } from "./store/slices/shortcutSlice";
 import { useAuxiliaryDockStore } from "./store/auxiliaryDock";
 import { startPersistentSettingsUpdates } from "./store/slices/persistentSettingsUpdates";
@@ -138,6 +135,9 @@ function App() {
   const voiceShortcut = useAppStore((s) => s.voiceShortcut);
   const voiceInputTarget = useAppStore((s) => s.voiceInputTarget);
   const voiceTriggerVisible = useAppStore((s) => s.voiceTriggerVisible);
+  const pixelPetVisible = useAppStore((s) => s.pixelPetVisible);
+  const pixelPetConfig = useAppStore((s) => s.pixelPetConfig);
+  const pixelPetFilePath = useAppStore((s) => s.pixelPetFilePath);
   const [persistentSettingsReady, setPersistentSettingsReady] = useState(false);
 
   useEffect(() => {
@@ -214,9 +214,13 @@ function App() {
       voiceInputTarget,
       voiceTriggerVisible,
       keyboardShortcuts,
+      pixelPetSettings: { visible: pixelPetVisible, config: pixelPetConfig, filePath: pixelPetFilePath },
     }),
     [
       auxiliaryDockWidths,
+      pixelPetVisible,
+      pixelPetConfig,
+      pixelPetFilePath,
       isVoiceWorkerWindow,
       keyboardShortcuts,
       asrApiKey,
@@ -325,7 +329,7 @@ function App() {
       .then((settings) => {
         if (!disposed) {
           message.destroy(PERSISTENT_SETTINGS_LOAD_ERROR_KEY);
-          applyPersistentSettingsToStore(settings);
+          applyRuntimePersistentSettings(settings);
           if (!isVoiceWorkerWindow && settings.auxiliaryDockWidths
             && useAuxiliaryDockStore.getState().widths === initialDockWidths) {
             useAuxiliaryDockStore.getState().restoreWidths(settings.auxiliaryDockWidths);

@@ -13,7 +13,7 @@ export interface DetectedFilePath extends ParsedPath {
 }
 
 export type FilePathLinkValidator = (path: ParsedPath) => Promise<boolean>;
-export type FilePathLinkHandler = (path: ParsedPath, openDirectly: boolean) => unknown;
+export type FilePathLinkHandler = (path: ParsedPath, openDirectly: boolean, event?: MouseEvent) => unknown;
 export type FilePathLinkHoverHandler = (path: ParsedPath, event: MouseEvent) => unknown;
 
 interface LogicalBufferLineSegment {
@@ -293,7 +293,7 @@ export class FilePathLinkProvider implements ILinkProvider {
 
           this.activatingPaths.add(activationKey);
           try {
-            void Promise.resolve(this.onActivate(path, Boolean(event.ctrlKey || event.metaKey))).finally(() => {
+            void Promise.resolve(this.onActivate(path, Boolean(event.ctrlKey || event.metaKey), event)).finally(() => {
               this.activatingPaths.delete(activationKey);
             });
           } catch (error) {

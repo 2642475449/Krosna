@@ -73,6 +73,7 @@ export interface NetworkProxyTestResult {
 }
 
 export interface PersistentSettings {
+  pixelPetSettings?: import("@/store/types").PixelPetSettings | null;
   auxiliaryDockWidth?: number | null;
   auxiliaryDockWidths?: Partial<Record<"task-monitor" | "file" | "review" | "terminal" | "task", number>> | null;
   lightTheme: string;

@@ -3,7 +3,7 @@ import { useResumeSession } from "@/hooks/useResumeSession";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { matchesShortcut } from "@/lib/shortcut";
 import { useEffect, useRef, useCallback, useState, useId } from "react";
-import type { DragEvent as ReactDragEvent } from "react";
+import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Button, Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -71,7 +71,7 @@ import {
 } from "@/lib/terminalSubmission";
 import { AgentIcon } from "@/components/AgentIcon";
 import { SideQuestionComposer } from "@/components/SideQuestionComposer";
-import { TerminalLinkDialog } from "@/components/terminal/TerminalLinkDialog";
+import { TerminalLinkDialog, type TerminalLinkAnchor } from "@/components/terminal/TerminalLinkDialog";
 import { getAgentTerminalBehavior, isAiAgentId } from "@/lib/agents";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { canRestoreTerminalInputCursor, createTerminalAgentInterrupt } from "@/lib/terminalAgentInterrupt";
@@ -205,11 +205,12 @@ interface SideQuestionDraft {
 }
 
 type PendingTerminalLink =
-  | { kind: "external"; href: string }
+  | { kind: "external"; href: string; anchor?: TerminalLinkAnchor }
   | {
       kind: "file";
       path: ParsedPath;
       context: TerminalLinkContext;
+      anchor?: TerminalLinkAnchor;
       resolution?: TerminalLinkResolution;
       selectedPath?: string;
     };
@@ -297,6 +298,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const terminalCommandWatcherRef = useRef(createTerminalCommandWatcher());
   const imagePreviewRequestRef = useRef(0);
   const imagePreviewDismissTimerRef = useRef<number | null>(null);
+  const lastPointerClientRef = useRef<TerminalLinkAnchor | null>(null);
 
   const activeTheme = useAppStore((s) => s.activeTheme());
   const fontSize = useAppStore((s) => s.terminalFontSize);
@@ -702,9 +704,22 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     }
   }, [openFileTab, t]);
 
-  const activateTerminalFileLink = useCallback((path: ParsedPath, openDirectly: boolean) => {
+  const resolveLinkAnchor = useCallback((event?: Pick<MouseEvent, "clientX" | "clientY">): TerminalLinkAnchor | undefined => {
+    if (event && (event.clientX !== 0 || event.clientY !== 0)) {
+      return { x: event.clientX, y: event.clientY };
+    }
+    if (lastPointerClientRef.current) {
+      return lastPointerClientRef.current;
+    }
+    const bounds = containerRef.current?.getBoundingClientRect();
+    if (!bounds) return undefined;
+    return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+  }, []);
+
+  const activateTerminalFileLink = useCallback((path: ParsedPath, openDirectly: boolean, event?: MouseEvent) => {
     // xterm 会把同一链接范围内的拖选也当成 activate，必须优先保留文字选择。
     if (terminalRef.current?.hasSelection()) return;
+    const anchor = resolveLinkAnchor(event);
     const link: PendingTerminalLink = {
       kind: "file",
       path,
@@ -712,12 +727,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         projectPath: currentSessionPathRef.current,
         workingDirectory: currentTerminalDirectoryRef.current,
       },
+      anchor,
     };
     return linkActivationGateRef.current.activate(
       () => openDirectly ? openTerminalLink(link) : setPendingTerminalLink(link),
       openDirectly,
     );
-  }, [openTerminalLink]);
+  }, [openTerminalLink, resolveLinkAnchor]);
 
   useEffect(() => () => linkActivationGateRef.current.dispose(), [sessionId]);
 
@@ -726,6 +742,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
 
     if (await openTerminalLink(pendingTerminalLink)) setPendingTerminalLink(null);
   }, [openTerminalLink, openingTerminalLink, pendingTerminalLink]);
+
+  const handleCancelTerminalLink = useCallback(() => {
+    if (!openingTerminalLink) setPendingTerminalLink(null);
+  }, [openingTerminalLink]);
+
+  const handleTerminalPointerUpCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    lastPointerClientRef.current = { x: event.clientX, y: event.clientY };
+  }, []);
 
   const isDropPositionInsideTerminal = useCallback((position: { x: number; y: number }) => {
     const container = containerRef.current;
@@ -952,12 +977,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     let unregisterTerminalRecovery = () => {};
     const webLinkHandler = createTerminalWebLinkHandler(
       (uri) => {
-        linkActivationGateRef.current.activate(() => setPendingTerminalLink({ kind: "external", href: uri }));
+        const anchor = resolveLinkAnchor();
+        linkActivationGateRef.current.activate(() => setPendingTerminalLink({ kind: "external", href: uri, anchor }));
       },
       showExternalImagePreview,
       scheduleImagePreviewDismissal,
       {
-        activate: (path, event) => activateTerminalFileLink({ filePath: path }, Boolean(event.ctrlKey || event.metaKey)),
+        activate: (path, event) => activateTerminalFileLink({ filePath: path }, Boolean(event.ctrlKey || event.metaKey), event),
         hover: (path, event) => showLocalImagePreview({ filePath: path }, event),
       },
     );
@@ -1968,6 +1994,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     activateTerminalFileLink,
     t,
     openFileTab,
+    resolveLinkAnchor,
     showExternalImagePreview,
     showLocalImagePreview,
     scheduleImagePreviewDismissal,
@@ -2054,6 +2081,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
             outlineOffset: isExternalFileDragOver || isAgentFileDragOver ? "-4px" : "0",
             position: "relative",
           }}
+          onPointerUpCapture={handleTerminalPointerUpCapture}
           onDragEnter={handleAgentFileDragEnter}
           onDragOver={handleAgentFileDragOver}
           onDragLeave={handleAgentFileDragLeave}
@@ -2116,12 +2144,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         open={Boolean(pendingTerminalLink)}
         kind={pendingTerminalLink?.kind ?? "file"}
         value={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.path.filePath : pendingTerminalLink?.href ?? ""}
+        anchor={pendingTerminalLink?.anchor}
         resolution={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.resolution : undefined}
         selectedPath={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.selectedPath : undefined}
         opening={openingTerminalLink}
         onSelectPath={(path) => setPendingTerminalLink((link) => link?.kind === "file" ? { ...link, selectedPath: path } : link)}
         onConfirm={() => void handleConfirmTerminalLinkOpen()}
-        onCancel={() => !openingTerminalLink && setPendingTerminalLink(null)}
+        onCancel={handleCancelTerminalLink}
       />
     </>
   );
