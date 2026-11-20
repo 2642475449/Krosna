@@ -1,8 +1,10 @@
 use serde::Serialize;
+#[cfg(not(target_os = "windows"))]
 use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
+#[cfg(any(test, not(target_os = "windows")))]
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -134,28 +136,14 @@ pub(crate) fn agent_definition(agent_id: &str) -> Option<&'static AgentDefinitio
 pub(crate) fn find_executable(command: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        let mut lookup = Command::new("where.exe");
-        lookup.arg(command);
-        let output = run_command_with_timeout(lookup, DISCOVERY_TIMEOUT).ok()?;
-        if !output.status.success() {
-            return None;
+        let mut directories: Vec<_> = std::env::var_os("PATH")
+            .map(|path| std::env::split_paths(&path).collect())
+            .unwrap_or_default();
+        // 桌面进程可能继承安装 CLI 之前的 PATH；补查 npm 的用户安装目录。
+        if let Some(app_data) = std::env::var_os("APPDATA") {
+            directories.push(std::path::PathBuf::from(app_data).join("npm"));
         }
-
-        // npm exposes both an extensionless POSIX shim and a .cmd shim on
-        // Windows. `where` lists the extensionless file first, but Windows
-        // cannot execute it directly, so select the first native wrapper.
-        return String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .find(|candidate| {
-                let lower = candidate.to_ascii_lowercase();
-                !candidate.is_empty()
-                    && Path::new(candidate).exists()
-                    && [".exe", ".com", ".cmd", ".bat", ".ps1"]
-                        .iter()
-                        .any(|extension| lower.ends_with(extension))
-            })
-            .map(str::to_string);
+        return find_windows_executable(command, &directories);
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -173,6 +161,19 @@ pub(crate) fn find_executable(command: &str) -> Option<String> {
             .find(|candidate| !candidate.is_empty() && Path::new(candidate).exists())
             .map(str::to_string)
     }
+}
+
+#[cfg(target_os = "windows")]
+fn find_windows_executable(command: &str, directories: &[std::path::PathBuf]) -> Option<String> {
+    // 直接检查文件，避免 where 的超时和本地代码页破坏含中文的路径。
+    // 跳过 npm 的无扩展名 POSIX shim，优先选择 Windows 可执行入口。
+    directories.iter().find_map(|directory| {
+        [".exe", ".com", ".cmd", ".bat", ".ps1"]
+            .iter()
+            .map(|extension| directory.join(format!("{command}{extension}")))
+            .find(|candidate| candidate.is_file())
+            .map(|candidate| candidate.to_string_lossy().into_owned())
+    })
 }
 
 pub(crate) fn find_agent_executable(agent_id: &str) -> Result<String, String> {
@@ -365,6 +366,31 @@ mod tests {
     fn discovery_and_version_checks_have_finite_budgets() {
         assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(2));
         assert_eq!(VERSION_TIMEOUT, Duration::from_secs(5));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn discovery_falls_back_to_npm_and_ignores_posix_shims() {
+        let root = tempfile::tempdir().expect("temporary directory");
+        let stale_path = root.path().join("old-path");
+        let npm = root.path().join("中文用户").join("npm");
+        std::fs::create_dir_all(&npm).expect("npm directory");
+        std::fs::create_dir_all(&stale_path).expect("PATH directory");
+        std::fs::write(stale_path.join("codex"), "POSIX shim").expect("shim");
+        std::fs::write(npm.join("codex.cmd"), "@echo off").expect("Windows shim");
+        assert_eq!(
+            super::find_windows_executable("codex", &[stale_path.clone(), npm.clone()]),
+            Some(npm.join("codex.cmd").to_string_lossy().into_owned())
+        );
+        std::fs::write(stale_path.join("codex.exe"), "native").expect("native CLI");
+        assert_eq!(
+            super::find_windows_executable("codex", &[stale_path.clone(), npm]),
+            Some(stale_path.join("codex.exe").to_string_lossy().into_owned())
+        );
+        assert_eq!(
+            super::find_windows_executable("missing", &[stale_path]),
+            None
+        );
     }
 
     #[cfg(target_os = "windows")]

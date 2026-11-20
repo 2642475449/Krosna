@@ -156,7 +156,8 @@ fn fetch_codex_rate_limits() -> Result<CodexRateLimits, String> {
 
     let executable = match find_agent_executable("codex") {
         Ok(path) => path,
-        Err(_) => return Ok(unavailable_result("Codex CLI not found", identity)),
+        // CLI 检测失败可恢复，按失败退避重试，不能永久暂停用量查询。
+        Err(_) => return Ok(error_result("Codex CLI not found".into(), identity)),
     };
 
     Ok(fetch_via_rpc(&executable, identity))
@@ -853,6 +854,37 @@ mod tests {
             assert_eq!(cache.retry_at - now, delay);
             assert_eq!(result.error.as_deref(), Some("offline"));
         }
+    }
+
+    #[test]
+    #[ignore = "requires a locally installed and signed-in Codex CLI"]
+    fn installed_cli_can_refresh_usage() {
+        let result = fetch_codex_rate_limits().expect("usage query");
+        assert_eq!(
+            result.status, "ok",
+            "usage query failed: {:?}",
+            result.error
+        );
+    }
+
+    #[test]
+    fn missing_cli_retries_automatically_and_retains_last_usage() {
+        let mut cache = UsageCache::default();
+        let mut success = unavailable_result("", CodexIdentity::default());
+        success.status = "ok".into();
+        success.error = None;
+        success.updated_at = 42;
+        cache.update(success, 0);
+        let result = cache.update(
+            error_result("Codex CLI not found".into(), CodexIdentity::default()),
+            100,
+        );
+        assert_eq!(result.updated_at, 42);
+        assert_eq!(result.error.as_deref(), Some("Codex CLI not found"));
+        assert_eq!(cache.retry_at, 100 + REFRESH_INTERVAL_MS);
+        assert!(cache
+            .cached(cache.retry_at, cache.retry_at, false)
+            .is_none());
     }
 
     #[test]
