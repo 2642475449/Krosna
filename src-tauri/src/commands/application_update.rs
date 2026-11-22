@@ -8,8 +8,9 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::network_proxy::{resolve_network_proxy, NetworkProxySettings};
 
-const CHECK_TIMEOUT: Duration = Duration::from_secs(6);
-const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(15);
+const CHECK_TIMEOUT: Duration = Duration::from_secs(15);
+const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(30);
+const MIRROR_HOST: &str = "termflow.jianglan.online";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +22,16 @@ pub struct UpdateMetadata {
     raw_json: serde_json::Value,
     host: String,
     alternate: Option<(ResourceId, String)>,
+    mirror_installer_url: Option<String>,
+}
+
+fn resolve_mirror_installer_url(primary: &Url, alternate: Option<&Url>) -> Option<String> {
+    if primary.host_str() == Some(MIRROR_HOST) {
+        return Some(primary.to_string());
+    }
+    alternate
+        .filter(|url| url.host_str() == Some(MIRROR_HOST))
+        .map(Url::to_string)
 }
 
 // 两端发布脚本分别保留 Krosna 和 Termflow 的安装包文件名。只为已知的平台和
@@ -154,6 +165,10 @@ pub async fn check_application_update<R: Runtime>(
     else {
         return Ok(None);
     };
+    let mirror_installer_url = resolve_mirror_installer_url(
+        &update.download_url,
+        alternate.as_ref().map(|item| &item.download_url),
+    );
     let mut resources = webview.resources_table();
     Ok(Some(UpdateMetadata {
         current_version: update.current_version.clone(),
@@ -166,6 +181,7 @@ pub async fn check_application_update<R: Runtime>(
             let host = update.download_url.host_str().unwrap_or_default().into();
             (resources.add(update), host)
         }),
+        mirror_installer_url,
     }))
 }
 
@@ -232,5 +248,22 @@ mod tests {
             Url::parse("https://termflow.jianglan.online/releases/Termflow_1.8.38_arm64-setup.exe")
                 .unwrap();
         assert_eq!(alternate_windows_url(&other, &version), None);
+    }
+
+    #[test]
+    fn resolves_mirror_installer_url_only_when_a_source_targets_the_mirror_host() {
+        let github = Url::parse("https://github.com/2642475449/Krosna/releases/download/v1.8.38/Krosna_1.8.38_x64-setup.exe").unwrap();
+        let mirror =
+            Url::parse("https://termflow.jianglan.online/releases/Termflow_1.8.38_x64-setup.exe")
+                .unwrap();
+        assert_eq!(
+            resolve_mirror_installer_url(&github, Some(&mirror)).as_deref(),
+            Some(mirror.as_str())
+        );
+        assert_eq!(
+            resolve_mirror_installer_url(&mirror, Some(&github)).as_deref(),
+            Some(mirror.as_str())
+        );
+        assert_eq!(resolve_mirror_installer_url(&github, None), None);
     }
 }

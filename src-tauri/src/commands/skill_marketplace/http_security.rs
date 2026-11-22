@@ -88,7 +88,7 @@ pub(super) fn preview_client() -> Result<Client, String> {
         .redirect(redirect_policy(false))
         .user_agent("Krosna skill marketplace")
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
+        .read_timeout(Duration::from_secs(30))
         .build()
         .map_err(|error| error.to_string())
 }

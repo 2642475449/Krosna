@@ -16,6 +16,7 @@ export interface ApplicationUpdateSnapshot {
   currentVersion: string;
   availableVersion: string | null;
   releaseNotes: string | null;
+  mirrorInstallerUrl: string | null;
   downloadedBytes: number;
   totalBytes: number | null;
   percent: number | null;
@@ -39,6 +40,7 @@ export function createInitialApplicationUpdateSnapshot(
     currentVersion,
     availableVersion: null,
     releaseNotes: null,
+    mirrorInstallerUrl: null,
     downloadedBytes: 0,
     totalBytes: null,
     percent: null,

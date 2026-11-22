@@ -2,9 +2,6 @@ import {
   CheckCircleFilled,
   CloudDownloadOutlined,
   ExclamationCircleOutlined,
-  ExportOutlined,
-  GithubOutlined,
-  GlobalOutlined,
   LoadingOutlined,
   RightOutlined,
   SyncOutlined,
@@ -30,12 +27,40 @@ import {
   type ReleaseNoteInline,
 } from "@/lib/updateReleaseNotes";
 import { useAppStore } from "@/store";
-import { useApplicationUpdateStore } from "@/store/slices/applicationUpdate";
+import {
+  useApplicationUpdateStore,
+  type ApplicationUpdateErrorStage,
+} from "@/store/slices/applicationUpdate";
 import "./ApplicationUpdateModal.css";
 
 interface InstallWarningCounts {
   runningTurns: number;
   dirtyTabs: number;
+}
+
+type UpdateErrorHintKey =
+  | "updater.timeoutErrorHint"
+  | "updater.networkErrorHint"
+  | "updater.signatureErrorHint"
+  | "updater.recoveryHint"
+  | "updater.installErrorHint";
+
+function resolveErrorHintKey(
+  error: string | null,
+  stage: ApplicationUpdateErrorStage | null,
+): UpdateErrorHintKey {
+  if (stage === "install") return "updater.installErrorHint";
+  const text = error ?? "";
+  if (/timed?\s*out|timeout|deadline/i.test(text)) {
+    return "updater.timeoutErrorHint";
+  }
+  if (/signature|verify|checksum|hash|minisign/i.test(text)) {
+    return "updater.signatureErrorHint";
+  }
+  if (/error sending request|dns|connect|reset|broken pipe|eof|network|offline|proxy|tls|ssl|cert/i.test(text)) {
+    return "updater.networkErrorHint";
+  }
+  return "updater.recoveryHint";
 }
 
 function renderReleaseNoteInlines(inlines: ReleaseNoteInline[], keyPrefix: string) {
@@ -61,7 +86,6 @@ function renderReleaseNoteInlines(inlines: ReleaseNoteInline[], keyPrefix: strin
 
 export function ApplicationUpdateModal() {
   const { t } = useTranslation();
-  const modalOpen = useApplicationUpdateStore((state) => state.modalOpen);
   const update = useApplicationUpdateStore();
   const [confirmCounts, setConfirmCounts] = useState<InstallWarningCounts | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -69,10 +93,10 @@ export function ApplicationUpdateModal() {
   const errorDetailsId = useId();
 
   useEffect(() => {
-    if (!modalOpen || !update.error) {
+    if (!update.modalOpen || !update.error) {
       setDetailsOpen(false);
     }
-  }, [modalOpen, update.error]);
+  }, [update.modalOpen, update.error]);
 
   const parsedReleaseNotes = useMemo(
     () => (update.releaseNotes ? parseReleaseNotes(update.releaseNotes) : []),
@@ -80,7 +104,7 @@ export function ApplicationUpdateModal() {
   );
 
   // 弹窗关闭时不渲染也不随进度事件重渲染。
-  if (!modalOpen) return null;
+  if (!update.modalOpen) return null;
 
   const isPreparing = update.phase === "checking" || update.phase === "available";
   const isDownloadingOrReady =
@@ -89,7 +113,6 @@ export function ApplicationUpdateModal() {
     update.phase === "installing";
   const canInstall = update.phase === "ready";
   const canRetry = update.phase === "error";
-  const { availableVersion } = update;
   const isConnectivityError =
     update.errorStage === "check" || update.errorStage === "download";
   const errorCopied = isCopied("updater-error");
@@ -146,9 +169,11 @@ export function ApplicationUpdateModal() {
       ? t("updater.downloadFailed")
       : t("updater.installFailed");
 
-  const errorDescription = isConnectivityError
-    ? t("updater.recoveryHint")
-    : t("updater.installErrorHint");
+  const errorDescription = t(resolveErrorHintKey(update.error, update.errorStage));
+
+  const modalTitle = update.availableVersion && update.phase !== "error"
+    ? t("updater.updateAvailableTitle")
+    : t("updater.title");
 
   return (
     <>
@@ -172,11 +197,7 @@ export function ApplicationUpdateModal() {
             />
             <div className="app-update-modal__header-text">
               <div className="app-update-modal__title-row">
-                <span className="app-update-modal__title">
-                  {update.availableVersion
-                    ? t("updater.updateAvailableTitle")
-                    : t("updater.title")}
-                </span>
+                <h2 className="app-update-modal__title">{modalTitle}</h2>
                 {update.availableVersion ? (
                   <span className="app-update-modal__version-pill">
                     v{update.availableVersion}
@@ -324,6 +345,34 @@ export function ApplicationUpdateModal() {
 
               <div className="app-update-modal__disclosure" data-open={detailsOpen ? "true" : "false"}>
                 <div className="app-update-modal__disclosure-bar">
+                  {isConnectivityError ? (
+                    <div className="app-update-modal__error-links">
+                      <button
+                        type="button"
+                        className="app-update-modal__inline-action"
+                        onClick={handleOpenNetworkSettings}
+                      >
+                        {t("updater.openNetworkSettings")}
+                      </button>
+                      {update.errorStage === "download" && update.mirrorInstallerUrl ? (
+                        <button
+                          type="button"
+                          className="app-update-modal__inline-action"
+                          onClick={() => void openExternalUrl(update.mirrorInstallerUrl!)}
+                        >
+                          {t("updater.downloadFromMirror")}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="app-update-modal__inline-action"
+                        onClick={() => void openExternalUrl(KROSNA_RELEASES_URL)}
+                      >
+                        {t("updater.manualDownload")}
+                      </button>
+                    </div>
+                  ) : <span />}
+
                   <button
                     type="button"
                     className="app-update-modal__disclosure-toggle"
@@ -336,97 +385,38 @@ export function ApplicationUpdateModal() {
                       {detailsOpen ? t("updater.hideErrorDetails") : t("updater.showErrorDetails")}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="app-update-modal__copy-btn"
-                    onClick={() => void handleCopyError()}
-                  >
-                    <CopyFeedbackIcon copied={errorCopied} />
-                    <span>{errorCopied ? t("common.copied") : t("updater.copyErrorDetails")}</span>
-                  </button>
                 </div>
+
                 {detailsOpen ? (
-                  <pre id={errorDetailsId} className="app-update-modal__error-code">
-                    {update.error}
-                  </pre>
+                  <div className="app-update-modal__error-details">
+                    <button
+                      type="button"
+                      className="app-update-modal__copy-btn"
+                      onClick={() => void handleCopyError()}
+                    >
+                      <CopyFeedbackIcon copied={errorCopied} />
+                      <span>{errorCopied ? t("common.copied") : t("updater.copyErrorDetails")}</span>
+                    </button>
+                    <pre id={errorDetailsId} className="app-update-modal__error-code">
+                      {update.error}
+                    </pre>
+                  </div>
                 ) : null}
               </div>
             </div>
           ) : null}
 
-          {isConnectivityError ? (
-            <div className="app-update-modal__actions">
-              <button
-                type="button"
-                className="app-update-modal__action-row"
-                onClick={handleOpenNetworkSettings}
-              >
-                <span className="app-update-modal__action-icon" aria-hidden="true">
-                  <GlobalOutlined />
-                </span>
-                <span className="app-update-modal__action-text">
-                  <span className="block app-update-modal__action-title">
-                    {t("updater.openNetworkSettings")}
-                  </span>
-                  <span className="block app-update-modal__action-desc">
-                    {t("updater.openNetworkSettingsDesc")}
-                  </span>
-                </span>
-                <RightOutlined className="app-update-modal__action-arrow" aria-hidden="true" />
-              </button>
-              {update.errorStage === "download" && availableVersion ? (
-                <button
-                  type="button"
-                  className="app-update-modal__action-row"
-                  onClick={() => void openExternalUrl(
-                    `https://termflow.jianglan.online/releases/Termflow_${encodeURIComponent(availableVersion)}_x64-setup.exe`,
-                  )}
-                >
-                  <span className="app-update-modal__action-icon" aria-hidden="true"><CloudDownloadOutlined /></span>
-                  <span className="app-update-modal__action-text">
-                    <span className="block app-update-modal__action-title">
-                      {t("updater.downloadFromMirror")}
-                    </span>
-                    <span className="block app-update-modal__action-desc">
-                      {t("updater.downloadFromMirrorDesc")}
-                    </span>
-                  </span>
-                  <ExportOutlined className="app-update-modal__action-arrow" aria-hidden="true" />
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="app-update-modal__action-row"
-                onClick={() => void openExternalUrl(KROSNA_RELEASES_URL)}
-              >
-                <span className="app-update-modal__action-icon" aria-hidden="true">
-                  <GithubOutlined />
-                </span>
-                <span className="app-update-modal__action-text">
-                  <span className="block app-update-modal__action-title">
-                    {t("updater.manualDownload")}
-                  </span>
-                  <span className="block app-update-modal__action-desc">
-                    {t("updater.manualDownloadDesc")}
-                  </span>
-                </span>
-                <ExportOutlined className="app-update-modal__action-arrow" aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
-
-          {update.availableVersion ? (
+          {update.availableVersion && update.phase !== "error" ? (
             <div className="app-update-modal__notes-wrap">
               <div className="app-update-modal__notes-label">{t("updater.releaseNotes")}</div>
               <div className="app-update-modal__notes">
                 {parsedReleaseNotes.length > 0 ? (
                   parsedReleaseNotes.map((block, index) => {
                     if (block.kind === "heading") {
-                      const HeadingTag = block.level === 1 ? "h1" : block.level === 2 ? "h2" : "h3";
                       return (
-                        <HeadingTag key={`block-${index}`}>
+                        <h4 key={`block-${index}`} className="app-update-modal__note-heading">
                           {renderReleaseNoteInlines(block.inlines, `h-${index}`)}
-                        </HeadingTag>
+                        </h4>
                       );
                     }
                     if (block.kind === "list") {

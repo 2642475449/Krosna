@@ -30,7 +30,7 @@ import {
 } from "@/lib/dashscopeAsr";
 
 const STARTUP_TIMEOUT_MS = 20_000;
-const TRANSCRIBE_TIMEOUT_MS = 30_000;
+const TRANSCRIBE_TIMEOUT_MS = 120_000;
 const LEVEL_POLL_INTERVAL_MS = 200;
 const MAX_AUTO_DURATION_MS = 60_000;
 const MIMO_ASR_UPLOAD_MIME_TYPE = "audio/wav";

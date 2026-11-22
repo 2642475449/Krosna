@@ -6,7 +6,8 @@ use std::time::Duration;
 const FEISHU_CREDENTIAL_TARGET: &str = "Krosna/FeishuNotification";
 const FEISHU_CREDENTIAL_USER: &str = "Krosna";
 const FEISHU_WEBHOOK_PREFIX: &str = "/open-apis/bot/v2/hook/";
-const FEISHU_REQUEST_TIMEOUT_SECS: u64 = 5;
+const FEISHU_CONNECT_TIMEOUT_SECS: u64 = 8;
+const FEISHU_REQUEST_TIMEOUT_SECS: u64 = 15;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -159,6 +160,7 @@ fn send_feishu_blocking(
     let request_body = build_request_body(credentials, payload);
     let client = crate::network_proxy::apply_proxy_to_blocking_client_builder(
         reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_secs(FEISHU_CONNECT_TIMEOUT_SECS))
             .timeout(Duration::from_secs(FEISHU_REQUEST_TIMEOUT_SECS)),
         proxy,
     )?

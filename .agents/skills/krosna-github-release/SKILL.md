@@ -9,7 +9,7 @@ Build and sign each release once. Publish the original installer, signature and 
 
 ## Release contract
 
-- Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` on the identical SemVer version.
+- Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` on the identical SemVer version. Keep the Krosna package entry in `src-tauri/Cargo.lock` in sync.
 - Publish the signed Windows NSIS installer and its `.sig` file as assets of the matching `v<version>` GitHub Release.
 - Generate and upload `latest.json` to that same release.
 - Publish substantive, user-facing Release notes that explain what was added or upgraded and what was fixed. The automatically generated `Full Changelog` link alone is not an acceptable release description.
@@ -18,12 +18,12 @@ Build and sign each release once. Publish the original installer, signature and 
 
 ## Prepare a release
 
-1. Inspect the working tree and preserve unrelated changes.
+1. Inspect the working tree, target commit, and latest published tag. Review the commits and diff between that tag and the target. The new tag publishes the target's committed history, including local commits ahead of the remote. Surface any unexpected committed scope before pushing. Keep unrelated working-tree edits out of the release commit and use an isolated checkout for the preflight if those edits would affect the build.
 2. Choose the next SemVer version; never reuse or mutate an already published version.
-3. Update all three version files and confirm they match the planned `v<version>` tag.
-4. Run the relevant build and test checks, including the Windows packaging preflight below. A release build must have `TAURI_SIGNING_PRIVATE_KEY` configured so its installer has a fresh matching `.sig` file.
-5. Draft the Release notes from the complete diff and commit range between the previous published release tag and the planned tag. Verify important claims against the implementation; do not infer features from commit subjects alone.
-6. Run `pnpm update:manifest --notes "<concise user-facing summary>"`. Do not leave the updater notes as only `Krosna v<version>`. Confirm the generated `latest.json` has the intended version, a non-empty signature, the GitHub Release installer URL, and useful notes.
+3. Update the version files and lockfile entry, then confirm they match the planned `v<version>` tag. Keep the release preparation commit scoped to those files and the release notes unless the task requires a separate fix.
+4. Draft `release-notes/v<version>.md` from the complete diff and commit range between the previous published release tag and the planned tag. Verify important claims against the implementation.
+5. Run the relevant tests and the Windows packaging preflight below on the intended release contents. Inspect the staged diff before committing and confirm that the tag points to the tested source.
+6. In the standard tag-triggered workflow, GitHub Actions supplies `TAURI_SIGNING_PRIVATE_KEY`, signs the installer, and runs `pnpm update:manifest --notes-file release-notes/v<version>.md` using the resulting signature. For an authorized manual publication, run the same manifest command after the signed build. Verify the version, signature, GitHub installer URL, and curated notes in the resulting `latest.json`.
 
 ## Release notes
 
@@ -48,8 +48,15 @@ Build and sign each release once. Publish the original installer, signature and 
 1. Push the matching `v<version>` tag only when the user has explicitly authorized publication.
 2. The `Release Krosna` workflow must publish the installer, signature, generated `latest.json`, and curated Release notes, then mark the release as latest.
 3. After the workflow finishes, inspect the public Release page and confirm both `新增与升级` and `问题修复` are present with the intended content; reject a body containing only GitHub's generated changelog.
-4. Check both public manifests and their actual downloads. Confirm the expected version, signature and release notes match, each installer downloads from its own source, and both files have the same SHA-256 and pass updater signature verification. To retry a mirror deployment, dispatch the workflow for the current latest release tag.
-5. Exercise a packaged Windows updater with the previous version. Test the China path with GitHub unavailable and the GitHub path with the China mirror unavailable. Check update detection and the download through signature verification. An active user's session can be preserved by running the test in a separate profile.
+4. Check both public manifests and download the installers they reference. Confirm the expected version, signature, and release notes match, each URL uses its expected host, and both installers have the same SHA-256 and pass updater signature verification with the application's public key.
+5. Verify client behavior using the previous packaged Windows version in an isolated environment. Test update detection and download through signature verification with only the China mirror reachable, then with only GitHub reachable. If an isolated previous client is unavailable, report the client verification as untested and state which artifact checks passed. Keep active user sessions intact.
+6. In the release report, identify the tag and release commit, summarize the files changed by the release commit, and link the whole version comparison separately. If there are unrelated working-tree changes, report their status separately. Give GitHub publication, mirror deployment, and client verification their own results.
+
+### Retry a mirror deployment
+
+- Check the mirror job result and the public mirror manifest. When GitHub already has the intended latest release and only the mirror job failed with a transient transport error, rerun that job once if the failed run is available.
+- Use `workflow_dispatch` in `.github/workflows/release.yml` with the current latest release tag for a standalone mirror sync. The mirror job downloads the existing signed release in either retry path. Keep the original tag and signed assets.
+- Wait for the retry result and verify the public mirror artifacts. If the same failure recurs, diagnose it before retrying again. Report GitHub and mirror status independently while the mirror is pending or failed.
 
 ## Diagnose update checks
 

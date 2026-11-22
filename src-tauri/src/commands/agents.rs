@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 #[cfg(any(test, not(target_os = "windows")))]
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(2);
-const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
+const VERSION_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn discovery_and_version_checks_have_finite_budgets() {
         assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(2));
-        assert_eq!(VERSION_TIMEOUT, Duration::from_secs(5));
+        assert_eq!(VERSION_TIMEOUT, Duration::from_secs(15));
     }
 
     #[cfg(target_os = "windows")]

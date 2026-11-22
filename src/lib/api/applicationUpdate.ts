@@ -10,6 +10,7 @@ interface UpdateMetadata {
   rawJson: Record<string, unknown>;
   host: string;
   alternate: [number, string] | null;
+  mirrorInstallerUrl?: string | null;
 }
 
 export interface ApplicationUpdate {
@@ -17,6 +18,7 @@ export interface ApplicationUpdate {
   version: string;
   body?: string;
   sources: { host: string; update: Update }[];
+  mirrorInstallerUrl?: string | null;
   downloadedFrom?: Update;
 }
 
@@ -28,7 +30,13 @@ export async function checkApplicationUpdate(settings: NetworkProxySettings): Pr
     const [rid, host] = metadata.alternate;
     sources.push({ host, update: new Update({ ...metadata, rid }) });
   }
-  return { currentVersion: metadata.currentVersion, version: metadata.version, body: metadata.body, sources };
+  return {
+    currentVersion: metadata.currentVersion,
+    version: metadata.version,
+    body: metadata.body,
+    sources,
+    mirrorInstallerUrl: metadata.mirrorInstallerUrl ?? null,
+  };
 }
 
 export async function downloadApplicationUpdate(

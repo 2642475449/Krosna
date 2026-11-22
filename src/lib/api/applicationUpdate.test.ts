@@ -19,6 +19,7 @@ const settings = { mode: "disabled", customProxyUrl: "", noProxy: "localhost" } 
 const metadata = {
   rid: 1, alternate: [2, "mirror"], host: "primary", currentVersion: "1.8.37",
   version: "1.8.38", rawJson: {}, body: "Release notes",
+  mirrorInstallerUrl: "https://termflow.jianglan.online/releases/Termflow_1.8.38_x64-setup.exe",
 };
 
 beforeEach(() => {
@@ -34,9 +35,10 @@ test("passes the application proxy settings directly to the native checker", asy
 
 test("downloads once when the selected mirror succeeds", async () => {
   const update = (await checkApplicationUpdate(settings))!;
+  expect(update.mirrorInstallerUrl).toBe(metadata.mirrorInstallerUrl);
   const onEvent = vi.fn();
-  await downloadApplicationUpdate(update, onEvent, { timeout: 120_000 });
-  expect(download.mock.calls).toEqual([[1, onEvent, { timeout: 120_000 }]]);
+  await downloadApplicationUpdate(update, onEvent);
+  expect(download.mock.calls).toEqual([[1, onEvent, undefined]]);
   await installApplicationUpdate(update);
   expect(install).toHaveBeenCalledWith(1);
 });

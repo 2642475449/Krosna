@@ -14,7 +14,6 @@ import {
   type ApplicationUpdatePhase,
 } from "@/store/slices/applicationUpdate";
 
-const DOWNLOAD_TIMEOUT_MS = 120_000;
 const PENDING_UPDATE_VERSION_KEY = "krosna.pending-update-version";
 
 // 仍处于"已持有更新资源"状态的阶段；命中时直接复用 pendingUpdate，不再重新请求。
@@ -123,6 +122,7 @@ export async function checkForApplicationUpdate(
         currentVersion: update.currentVersion,
         availableVersion: update.version,
         releaseNotes: update.body ?? null,
+        mirrorInstallerUrl: update.mirrorInstallerUrl ?? null,
         downloadedBytes: 0,
         totalBytes: null,
         percent: null,
@@ -179,6 +179,7 @@ export async function downloadPendingApplicationUpdate(): Promise<void> {
       let progress = createUpdateProgress();
       let lastEmittedPercent = Number.NaN;
       let lastEmittedBytesStep = -1;
+      // 不传整包墙钟总超时，避免慢速网络下载到一半被掐断；卡死连接由后端 connect/read timeout 检测。
       await downloadApplicationUpdate(
         update,
         (event) => {
@@ -197,7 +198,6 @@ export async function downloadPendingApplicationUpdate(): Promise<void> {
             percent: progress.percent,
           });
         },
-        { timeout: DOWNLOAD_TIMEOUT_MS },
       );
       useApplicationUpdateStore.getState().patch({
         phase: "ready",

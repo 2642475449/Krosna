@@ -159,6 +159,8 @@ test("keeps one update resource while downloading and exposes byte progress", as
     });
   });
   expect(downloadApplicationUpdate).toHaveBeenCalledTimes(1);
+  // 不传递整包总超时选项，避免慢速网络下载到一半被强行中止。
+  expect(vi.mocked(downloadApplicationUpdate).mock.calls[0]?.[2]).toBeUndefined();
 });
 
 test("flushes only pending settings through the shared queue before installing", async () => {

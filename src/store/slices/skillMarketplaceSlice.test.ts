@@ -49,7 +49,7 @@ it("ends an unresponsive refresh with a retryable timeout while preserving cards
   vi.mocked(searchSkillMarketplace).mockReturnValueOnce(late.promise).mockResolvedValueOnce(results("fresh"));
   const store = useSkillMarketplaceStore.getState();
   const pending = store.search(true);
-  await vi.advanceTimersByTimeAsync(35000);
+  await vi.advanceTimersByTimeAsync(90_000);
   await pending;
   expect(useSkillMarketplaceStore.getState()).toMatchObject({ loading: false, loadingSlow: false, results: first, error: "marketplace_request_timeout" });
   late.resolve(results("late"));

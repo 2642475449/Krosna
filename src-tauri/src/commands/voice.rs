@@ -363,10 +363,14 @@ pub async fn transcribe_audio(
 
     let auth_mode = normalize_auth_mode(auth_mode.as_deref());
     let proxy = super::network_proxy::load_resolved_proxy(&database)?;
-    let client =
-        crate::network_proxy::apply_proxy_to_client_builder(reqwest::Client::builder(), &proxy)?
-            .build()
-            .map_err(|error| format!("创建语音转写客户端失败: {error}"))?;
+    let client = crate::network_proxy::apply_proxy_to_client_builder(
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .read_timeout(Duration::from_secs(60)),
+        &proxy,
+    )?
+    .build()
+    .map_err(|error| format!("创建语音转写客户端失败: {error}"))?;
     let request = client.post(mimo_endpoint(auth_mode)).json(&payload);
     let request = if auth_mode == "token-plan" {
         request.bearer_auth(api_key.trim())

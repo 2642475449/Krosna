@@ -129,7 +129,7 @@ fn client(database: &State<'_, Arc<Database>>) -> Result<Client, String> {
             .redirect(redirect_policy(true))
             .user_agent("Krosna skill marketplace")
             .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30)),
+            .read_timeout(Duration::from_secs(30)),
         &proxy,
     )?
     .build()
@@ -137,27 +137,11 @@ fn client(database: &State<'_, Arc<Database>>) -> Result<Client, String> {
 }
 
 async fn read_bytes(client: &Client, url: reqwest::Url, limit: usize) -> Result<Vec<u8>, String> {
-    let started = Instant::now();
-    let budget = Duration::from_secs(35);
     for attempt in 1..=3 {
-        let remaining = budget.saturating_sub(started.elapsed());
-        if remaining.is_zero() {
-            return Err(format!(
-                "Response from {} timed out after retries",
-                url.host_str().unwrap_or("remote service")
-            ));
-        }
-        match read_bytes_once(
-            client,
-            url.clone(),
-            limit,
-            remaining.min(Duration::from_secs(30)),
-        )
-        .await
-        {
+        match read_bytes_once(client, url.clone(), limit).await {
             Ok(bytes) => return Ok(bytes),
             Err(failure) => {
-                if !failure.retryable || attempt == 3 || started.elapsed() >= budget {
+                if !failure.retryable || attempt == 3 {
                     return Err(format!(
                         "{} (host: {}, attempts: {attempt})",
                         failure.message,
@@ -203,11 +187,9 @@ async fn read_bytes_once(
     client: &Client,
     url: reqwest::Url,
     limit: usize,
-    timeout: Duration,
 ) -> Result<Vec<u8>, ResponseReadFailure> {
     let mut response = client
         .get(url)
-        .timeout(timeout)
         .send()
         .await
         .map_err(|error| ResponseReadFailure::transport("Network request failed", error))?;

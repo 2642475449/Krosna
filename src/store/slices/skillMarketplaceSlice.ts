@@ -66,7 +66,7 @@ export const useSkillMarketplaceStore = create<SkillMarketplaceState>((set, get)
       const results = await Promise.race([
         searchSkillMarketplace(query),
         new Promise<never>((_, reject) => {
-          timeoutTimer = setTimeout(() => reject("marketplace_request_timeout"), 35000);
+          timeoutTimer = setTimeout(() => reject("marketplace_request_timeout"), 90_000);
         }),
       ]);
       if (get().searchId === searchId) set({ results, ...(!query ? { browseResults: results } : {}), loading: false, loadingSlow: false });

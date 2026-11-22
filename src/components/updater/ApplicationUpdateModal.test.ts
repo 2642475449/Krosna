@@ -107,8 +107,9 @@ it("keeps raw error details collapsed by default and supports expand, copy, netw
 
   expect(host.textContent).toContain("v1.8.36");
   expect(host.textContent).toContain(i18n.t("updater.checkFailed"));
-  expect(host.textContent).toContain(i18n.t("updater.recoveryHint"));
+  expect(host.textContent).toContain(i18n.t("updater.networkErrorHint"));
   expect(host.querySelector(".app-update-modal__error-code")).toBeNull();
+  expect(findButton(i18n.t("updater.copyErrorDetails"))).toBeUndefined();
 
   expect(findButton(i18n.t("updater.downloadFromMirror"))).toBeUndefined();
   const toggleButton = findButton(i18n.t("updater.showErrorDetails"))!;
@@ -176,7 +177,7 @@ it("renders parsed release notes and omits disabled primary action while downloa
 
   expect(host.textContent).toContain(i18n.t("updater.downloadPhase"));
   expect(host.textContent).toContain("50%");
-  expect(host.querySelector(".app-update-modal__notes h2")?.textContent).toBe("新增与升级");
+  expect(host.querySelector(".app-update-modal__notes h4")?.textContent).toBe("新增与升级");
   expect(host.querySelector(".app-update-modal__notes code")?.textContent).toBe("proxy");
   expect(findButton(i18n.t("updater.restartAndInstall"))).toBeUndefined();
   expect(findButton(i18n.t("updater.close"))).toBeTruthy();
@@ -188,12 +189,23 @@ it("renders parsed release notes and omits disabled primary action while downloa
   );
 });
 
-it("uses the known version for the domestic installer and rechecks sources on retry", async () => {
-  setUpdateState({ modalOpen: true, phase: "error", errorStage: "download", availableVersion: "2.3.4", error: "timeout" });
+it("uses the backend-provided mirror url, explains timeout failures plainly, hides release notes, and rechecks sources on retry", async () => {
+  const mirrorUrl = "https://termflow.jianglan.online/releases/Termflow_2.3.4_x64-setup.exe";
+  setUpdateState({
+    modalOpen: true,
+    phase: "error",
+    errorStage: "download",
+    availableVersion: "2.3.4",
+    mirrorInstallerUrl: mirrorUrl,
+    releaseNotes: "## 新增与升级\n\n- 测试说明",
+    error: "operation timed out",
+  });
   await act(async () => root.render(createElement(ApplicationUpdateModal)));
+  expect(host.textContent).toContain(i18n.t("updater.timeoutErrorHint"));
+  expect(host.querySelector(".app-update-modal__notes")).toBeNull();
   const installerButton = findButton(i18n.t("updater.downloadFromMirror"))!;
   await act(async () => installerButton.click());
-  expect(mocks.openExternalUrl).toHaveBeenCalledWith("https://termflow.jianglan.online/releases/Termflow_2.3.4_x64-setup.exe");
+  expect(mocks.openExternalUrl).toHaveBeenCalledWith(mirrorUrl);
   await act(async () => findButton(i18n.t("updater.retry"))!.click());
   expect(mocks.checkForApplicationUpdate).toHaveBeenCalledWith({ manual: true });
 });

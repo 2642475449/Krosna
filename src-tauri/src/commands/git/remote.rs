@@ -9,7 +9,9 @@ use std::process::{Child, Output, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-const REMOTE_COMMAND_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const REMOTE_COMMAND_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const GIT_HTTP_LOW_SPEED_LIMIT: &str = "http.lowSpeedLimit=1024";
+const GIT_HTTP_LOW_SPEED_TIME: &str = "http.lowSpeedTime=60";
 
 #[derive(serde::Serialize)]
 pub struct RemoteEntry {
@@ -363,6 +365,7 @@ pub(super) fn run_remote_command(
 
     let mut command = git_command_with_proxy(proxy);
     command
+        .args(["-c", GIT_HTTP_LOW_SPEED_LIMIT, "-c", GIT_HTTP_LOW_SPEED_TIME])
         .args(args)
         .current_dir(&path)
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -1016,8 +1019,8 @@ mod tests {
     }
 
     #[test]
-    fn remote_commands_allow_large_repositories_five_minutes() {
-        assert_eq!(REMOTE_COMMAND_TIMEOUT, Duration::from_secs(300));
+    fn remote_commands_allow_large_repositories_thirty_minutes() {
+        assert_eq!(REMOTE_COMMAND_TIMEOUT, Duration::from_secs(1800));
     }
 
     #[test]
