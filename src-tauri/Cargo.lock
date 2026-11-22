@@ -2305,7 +2305,7 @@ dependencies = [
 
 [[package]]
 name = "krosna"
-version = "1.8.38"
+version = "1.8.39"
 dependencies = [
  "base64 0.22.1",
  "chrono",

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/make-dialog/refs/heads/main/tauri/tauri.conf.json",
   "productName": "Krosna",
-  "version": "1.8.38",
+  "version": "1.8.39",
   "identifier": "com.krosna.desktop",
   "build": {
     "frontendDist": "../dist",
