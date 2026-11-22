@@ -28,6 +28,7 @@ import { useAgentHookHealthStore } from "@/store/slices/agentHookHealth";
 import { REMOTE_NOTIFICATION_PROVIDERS } from "@/lib/remoteNotifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useResumeSession } from "@/hooks/useResumeSession";
+import { createRecentFileEditorCache, RecentFileEditorContext } from "@/lib/recentFileEditor";
 import { hasOtherCodexSessionBinding } from "@/lib/sessionRestore";
 import { addTerminalSession } from "@/lib/sessions";
 import { getDefaultSessionTitle } from "@/lib/sessionTitles";
@@ -184,6 +185,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
   const updateSession = useAppStore((state) => state.updateSession);
   const closeTab = useAppStore((state) => state.closeTab);
   const resumeSession = useResumeSession();
+  const [retainRecentEditor] = useState(createRecentFileEditorCache);
 
   if (!pane) return null;
 
@@ -210,7 +212,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
         ) : (
           <>
             {!pane.activeTabId ? (
-              <div className="absolute inset-0 overflow-auto">
+              <div className="app-thin-scrollbar absolute inset-0 overflow-auto">
                 <HomePage />
               </div>
             ) : null}
@@ -231,6 +233,7 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                 <div
                   key={tabId}
                   className="app-workspace-tab-content"
+                  data-tab-kind={tab?.kind}
                   data-active={tabId === pane.activeTabId ? "true" : "false"}
                 >
                   <ErrorBoundary key={`${tab?.kind}:${tab?.resourceId}`} scope={`tab:${tabId}`} onClose={() => closeTab(tabId)}>
@@ -240,12 +243,14 @@ function WorkspacePane({ paneId }: { paneId: string }) {
                     ) : isSkillMarket ? (
                       <SkillMarketplacePage isActive={!settingsVisible && tabId === pane.activeTabId} />
                     ) : isFile && currentProject ? (
-                      <FileTabView
-                        tabId={tabId}
-                        projectPath={currentProject.path}
-                        path={tab.resourceId}
-                        isActive={!settingsVisible && tabId === pane.activeTabId}
-                      />
+                      <RecentFileEditorContext.Provider value={retainRecentEditor}>
+                        <FileTabView
+                          tabId={tabId}
+                          projectPath={currentProject.path}
+                          path={tab.resourceId}
+                          isActive={!settingsVisible && tabId === pane.activeTabId}
+                        />
+                      </RecentFileEditorContext.Provider>
                     ) : isDiff ? (
                       <GitDiffTabView tabId={tabId} isActive={!settingsVisible && tabId === pane.activeTabId} />
                     // 重启期间保留终端与输出监听，避免新进程启动时丢失输出。
@@ -1855,7 +1860,8 @@ function AppLayout() {
     <Layout className="app-shell h-screen flex flex-col">
       <ApplicationUpdateController />
       <TitleBar />
-      <Layout className="relative flex-1 min-h-0">
+      {/* Ant Layout 默认按内容计算 flex-basis，工作区只应占用窗口的剩余高度。 */}
+      <Layout className="relative min-h-0" style={{ flex: "1 1 0px" }}>
         <PrimarySidebarRail />
         <Sidebar
           collapsed={sidebarCollapsed}

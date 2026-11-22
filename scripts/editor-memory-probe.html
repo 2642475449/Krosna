@@ -1,5 +1,11 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8"><title>Isolated editor lifecycle probe</title></head>
+  <head>
+    <meta charset="utf-8"><title>Isolated editor lifecycle probe</title>
+    <style>
+      /* The isolated fixture does not load the application's Tailwind utilities. */
+      #root > main > section > .w-full { width: 100%; min-width: 0; }
+    </style>
+  </head>
   <body style="margin:0"><div id="root"></div><script type="module" src="/scripts/editorMemoryProbe.tsx"></script></body>
 </html>

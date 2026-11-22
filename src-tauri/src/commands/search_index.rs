@@ -4,7 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ignore::gitignore::GitignoreBuilder;
@@ -79,6 +79,101 @@ struct ActiveEntry {
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
     status: ProjectSearchIndexStatus,
+    fallback_paths: Option<Arc<Mutex<LiveFileCatalog>>>,
+}
+
+// A paused or failed full-text writer cannot maintain the published SQLite file.
+// Keep just the names in memory while that state lasts. Watcher revisions let
+// successive keystrokes reuse the same directory walk.
+#[derive(Default)]
+struct LiveFileCatalog {
+    database: Option<Connection>,
+    revision: u64,
+}
+
+impl LiveFileCatalog {
+    fn query<T>(
+        &mut self,
+        project: &ResolvedProject,
+        cancel: &AtomicBool,
+        query: impl FnOnce(&Connection, &ResolvedProject) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let (revision, incremental) = {
+            let changes = project
+                .runtime
+                .changes
+                .lock()
+                .map_err(|_| "Failed to read path changes")?;
+            let incremental = self.database.is_some()
+                && !changes
+                    .reconcile
+                    .is_some_and(|revision| revision > self.revision);
+            (
+                changes.revision,
+                incremental.then(|| {
+                    changes
+                        .paths
+                        .iter()
+                        .filter(|(_, revision)| **revision > self.revision)
+                        .map(|(path, _)| path.clone())
+                        .collect::<Vec<_>>()
+                }),
+            )
+        };
+        if self.database.is_none() || self.revision != revision {
+            if let (Some(database), Some(paths)) = (&mut self.database, incremental) {
+                let tx = database.transaction().map_err(|error| error.to_string())?;
+                for path in paths {
+                    if let Some(candidate) = candidate_for_existing_path(project, &path)? {
+                        tx.execute(
+                            "INSERT OR IGNORE INTO indexed_files VALUES (?1)",
+                            [candidate.relative_path],
+                        )
+                        .map_err(|error| error.to_string())?;
+                    } else if let Ok(relative) = path.strip_prefix(&project.path) {
+                        tx.execute(
+                            "DELETE FROM indexed_files WHERE relative_path = ?1
+                             OR substr(relative_path, 1, length(?1) + 1) = ?1 || '/'",
+                            [relative.to_string_lossy().replace('\\', "/")],
+                        )
+                        .map_err(|error| error.to_string())?;
+                    }
+                }
+                tx.commit().map_err(|error| error.to_string())?;
+            } else {
+                let candidates =
+                    discover_candidates(project, cancel, &AtomicBool::new(false), |_, _, _| {})?;
+                if cancel.load(Ordering::Relaxed) {
+                    return Err("search-project-released".into());
+                }
+                let mut database =
+                    Connection::open_in_memory().map_err(|error| error.to_string())?;
+                database
+                    .execute_batch("CREATE TABLE indexed_files(relative_path TEXT PRIMARY KEY)")
+                    .map_err(|error| error.to_string())?;
+                let tx = database.transaction().map_err(|error| error.to_string())?;
+                {
+                    let mut insert = tx
+                        .prepare("INSERT INTO indexed_files VALUES (?1)")
+                        .map_err(|error| error.to_string())?;
+                    for candidate in candidates {
+                        insert
+                            .execute([candidate.relative_path])
+                            .map_err(|error| error.to_string())?;
+                    }
+                }
+                tx.commit().map_err(|error| error.to_string())?;
+                self.database = Some(database);
+            }
+            self.revision = revision;
+        }
+        let result = query(
+            self.database.as_ref().ok_or("search-index-unavailable")?,
+            project,
+        )?;
+        let _lifetime = project.live()?;
+        Ok(result)
+    }
 }
 
 struct ProjectIndexWatcher {
@@ -95,6 +190,8 @@ impl Drop for ProjectIndexWatcher {
 #[derive(Clone, Default)]
 pub struct SearchIndexState {
     entries: Arc<Mutex<HashMap<String, ActiveEntry>>>,
+    catalog_changed: Arc<Condvar>,
+    storage_changes: Arc<Mutex<()>>,
     watchers: Arc<Mutex<HashMap<String, ProjectIndexWatcher>>>,
     next_job_id: Arc<AtomicU64>,
     runtimes: Arc<Mutex<HashMap<String, Arc<ProjectRuntime>>>>,
@@ -112,21 +209,17 @@ impl SearchIndexState {
     }
 }
 
-pub(crate) fn begin_content_search(
+pub(super) fn capture_search_project(
     app: &AppHandle,
-    project_path: &str,
-) -> Option<SearchActivityGuard> {
-    let project = resolve_project(project_path).ok()?;
-    Some(
-        app.state::<SearchIndexState>()
-            .runtime(&project.preference_key)
-            .ok()?
-            .begin_search(),
-    )
+    path: &str,
+) -> Result<ResolvedProject, String> {
+    resolve_project(&app.state::<SearchIndexState>(), path)
 }
 
 #[derive(Clone)]
-struct ResolvedProject {
+pub(super) struct ResolvedProject {
+    runtime: Arc<ProjectRuntime>,
+    generation: u64,
     path: PathBuf,
     display_path: String,
     preference_key: String,
@@ -138,6 +231,24 @@ struct IndexCandidate {
     relative_path: String,
     size: u64,
     modified_ns: i64,
+}
+
+impl IndexCandidate {
+    fn content_bytes(&self) -> u64 {
+        if self.size <= MAX_FILE_BYTES {
+            self.size
+        } else {
+            0
+        }
+    }
+
+    fn read_content(&self, full_text: bool) -> Option<(String, TextEncoding)> {
+        if full_text && self.size <= MAX_FILE_BYTES {
+            read_text_file(&self.path).ok()
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -172,7 +283,7 @@ enum TextEncoding {
 }
 
 pub(crate) enum IndexCandidateLookup {
-    Unavailable,
+    ShortQueryError(&'static str),
     Ready {
         paths: Vec<PathBuf>,
         generation: u64,
@@ -194,7 +305,10 @@ impl TextEncoding {
     }
 }
 
-fn resolve_project(project_path: &str) -> Result<ResolvedProject, String> {
+fn resolve_project(
+    state: &SearchIndexState,
+    project_path: &str,
+) -> Result<ResolvedProject, String> {
     let trimmed = project_path.trim();
     if trimmed.is_empty() {
         return Err("Project path cannot be empty".to_string());
@@ -209,11 +323,39 @@ fn resolve_project(project_path: &str) -> Result<ResolvedProject, String> {
     let preference_key = normalized.to_lowercase();
     #[cfg(not(windows))]
     let preference_key = normalized;
+    let runtime = state.runtime(&preference_key)?;
+    let generation = *runtime
+        .generation
+        .lock()
+        .map_err(|_| "Failed to lock project lifetime")?;
     Ok(ResolvedProject {
+        runtime,
+        generation,
         path,
         display_path: display,
         preference_key,
     })
+}
+
+impl ResolvedProject {
+    pub(super) fn begin_content_search(&self) -> Result<SearchActivityGuard, String> {
+        let _lifetime = self.live()?;
+        Ok(self.runtime.begin_search())
+    }
+
+    // Hold through registering a watcher or committing a write. Release advances
+    // the same generation, even if the project is immediately reopened.
+    fn live(&self) -> Result<std::sync::MutexGuard<'_, u64>, String> {
+        let guard = self
+            .runtime
+            .generation
+            .lock()
+            .map_err(|_| "Failed to lock project lifetime")?;
+        if *guard != self.generation {
+            return Err("search-project-released".into());
+        }
+        Ok(guard)
+    }
 }
 
 fn now_ms() -> u64 {
@@ -243,6 +385,14 @@ fn disabled_status(project_path: String) -> ProjectSearchIndexStatus {
     }
 }
 
+fn content_status(status: ProjectSearchIndexStatus) -> ProjectSearchIndexStatus {
+    if status.enabled {
+        status
+    } else {
+        disabled_status(status.project_path)
+    }
+}
+
 fn initial_build_status(project_path: String) -> ProjectSearchIndexStatus {
     ProjectSearchIndexStatus {
         project_path,
@@ -263,10 +413,8 @@ fn initial_build_status(project_path: String) -> ProjectSearchIndexStatus {
     }
 }
 
-fn project_hash(project: &ResolvedProject) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(project.preference_key.as_bytes());
-    format!("{:x}", hasher.finalize())
+fn project_hash(key: &str) -> String {
+    format!("{:x}", Sha256::digest(key.as_bytes()))
 }
 
 fn default_index_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -300,7 +448,7 @@ fn index_root(app: &AppHandle) -> Result<PathBuf, String> {
 fn index_directory(app: &AppHandle, project: &ResolvedProject) -> Result<PathBuf, String> {
     Ok(index_root(app)?
         .join(format!("v{INDEX_SCHEMA_VERSION}"))
-        .join(project_hash(project)))
+        .join(project_hash(&project.preference_key)))
 }
 
 fn directory_size(path: &Path) -> u64 {
@@ -387,10 +535,21 @@ fn storage_status(app: &AppHandle) -> Result<SearchIndexStorageStatus, String> {
     })
 }
 
-fn enforce_storage_quota(app: &AppHandle, keep: &Path) -> Result<(), String> {
+fn enforce_storage_quota(app: &AppHandle, keep: Option<&Path>) -> Result<(), String> {
     let database = app.state::<Arc<Database>>();
     let settings = database.load_search_index_storage()?;
     let root = index_root_from_settings(app, &settings)?;
+    let state = app.state::<SearchIndexState>();
+    let active_dirs: HashSet<_> = state
+        .entries
+        .lock()
+        .map_err(|_| "Failed to read active projects")?
+        .keys()
+        .map(|key| {
+            root.join(format!("v{INDEX_SCHEMA_VERSION}"))
+                .join(project_hash(key))
+        })
+        .collect();
     let mut indexes = cached_index_directories(&root);
     let mut used_bytes: u64 = indexes.iter().map(|(_, size, _)| *size).sum();
     indexes.sort_by_key(|(_, _, last_used)| *last_used);
@@ -398,7 +557,7 @@ fn enforce_storage_quota(app: &AppHandle, keep: &Path) -> Result<(), String> {
         if used_bytes <= settings.quota_bytes {
             break;
         }
-        if path == keep {
+        if Some(path.as_path()) == keep || active_dirs.contains(&path) {
             continue;
         }
         fs::remove_dir_all(&path).map_err(|error| {
@@ -414,9 +573,12 @@ fn enforce_storage_quota(app: &AppHandle, keep: &Path) -> Result<(), String> {
 
 fn has_active_build(state: &SearchIndexState) -> bool {
     let building = state.entries.lock().ok().is_some_and(|entries| {
-        entries
-            .values()
-            .any(|entry| matches!(entry.status.state.as_str(), "preflight" | "building"))
+        entries.values().any(|entry| {
+            matches!(
+                entry.status.state.as_str(),
+                "preflight" | "building" | "paused"
+            )
+        })
     });
     building
         || state.runtimes.lock().ok().is_some_and(|runtimes| {
@@ -451,15 +613,13 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
             destination.display()
         )
     })?;
-    for entry in fs::read_dir(source)
-        .map_err(|error| {
-            format!(
-                "Failed to read cache directory {}: {error}",
-                source.display()
-            )
-        })?
-        .flatten()
-    {
+    for entry in fs::read_dir(source).map_err(|error| {
+        format!(
+            "Failed to read cache directory {}: {error}",
+            source.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| format!("Failed to enumerate cache files: {error}"))?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         let file_type = entry.file_type().map_err(|error| {
@@ -482,11 +642,16 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn relocate_index_root(source: &Path, destination: &Path) -> Result<(), String> {
+fn relocate_index_root(
+    source: &Path,
+    destination: &Path,
+    save_location: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
     if source == destination || !source.exists() {
-        return Ok(());
+        return save_location();
     }
-    if destination.exists() {
+    let existed = destination.exists();
+    if existed {
         let is_empty = fs::read_dir(destination)
             .map_err(|error| format!("Failed to read destination cache directory: {error}"))?
             .next()
@@ -495,18 +660,45 @@ fn relocate_index_root(source: &Path, destination: &Path) -> Result<(), String> 
             return Err("The selected index cache folder is not empty".to_string());
         }
     }
-    let temporary =
-        destination.with_file_name(format!(".krosna-search-index-moving-{}", now_ms()));
-    copy_directory(source, &temporary)?;
-    if destination.exists() {
+    let parent = destination
+        .parent()
+        .ok_or("The destination needs a parent directory")?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    if fs::canonicalize(parent)
+        .map_err(|error| error.to_string())?
+        .starts_with(fs::canonicalize(source).map_err(|error| error.to_string())?)
+    {
+        return Err("The destination cannot be inside the current index cache".into());
+    }
+    let temporary = tempfile::Builder::new()
+        .prefix(".krosna-search-index-moving-")
+        .tempdir_in(parent)
+        .map_err(|error| error.to_string())?;
+    copy_directory(source, temporary.path())?;
+    if existed {
         fs::remove_dir(destination)
             .map_err(|error| format!("Failed to prepare destination cache directory: {error}"))?;
     }
-    fs::rename(&temporary, destination)
-        .map_err(|error| format!("Failed to activate relocated index cache: {error}"))?;
-    fs::remove_dir_all(source).map_err(|error| {
-        format!("Index cache was copied but the old cache could not be removed: {error}")
-    })?;
+    if let Err(error) = fs::rename(temporary.path(), destination) {
+        if existed {
+            let _ = fs::create_dir(destination);
+        }
+        return Err(format!("Failed to activate relocated index cache: {error}"));
+    }
+    if let Err(error) = save_location() {
+        fs::rename(destination, temporary.path()).map_err(|rollback| {
+            format!("{error}. Original cache retained; failed to roll back the copy: {rollback}")
+        })?;
+        if existed {
+            fs::create_dir(destination).map_err(|restore| format!("{error}: {restore}"))?;
+        }
+        return Err(error);
+    }
+    // The preference now points at the complete copy. An external reader may
+    // still hold the old directory open on Windows.
+    if let Err(error) = fs::remove_dir_all(source) {
+        eprintln!("Could not remove the previous search index cache: {error}");
+    }
     Ok(())
 }
 
@@ -525,6 +717,7 @@ fn set_status(
     job_id: u64,
     status: ProjectSearchIndexStatus,
 ) -> bool {
+    let finished = matches!(status.state.as_str(), "ready" | "failed" | "unsupported");
     let updated = state.entries.lock().ok().is_some_and(|mut entries| {
         let Some(entry) = entries.get_mut(key) else {
             return false;
@@ -532,14 +725,23 @@ fn set_status(
         if entry.job_id != job_id {
             return false;
         }
-        if entry.status.state == "paused" {
+        if entry.pause.load(Ordering::Relaxed) && !finished {
             return false;
+        }
+        if finished {
+            entry.pause.store(false, Ordering::Relaxed);
+        }
+        if status.state == "ready" {
+            entry.fallback_paths = None;
         }
         entry.status = status.clone();
         true
     });
     if updated {
-        let _ = app.emit("search-index-status", status);
+        if finished {
+            state.catalog_changed.notify_all();
+        }
+        let _ = app.emit("search-index-status", content_status(status));
     }
     updated
 }
@@ -675,11 +877,14 @@ fn watcher_event_paths(
 fn mark_index_for_rebuild(
     app: &AppHandle,
     state: &SearchIndexState,
-    key: &str,
+    project: &ResolvedProject,
     error: Option<String>,
 ) {
+    let Ok(_lifetime) = project.live() else {
+        return;
+    };
     let status = state.entries.lock().ok().and_then(|mut entries| {
-        let entry = entries.get_mut(key)?;
+        let entry = entries.get_mut(&project.preference_key)?;
         entry.status.state = "stale".to_string();
         entry.status.backend = "scan".to_string();
         entry.status.phase = "reconciling".to_string();
@@ -688,7 +893,7 @@ fn mark_index_for_rebuild(
         Some(entry.status.clone())
     });
     if let Some(status) = status {
-        let _ = app.emit("search-index-status", status);
+        let _ = app.emit("search-index-status", content_status(status));
     }
 }
 
@@ -703,32 +908,36 @@ fn apply_watcher_updates(
         .writer
         .lock()
         .map_err(|_| "Failed to lock index writer")?;
-    if !get_active_status(state, &project.preference_key)
-        .is_some_and(|status| status.enabled && status.state == "ready")
-        || runtime
-            .changes
-            .lock()
-            .map_err(|_| "Failed to access pending changes")?
-            .searches_active()
-    {
-        return Ok(false);
-    }
-    let job_id = state
+    let active = state
         .entries
         .lock()
         .map_err(|_| "Failed to access index state")?
         .get(&project.preference_key)
-        .map(|entry| entry.job_id);
+        .cloned();
+    let Some(active) = active
+        .filter(|entry| entry.status.state == "ready" && !entry.cancel.load(Ordering::Relaxed))
+    else {
+        return Ok(false);
+    };
+    if runtime
+        .changes
+        .lock()
+        .map_err(|_| "Failed to access pending changes")?
+        .searches_active()
+    {
+        return Ok(false);
+    }
     let database_path = index_directory(app, project)?.join("index.sqlite3");
     let paths = if batch.reconcile {
         reconciliation_paths(&database_path, project, &batch.paths)?
     } else {
         batch.paths.clone()
     };
-    let summary = apply_incremental_updates(&database_path, project, &paths)?;
+    let summary =
+        apply_incremental_updates(active.status.enabled, &database_path, project, &paths)?;
     let next_status = state.entries.lock().ok().and_then(|mut entries| {
         let entry = entries.get_mut(&project.preference_key)?;
-        if Some(entry.job_id) != job_id || entry.status.state != "ready" {
+        if entry.job_id != active.job_id || entry.status.state != "ready" {
             return None;
         }
         entry.status.total_files = Some(summary.total_files);
@@ -746,7 +955,7 @@ fn apply_watcher_updates(
     });
     if let Some(next_status) = next_status {
         touch_index_usage(database_path.parent().unwrap_or_else(|| Path::new("")));
-        let _ = app.emit("search-index-status", next_status);
+        let _ = app.emit("search-index-status", content_status(next_status));
         return Ok(true);
     }
     Ok(false)
@@ -867,7 +1076,10 @@ fn ensure_project_watcher(
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = stop.clone();
     std::thread::Builder::new()
-        .name(format!("krosna-index-watch-{}", project_hash(project)))
+        .name(format!(
+            "krosna-index-watch-{}",
+            project_hash(&project.preference_key)
+        ))
         .spawn(move || {
             while !worker_stop.load(Ordering::Relaxed) {
                 match receiver.recv_timeout(SCHEDULER_TICK) {
@@ -878,7 +1090,7 @@ fn ensure_project_watcher(
                     break;
                 }
                 if !get_active_status(&worker_state, &worker_project.preference_key)
-                    .is_some_and(|status| status.enabled && status.state == "ready")
+                    .is_some_and(|status| status.state == "ready")
                 {
                     continue;
                 }
@@ -909,12 +1121,7 @@ fn ensure_project_watcher(
                     }
                     if let Err(error) = result {
                         if !stop.load(Ordering::Relaxed) {
-                            mark_index_for_rebuild(
-                                &app,
-                                &state,
-                                &project.preference_key,
-                                Some(error),
-                            );
+                            mark_index_for_rebuild(&app, &state, &project, Some(error));
                             let _ = start_index_build(app, state, project, true);
                         }
                     }
@@ -938,15 +1145,49 @@ fn stop_project_watcher(state: &SearchIndexState, key: &str) {
     }
 }
 
+pub(super) fn release_project_watcher(app: &AppHandle, project_path: &str) {
+    let path = display_path(&normalize_input_path(project_path)).replace('\\', "/");
+    #[cfg(windows)]
+    let path = path.to_lowercase();
+    let state = app.state::<SearchIndexState>();
+    release_index_lifetime(&state, &path);
+}
+
+fn release_index_lifetime(state: &SearchIndexState, path: &str) {
+    let Ok(runtime) = state.runtime(path) else {
+        return;
+    };
+    let Ok(mut generation) = runtime.generation.lock() else {
+        return;
+    };
+    *generation += 1;
+    if let Ok(mut entries) = state.entries.lock() {
+        if let Some(entry) = entries.remove(path) {
+            entry.cancel.store(true, Ordering::Relaxed);
+            state.catalog_changed.notify_all();
+        }
+    }
+    stop_project_watcher(state, path);
+}
+
 fn start_index_build(
     app: AppHandle,
     state: SearchIndexState,
     project: ResolvedProject,
     force: bool,
 ) -> Result<ProjectSearchIndexStatus, String> {
+    let lifetime = project.live()?;
+    let full_text = app
+        .state::<Arc<Database>>()
+        .load_project_search_index_enabled(&project.preference_key)?;
     if !force {
         if let Some(status) = get_active_status(&state, &project.preference_key) {
-            if matches!(status.state.as_str(), "preflight" | "building" | "ready") {
+            if status.enabled == full_text
+                && matches!(
+                    status.state.as_str(),
+                    "preflight" | "building" | "paused" | "ready"
+                )
+            {
                 return Ok(status);
             }
         }
@@ -956,7 +1197,8 @@ fn start_index_build(
     let job_id = state.next_job_id.fetch_add(1, Ordering::Relaxed) + 1;
     let cancel = Arc::new(AtomicBool::new(false));
     let pause = Arc::new(AtomicBool::new(false));
-    let status = initial_build_status(project.display_path.clone());
+    let mut status = initial_build_status(project.display_path.clone());
+    status.enabled = full_text;
     state
         .entries
         .lock()
@@ -968,6 +1210,7 @@ fn start_index_build(
                 cancel: cancel.clone(),
                 pause: pause.clone(),
                 status: status.clone(),
+                fallback_paths: None,
             },
         );
     if let Err(error) = ensure_project_watcher(&app, &state, &project) {
@@ -982,8 +1225,9 @@ fn start_index_build(
         }
         return Err(error);
     }
-    let _ = app.emit("search-index-status", status.clone());
+    let _ = app.emit("search-index-status", content_status(status.clone()));
 
+    drop(lifetime);
     tauri::async_runtime::spawn_blocking(move || {
         let result = build_project_index(&app, &state, &project, job_id, &cancel, &pause);
         if let Err(error) = result {
@@ -1055,6 +1299,8 @@ fn build_project_index(
 
     let mut status = get_active_status(state, &project.preference_key)
         .unwrap_or_else(|| initial_build_status(project.display_path.clone()));
+    status.state = "preflight".into();
+    status.phase = "discovering".into();
     let mut last_emit = Instant::now();
     let candidates = discover_candidates(project, cancel, pause, |discovered, bytes, skipped| {
         status.processed_files = discovered;
@@ -1073,7 +1319,7 @@ fn build_project_index(
         return Ok(());
     }
 
-    let total_bytes = candidates.iter().map(|candidate| candidate.size).sum();
+    let total_bytes = candidates.iter().map(IndexCandidate::content_bytes).sum();
     let preflight_skipped = status.skipped_files;
     status.state = "building".to_string();
     status.phase = "writing".to_string();
@@ -1085,7 +1331,27 @@ fn build_project_index(
     status.updated_at = Some(now_ms());
     set_status(app, state, &project.preference_key, job_id, status.clone());
 
+    // Publish paths before the first full-text build, using the same discovery pass.
+    // Existing caches remain searchable during rebuilds.
+    if status.enabled && !existing_path.exists() {
+        write_index_database(
+            false,
+            &temp_path,
+            project,
+            &candidates,
+            cancel,
+            pause,
+            |_, _, _, _| {},
+        )?;
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        if !publish_build(state, project, job_id, &index_dir, &temp_path)? {
+            return Ok(());
+        }
+    }
     let build_result = write_index_database(
+        status.enabled,
         &temp_path,
         project,
         &candidates,
@@ -1116,7 +1382,10 @@ fn build_project_index(
     status.phase = "finalizing".to_string();
     status.updated_at = Some(now_ms());
     set_status(app, state, &project.preference_key, job_id, status.clone());
-    replace_index_atomically(&index_dir, &temp_path)?;
+    if !publish_build(state, project, job_id, &index_dir, &temp_path)? {
+        return Ok(());
+    }
+    let _lifetime = project.live()?;
 
     if let Ok(mut changes) = runtime.changes.lock() {
         changes.acknowledge(start_revision, Instant::now());
@@ -1130,7 +1399,7 @@ fn build_project_index(
         .map(|meta| meta.len())
         .unwrap_or(0);
     touch_index_usage(&index_dir);
-    enforce_storage_quota(app, &index_dir)?;
+    enforce_storage_quota(app, Some(&index_dir))?;
     status.updated_at = Some(now_ms());
     status.error = None;
     set_status(app, state, &project.preference_key, job_id, status);
@@ -1199,10 +1468,6 @@ where
                 continue;
             }
         };
-        if metadata.len() > MAX_FILE_BYTES {
-            skipped += 1;
-            continue;
-        }
         let Some(relative_path) = entry
             .path()
             .strip_prefix(&project.path)
@@ -1213,7 +1478,9 @@ where
             skipped += 1;
             continue;
         };
-        discovered_bytes = discovered_bytes.saturating_add(metadata.len());
+        if metadata.len() <= MAX_FILE_BYTES {
+            discovered_bytes = discovered_bytes.saturating_add(metadata.len());
+        }
         candidates.push(IndexCandidate {
             path: entry.path().to_path_buf(),
             relative_path,
@@ -1248,7 +1515,7 @@ fn candidate_for_existing_path(
         _ => return Ok(None),
     };
     let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.is_file() && metadata.len() <= MAX_FILE_BYTES => metadata,
+        Ok(metadata) if metadata.is_file() => metadata,
         Ok(_) | Err(_) => return Ok(None),
     };
 
@@ -1335,11 +1602,11 @@ fn update_index_metadata(
         .query_row(
             "SELECT
                 count(*),
-                sum(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END),
-                sum(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END),
-                coalesce(sum(size), 0)
+                count(CASE WHEN status = 'indexed' THEN 1 END),
+                count(CASE WHEN status = 'skipped' THEN 1 END),
+                coalesce(sum(CASE WHEN size <= ?1 THEN size ELSE 0 END), 0)
              FROM indexed_files",
-            [],
+            [MAX_FILE_BYTES],
             |row| {
                 Ok(IndexUpdateSummary {
                     total_files: row.get::<_, i64>(0)? as u64,
@@ -1370,6 +1637,7 @@ fn update_index_metadata(
 }
 
 fn apply_incremental_updates(
+    full_text: bool,
     database_path: &Path,
     project: &ResolvedProject,
     paths: &[PathBuf],
@@ -1421,8 +1689,8 @@ fn apply_incremental_updates(
             continue;
         };
         let indexed_at = now_ms() as i64;
-        match read_text_file(&candidate.path) {
-            Ok((content, encoding)) => {
+        match candidate.read_content(full_text) {
+            Some((content, encoding)) => {
                 transaction
                     .execute(
                         "INSERT INTO indexed_files
@@ -1452,7 +1720,7 @@ fn apply_incremental_updates(
                     )
                     .map_err(|error| format!("Failed to insert incremental FTS entry: {error}"))?;
             }
-            Err(_) => {
+            None => {
                 transaction
                     .execute(
                         "INSERT INTO indexed_files
@@ -1472,6 +1740,15 @@ fn apply_incremental_updates(
             }
         }
     }
+    if !full_text && !seen.is_empty() {
+        transaction
+            .execute(
+                "INSERT OR REPLACE INTO index_meta(key, value) VALUES ('full_text_ready', '0')",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    let _lifetime = project.live()?;
     let summary = update_index_metadata(&transaction)?;
     transaction
         .commit()
@@ -1480,6 +1757,7 @@ fn apply_incremental_updates(
 }
 
 fn write_index_database<F>(
+    full_text: bool,
     path: &Path,
     project: &ResolvedProject,
     candidates: &[IndexCandidate],
@@ -1509,18 +1787,24 @@ where
                encoding TEXT,
                status TEXT NOT NULL CHECK(status IN ('indexed', 'skipped')),
                indexed_at INTEGER NOT NULL
-             );
-             CREATE VIRTUAL TABLE content_fts USING fts5(
+             );",
+        )
+        .map_err(|error| format!("Failed to create project file catalog: {error}"))?;
+    if full_text {
+        connection
+            .execute_batch(
+                "CREATE VIRTUAL TABLE content_fts USING fts5(
                content,
                content='',
                contentless_delete=1,
                tokenize='trigram'
              );",
-        )
-        .map_err(|error| format!("FTS5 is unavailable or could not initialize: {error}"))?;
+            )
+            .map_err(|error| format!("FTS5 is unavailable or could not initialize: {error}"))?;
 
+        short_queries::create(&connection).map_err(|error| error.to_string())?;
+    }
     let built_at = now_ms();
-    short_queries::create(&connection).map_err(|error| error.to_string())?;
     let transaction = connection
         .transaction()
         .map_err(|error| format!("Failed to start index transaction: {error}"))?;
@@ -1535,8 +1819,9 @@ where
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             )
             .map_err(|error| format!("Failed to prepare indexed file write: {error}"))?;
-        let mut fts_statement = transaction
-            .prepare("INSERT INTO content_fts(rowid, content) VALUES (?1, ?2)")
+        let mut fts_statement = full_text
+            .then(|| transaction.prepare("INSERT INTO content_fts(rowid, content) VALUES (?1, ?2)"))
+            .transpose()
             .map_err(|error| format!("Failed to prepare FTS5 write: {error}"))?;
 
         for (index, candidate) in candidates.iter().enumerate() {
@@ -1546,9 +1831,9 @@ where
             if cancel.load(Ordering::Relaxed) {
                 return Ok(());
             }
-            processed_bytes = processed_bytes.saturating_add(candidate.size);
-            match read_text_file(&candidate.path) {
-                Ok((content, encoding)) => {
+            processed_bytes = processed_bytes.saturating_add(candidate.content_bytes());
+            match candidate.read_content(full_text) {
+                Some((content, encoding)) => {
                     file_statement
                         .execute(params![
                             candidate.relative_path,
@@ -1565,6 +1850,8 @@ where
                     short_queries::insert(&transaction, row_id, &content)
                         .map_err(|error| error.to_string())?;
                     fts_statement
+                        .as_mut()
+                        .ok_or("Missing full-text writer")?
                         .execute(params![row_id, content])
                         .map_err(|error| {
                             format!(
@@ -1574,7 +1861,7 @@ where
                         })?;
                     indexed += 1;
                 }
-                Err(_) => {
+                None => {
                     file_statement
                         .execute(params![
                             candidate.relative_path,
@@ -1601,7 +1888,14 @@ where
         return Ok(());
     }
     let metadata = [
-        ("cjk_bigrams_version", "1".to_string()),
+        (
+            "full_text_ready",
+            if full_text { "1" } else { "0" }.to_string(),
+        ),
+        (
+            "cjk_bigrams_version",
+            if full_text { "1" } else { "0" }.to_string(),
+        ),
         ("schema_version", INDEX_SCHEMA_VERSION.to_string()),
         ("project_path", project.display_path.clone()),
         ("project_key", project.preference_key.clone()),
@@ -1620,12 +1914,14 @@ where
             )
             .map_err(|error| format!("Failed to write index metadata: {error}"))?;
     }
-    transaction
-        .execute(
-            "INSERT INTO content_fts(content_fts) VALUES ('optimize')",
-            [],
-        )
-        .map_err(|error| format!("Failed to optimize FTS5 index: {error}"))?;
+    if full_text {
+        transaction
+            .execute(
+                "INSERT INTO content_fts(content_fts) VALUES ('optimize')",
+                [],
+            )
+            .map_err(|error| format!("Failed to optimize FTS5 index: {error}"))?;
+    }
     transaction
         .commit()
         .map_err(|error| format!("Failed to commit search index: {error}"))?;
@@ -1635,6 +1931,9 @@ where
         .map_err(|error| format!("Failed to verify search index: {error}"))?;
     if integrity != "ok" {
         return Err(format!("Search index integrity check failed: {integrity}"));
+    }
+    if !full_text {
+        return Ok(());
     }
     let fts_count: u64 = connection
         .query_row("SELECT count(*) FROM content_fts", [], |row| row.get(0))
@@ -1691,27 +1990,70 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
         .map_err(|error| error.to_string())
 }
 
-fn replace_index_atomically(index_dir: &Path, temp_path: &Path) -> Result<(), String> {
-    let final_path = index_dir.join("index.sqlite3");
-    let backup_path = index_dir.join("index.sqlite3.backup");
-    if backup_path.exists() {
-        fs::remove_file(&backup_path)
-            .map_err(|error| format!("Failed to remove stale index backup: {error}"))?;
-    }
-    if final_path.exists() {
-        fs::rename(&final_path, &backup_path)
-            .map_err(|error| format!("Failed to preserve the previous search index: {error}"))?;
-    }
-    if let Err(error) = fs::rename(temp_path, &final_path) {
-        if backup_path.exists() {
-            let _ = fs::rename(&backup_path, &final_path);
+fn publish_build(
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+    job_id: u64,
+    index_dir: &Path,
+    temp_path: &Path,
+) -> Result<bool, String> {
+    let mut delay = Duration::from_millis(15);
+    loop {
+        {
+            let Ok(_lifetime) = project.live() else {
+                let _ = fs::remove_file(temp_path);
+                return Ok(false);
+            };
+            let entries = state
+                .entries
+                .lock()
+                .map_err(|_| "Failed to publish project file catalog")?;
+            if !entries.get(&project.preference_key).is_some_and(|entry| {
+                entry.job_id == job_id && !entry.cancel.load(Ordering::Relaxed)
+            }) {
+                let _ = fs::remove_file(temp_path);
+                return Ok(false);
+            }
+            match replace_index_atomically(index_dir, temp_path) {
+                Ok(()) => {
+                    state.catalog_changed.notify_all();
+                    return Ok(true);
+                }
+                // SQLite readers on Windows hold handles without FILE_SHARE_DELETE.
+                Err(error) if cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33)) => {}
+                Err(error) => return Err(format!("Failed to publish search index: {error}")),
+            }
         }
-        return Err(format!("Failed to activate the new search index: {error}"));
+        // Never hold the job registry while a reader drains or the project is closing.
+        std::thread::sleep(delay);
+        delay = (delay * 2).min(Duration::from_millis(250));
     }
-    if backup_path.exists() {
-        let _ = fs::remove_file(backup_path);
+}
+
+fn replace_index_atomically(index_dir: &Path, temp_path: &Path) -> std::io::Result<()> {
+    let final_path = index_dir.join("index.sqlite3");
+    // Both files are in the same directory. Rust uses a replace-existing rename
+    // on Windows as well; a failed rename leaves the previous index in place.
+    let result = fs::rename(temp_path, &final_path);
+    #[cfg(windows)]
+    if result.as_ref().err().and_then(std::io::Error::raw_os_error) == Some(5) {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Replacing an open destination may return ACCESS_DENIED. Requesting
+        // DELETE on it gives the sharing violation if SQLite still holds it.
+        // If the reader has drained, this handle prevents a fresh incompatible
+        // reader racing the second rename. Genuine access errors propagate.
+        const DELETE_ACCESS: u32 = 0x0001_0000;
+        let _delete_access = match fs::OpenOptions::new()
+            .access_mode(DELETE_ACCESS)
+            .open(&final_path)
+        {
+            Ok(handle) => Some(handle),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        return fs::rename(temp_path, &final_path);
     }
-    Ok(())
+    result
 }
 
 fn cleanup_temporary_indexes(index_dir: &Path) {
@@ -1736,25 +2078,26 @@ enum IndexHealth {
 }
 
 fn inspect_index_health(path: &Path) -> IndexHealth {
-    let connection = match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
-        Ok(connection) => connection,
-        Err(error) => {
-            let message = error.to_string();
-            let lower = message.to_lowercase();
-            return if lower.contains("malformed")
-                || lower.contains("not a database")
-                || lower.contains("database corrupt")
-            {
-                IndexHealth::Corrupt(message)
-            } else {
-                IndexHealth::Unavailable(message)
-            };
+    // FTS5 may require a writable handle for its virtual-table integrity check.
+    // Open only an existing cache; an access or lock error is not evidence of corruption.
+    let classify = |error: rusqlite::Error| match error.sqlite_error_code() {
+        Some(rusqlite::ErrorCode::DatabaseCorrupt | rusqlite::ErrorCode::NotADatabase) => {
+            IndexHealth::Corrupt(error.to_string())
         }
+        _ => IndexHealth::Unavailable(error.to_string()),
+    };
+    let connection = match Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE) {
+        Ok(connection) => connection,
+        Err(error) => return classify(error),
     };
     match connection.query_row("PRAGMA quick_check(1)", [], |row| row.get::<_, String>(0)) {
         Ok(result) if result == "ok" => IndexHealth::Healthy,
+        // FTS5 reports operational failures as rows too (e.g. a read-only volume).
+        Ok(result) if result.contains("unable to validate the inverted index") => {
+            IndexHealth::Unavailable(result)
+        }
         Ok(result) => IndexHealth::Corrupt(format!("quick_check returned {result}")),
-        Err(error) => IndexHealth::Corrupt(format!("quick_check failed: {error}")),
+        Err(error) => classify(error),
     }
 }
 
@@ -1775,13 +2118,14 @@ fn recover_unusable_index(
     reason: String,
 ) {
     // 检查和隔离由持有 writer 锁的构建任务完成，避免与增量提交争用文件。
-    mark_index_for_rebuild(app, state, &project.preference_key, Some(reason));
+    mark_index_for_rebuild(app, state, project, Some(reason));
     let _ = start_index_build(app.clone(), state.clone(), project.clone(), true);
 }
 
 fn load_ready_status(
     app: &AppHandle,
     project: &ResolvedProject,
+    full_text: bool,
 ) -> Option<ProjectSearchIndexStatus> {
     let index_dir = index_directory(app, project).ok()?;
     let final_path = index_dir.join("index.sqlite3");
@@ -1807,6 +2151,7 @@ fn load_ready_status(
     if read_meta("schema_version")?.parse::<u32>().ok()? != INDEX_SCHEMA_VERSION
         || read_meta("project_key")? != project.preference_key
         || read_meta("state")?.as_str() != "ready"
+        || (full_text && read_meta("full_text_ready").as_deref() == Some("0"))
     {
         return None;
     }
@@ -1817,7 +2162,7 @@ fn load_ready_status(
     let built_at = read_meta("built_at")?.parse().ok()?;
     Some(ProjectSearchIndexStatus {
         project_path: project.display_path.clone(),
-        enabled: true,
+        enabled: full_text,
         state: "ready".to_string(),
         backend: "fts5".to_string(),
         phase: "ready".to_string(),
@@ -1840,7 +2185,11 @@ fn restore_project_index(
     state: &SearchIndexState,
     project: &ResolvedProject,
 ) -> Result<Option<ProjectSearchIndexStatus>, String> {
-    let Some(status) = load_ready_status(app, project) else {
+    let full_text = app
+        .state::<Arc<Database>>()
+        .load_project_search_index_enabled(&project.preference_key)?;
+    let _lifetime = project.live()?;
+    let Some(status) = load_ready_status(app, project, full_text) else {
         return Ok(None);
     };
     ensure_project_watcher(app, state, project)?;
@@ -1857,9 +2206,12 @@ fn restore_project_index(
     // 状态查询和搜索可能并发恢复同一项目，不能覆盖已经启动的构建任务。
     if let Some(entry) = entries
         .get(&project.preference_key)
-        .filter(|entry| entry.status.enabled)
+        .filter(|entry| entry.status.enabled == full_text)
     {
         return Ok(Some(entry.status.clone()));
+    }
+    if let Some(previous) = entries.get(&project.preference_key) {
+        previous.cancel.store(true, Ordering::Relaxed);
     }
     entries.insert(
         project.preference_key.clone(),
@@ -1868,11 +2220,14 @@ fn restore_project_index(
             cancel: Arc::new(AtomicBool::new(false)),
             pause: Arc::new(AtomicBool::new(false)),
             status: status.clone(),
+            fallback_paths: None,
         },
     );
     drop(entries);
-    schedule_short_query_upgrade(app, state, project);
-    let _ = app.emit("search-index-status", status.clone());
+    if full_text {
+        schedule_short_query_upgrade(app, state, project);
+    }
+    let _ = app.emit("search-index-status", content_status(status.clone()));
     Ok(Some(status))
 }
 
@@ -1927,6 +2282,7 @@ fn upgrade_short_query_database(
     if cancel.load(Ordering::Relaxed) {
         return Err("Index upgrade cancelled".into());
     }
+    let _lifetime = project.live()?;
     short_queries::mark_ready(&transaction).map_err(|error| error.to_string())?;
     transaction.commit().map_err(|error| error.to_string())
 }
@@ -1988,47 +2344,112 @@ fn schedule_short_query_upgrade(
             Some(entry.status.clone())
         });
         if let Some(status) = status {
-            let _ = app.emit("search-index-status", status);
+            let _ = app.emit("search-index-status", content_status(status));
         }
     });
 }
 
-pub(crate) fn search_project_entry_index(
+pub(super) fn search_project_entry_index(
     app: &AppHandle,
-    project_path: &str,
+    project: &ResolvedProject,
     query: &str,
 ) -> Result<Vec<super::file_tree::FileTreeEntry>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
-    with_project_entry_index(app, project_path, |connection, project| {
+    with_project_entry_index(app, project, |connection, project| {
         super::file_tree::search_indexed_project_entries(connection, &project.path, query)
     })
 }
 
 pub(super) fn terminal_entry_index(
     app: &AppHandle,
-    project_path: &str,
+    project: &ResolvedProject,
     root: &Path,
     name: &str,
 ) -> Result<super::terminal_links::TerminalLinkResolution, String> {
-    with_project_entry_index(app, project_path, |connection, _| {
+    with_project_entry_index(app, project, |connection, _| {
         super::terminal_links::search_indexed_exact_name(connection, root, name, 32)
     })
 }
 
 fn with_project_entry_index<T>(
     app: &AppHandle,
-    project_path: &str,
+    project: &ResolvedProject,
     query: impl FnOnce(&Connection, &ResolvedProject) -> Result<T, String>,
 ) -> Result<T, String> {
-    let project = resolve_project(project_path)?;
-    let database = app.state::<Arc<Database>>();
-    if !database.load_project_search_index_enabled(&project.preference_key)? {
-        return Err("search-index-unavailable".into());
+    drop(project.live()?);
+    let path = index_directory(app, project)?.join("index.sqlite3");
+    if !path.is_file() {
+        let state = app.state::<SearchIndexState>();
+        let runtime = state.runtime(&project.preference_key)?;
+        let _control = runtime
+            .control
+            .lock()
+            .map_err(|_| "Failed to lock index settings")?;
+        if !path.is_file() {
+            match get_active_status(&state, &project.preference_key) {
+                Some(status) if status.state == "ready" => {
+                    start_index_build(app.clone(), state.inner().clone(), project.clone(), true)?;
+                }
+                None => {
+                    start_index_build(app.clone(), state.inner().clone(), project.clone(), false)?;
+                }
+                _ => {}
+            }
+            drop(_control);
+            // A first query can arrive during discovery. Wake it as soon as paths are
+            // published, without waiting for the much longer text indexing phase.
+            let entries = state
+                .entries
+                .lock()
+                .map_err(|_| "search-index-unavailable")?;
+            let (_entries, timeout) = state
+                .catalog_changed
+                .wait_timeout_while(entries, Duration::from_secs(30), |entries| {
+                    entries.get(&project.preference_key).is_some_and(|entry| {
+                        matches!(entry.status.state.as_str(), "preflight" | "building")
+                            && !path.is_file()
+                    })
+                })
+                .map_err(|_| "search-index-unavailable")?;
+            if timeout.timed_out() && !path.is_file() {
+                return Err("search-index-building".into());
+            }
+        }
     }
-    // 查询只读已建成的索引，不触发建库、完整性扫描、监听器或目录遍历。
-    let path = index_directory(app, &project)?.join("index.sqlite3");
+    let state = app.state::<SearchIndexState>();
+    let fallback = {
+        let _lifetime = project.live()?;
+        let mut entries = state
+            .entries
+            .lock()
+            .map_err(|_| "search-index-unavailable")?;
+        entries
+            .get_mut(&project.preference_key)
+            .filter(|entry| {
+                entry.fallback_paths.is_some()
+                    || matches!(
+                        entry.status.state.as_str(),
+                        "paused" | "failed" | "unsupported"
+                    )
+            })
+            .map(|entry| {
+                (
+                    entry
+                        .fallback_paths
+                        .get_or_insert_with(Default::default)
+                        .clone(),
+                    entry.cancel.clone(),
+                )
+            })
+    };
+    if let Some((catalog, cancel)) = fallback {
+        return catalog
+            .lock()
+            .map_err(|_| "search-index-unavailable")?
+            .query(project, &cancel, query);
+    }
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| "search-index-unavailable".to_string())?;
     connection
@@ -2046,7 +2467,9 @@ fn with_project_entry_index<T>(
     if !compatible {
         return Err("search-index-unavailable".into());
     }
-    query(&connection, &project)
+    let results = query(&connection, project)?;
+    drop(project.live()?);
+    Ok(results)
 }
 
 fn query_candidate_relative_paths(
@@ -2111,14 +2534,16 @@ fn sqlite_is_busy(error: &rusqlite::Error) -> bool {
     )
 }
 
-pub(crate) fn lookup_index_candidates(
+pub(super) fn lookup_index_candidates(
     app: &AppHandle,
-    project_path: &str,
+    project: &ResolvedProject,
     query: &str,
     use_regex: bool,
-) -> IndexCandidateLookup {
-    let lookup = lookup_index_candidates_inner(app, project_path, query, use_regex);
-    enforce_short_query_index(query, use_regex, lookup)
+) -> Result<IndexCandidateLookup, String> {
+    drop(project.live()?);
+    let lookup = lookup_index_candidates_inner(app, project, query, use_regex);
+    drop(project.live()?);
+    Ok(enforce_short_query_index(query, use_regex, lookup))
 }
 
 fn enforce_short_query_index(
@@ -2127,18 +2552,40 @@ fn enforce_short_query_index(
     lookup: IndexCandidateLookup,
 ) -> IndexCandidateLookup {
     // 两字中文的索引尚不可用时明确等待，绝不能悄悄退回目录扫描。
-    if !use_regex
-        && short_queries::token(query.trim()).is_some()
-        && matches!(lookup, IndexCandidateLookup::Fallback { .. })
-    {
-        return IndexCandidateLookup::Unavailable;
+    if !use_regex && short_queries::token(query.trim()).is_some() {
+        if let IndexCandidateLookup::Fallback {
+            reason,
+            index_state,
+        } = &lookup
+        {
+            let error = match reason.as_str() {
+                "index_disabled" => "short-query-index-disabled",
+                "index_busy" | "index_reconciling" | "index_changed_during_query" => {
+                    "short-query-index-waiting"
+                }
+                "index_open_failed_rebuilding" | "index_query_failed_rebuilding" => {
+                    "short-query-index-waiting"
+                }
+                "index_not_ready" if index_state == "paused" => "short-query-index-paused",
+                "index_not_ready"
+                    if matches!(
+                        index_state.as_str(),
+                        "preflight" | "building" | "updating" | "stale"
+                    ) =>
+                {
+                    "short-query-index-waiting"
+                }
+                _ => "short-query-index-unavailable",
+            };
+            return IndexCandidateLookup::ShortQueryError(error);
+        }
     }
     lookup
 }
 
 fn lookup_index_candidates_inner(
     app: &AppHandle,
-    project_path: &str,
+    project: &ResolvedProject,
     query: &str,
     use_regex: bool,
 ) -> IndexCandidateLookup {
@@ -2161,19 +2608,16 @@ fn lookup_index_candidates_inner(
             index_state: "not_applicable".to_string(),
         };
     }
-    let project = match resolve_project(project_path) {
-        Ok(project) => project,
-        Err(error) => {
+    let database = app.state::<Arc<Database>>();
+    let enabled = match database.load_project_search_index_enabled(&project.preference_key) {
+        Ok(enabled) => enabled,
+        Err(reason) => {
             return IndexCandidateLookup::Fallback {
-                reason: error,
-                index_state: "unavailable".to_string(),
+                reason,
+                index_state: "unavailable".into(),
             }
         }
     };
-    let database = app.state::<Arc<Database>>();
-    let enabled = database
-        .load_project_search_index_enabled(&project.preference_key)
-        .unwrap_or(false);
     if !enabled {
         return IndexCandidateLookup::Fallback {
             reason: "index_disabled".to_string(),
@@ -2182,15 +2626,17 @@ fn lookup_index_candidates_inner(
     }
 
     let state = app.state::<SearchIndexState>();
-    if get_active_status(&state, &project.preference_key).is_none()
-        && !matches!(restore_project_index(app, &state, &project), Ok(Some(_)))
-    {
-        let _ = start_index_build(app.clone(), state.inner().clone(), project.clone(), false);
+    if get_active_status(&state, &project.preference_key).is_none() {
+        if let Ok(_control) = project.runtime.control.lock() {
+            if database.load_project_search_index_enabled(&project.preference_key) == Ok(true) {
+                let _ = ensure_index_mode(app, &state, project, true);
+            }
+        }
     }
 
     let snapshot = state.entries.lock().ok().and_then(|entries| {
         let entry = entries.get(&project.preference_key)?;
-        if entry.status.state != "ready" {
+        if !entry.status.enabled || entry.status.state != "ready" {
             return None;
         }
         Some(entry.job_id)
@@ -2205,7 +2651,7 @@ fn lookup_index_candidates_inner(
         };
     };
 
-    let final_path = match index_directory(app, &project) {
+    let final_path = match index_directory(app, project) {
         Ok(directory) => directory.join("index.sqlite3"),
         Err(error) => {
             return IndexCandidateLookup::Fallback {
@@ -2214,17 +2660,8 @@ fn lookup_index_candidates_inner(
             }
         }
     };
-    let runtime = match state.runtime(&project.preference_key) {
-        Ok(runtime) => runtime,
-        Err(reason) => {
-            return IndexCandidateLookup::Fallback {
-                reason,
-                index_state: "unavailable".into(),
-            }
-        }
-    };
     // 查询前后都保留脏路径；已经开始的提交可能在查询期间清理自己的批次。
-    let mut pending = match pending_search_paths(&runtime) {
+    let mut pending = match pending_search_paths(&project.runtime) {
         Ok(paths) => paths,
         Err(reason) => {
             return IndexCandidateLookup::Fallback {
@@ -2240,7 +2677,7 @@ fn lookup_index_candidates_inner(
                 recover_unusable_index(
                     app,
                     state.inner(),
-                    &project,
+                    project,
                     format!("Search index could not be opened: {error}"),
                 );
                 return IndexCandidateLookup::Fallback {
@@ -2257,8 +2694,15 @@ fn lookup_index_candidates_inner(
     }
     const CANDIDATE_LIMIT: usize = 50_000;
     if short_queries::token(query).is_some() && !short_queries::ready(&connection) {
-        schedule_short_query_upgrade(app, state.inner(), &project);
-        return IndexCandidateLookup::Unavailable;
+        if get_active_status(&state, &project.preference_key)
+            .is_some_and(|status| status.error.is_some())
+        {
+            return IndexCandidateLookup::ShortQueryError("short-query-index-unavailable");
+        }
+        if let Ok(_lifetime) = project.live() {
+            schedule_short_query_upgrade(app, state.inner(), project);
+        }
+        return IndexCandidateLookup::ShortQueryError("short-query-index-waiting");
     }
     let relative_paths = match query_candidate_relative_paths(&connection, query, CANDIDATE_LIMIT) {
         Ok(paths) => paths,
@@ -2273,7 +2717,7 @@ fn lookup_index_candidates_inner(
             recover_unusable_index(
                 app,
                 state.inner(),
-                &project,
+                project,
                 format!("Search index query failed: {reason}"),
             );
             return IndexCandidateLookup::Fallback {
@@ -2301,7 +2745,7 @@ fn lookup_index_candidates_inner(
         };
     }
 
-    match pending_search_paths(&runtime) {
+    match pending_search_paths(&project.runtime) {
         Ok(paths) => pending.extend(paths),
         Err(reason) => {
             return IndexCandidateLookup::Fallback {
@@ -2310,7 +2754,7 @@ fn lookup_index_candidates_inner(
             }
         }
     }
-    let paths = merge_search_candidates(&project, relative_paths, pending);
+    let paths = merge_search_candidates(project, relative_paths, pending);
     touch_index_usage(final_path.parent().unwrap_or_else(|| Path::new("")));
     IndexCandidateLookup::Ready {
         paths,
@@ -2327,74 +2771,79 @@ pub async fn get_search_index_status(
 ) -> Result<ProjectSearchIndexStatus, String> {
     let database = database.inner().clone();
     let state = state.inner().clone();
+    let project = resolve_project(&state, &project_path)?;
     crate::commands::run_background_task("get_search_index_status", move || {
-        get_search_index_status_blocking(app, database, state, project_path)
+        get_search_index_status_blocking(app, database, state, project)
     })
     .await
 }
 
-pub fn get_search_index_status_blocking(
+fn get_search_index_status_blocking(
     app: AppHandle,
     database: Arc<Database>,
     state: SearchIndexState,
-    project_path: String,
+    project: ResolvedProject,
 ) -> Result<ProjectSearchIndexStatus, String> {
-    let project = resolve_project(&project_path)?;
+    let runtime = state.runtime(&project.preference_key)?;
+    let _control = runtime
+        .control
+        .lock()
+        .map_err(|_| "Failed to lock index settings")?;
     let enabled = database.load_project_search_index_enabled(&project.preference_key)?;
-    if !enabled {
-        cancel_active_job(&state, &project.preference_key);
-        stop_project_watcher(&state, &project.preference_key);
-        return Ok(disabled_status(project.display_path));
+    ensure_index_mode(&app, &state, &project, enabled).map(content_status)
+}
+
+fn ensure_index_mode(
+    app: &AppHandle,
+    state: &SearchIndexState,
+    project: &ResolvedProject,
+    enabled: bool,
+) -> Result<ProjectSearchIndexStatus, String> {
+    {
+        let _lifetime = project.live()?;
+        if let Some(status) = get_active_status(state, &project.preference_key) {
+            if status.enabled == enabled {
+                return Ok(status);
+            }
+            cancel_active_job(state, &project.preference_key);
+        }
     }
-    if let Some(status) = get_active_status(&state, &project.preference_key) {
+    // A write from the previous mode can invalidate the persisted full-text cache.
+    let runtime = state.runtime(&project.preference_key)?;
+    let _writer = runtime
+        .writer
+        .lock()
+        .map_err(|_| "Failed to lock index writer")?;
+    if let Some(status) = restore_project_index(app, state, project)? {
         return Ok(status);
     }
-    if let Some(status) = restore_project_index(&app, &state, &project)? {
-        return Ok(status);
-    }
-    start_index_build(app, state.clone(), project, false)
+    start_index_build(app.clone(), state.clone(), project.clone(), false)
 }
 
 #[tauri::command]
-pub fn set_project_index_enabled(
+pub async fn set_project_index_enabled(
     app: AppHandle,
     database: State<'_, Arc<Database>>,
     state: State<'_, SearchIndexState>,
     project_path: String,
     enabled: bool,
 ) -> Result<ProjectSearchIndexStatus, String> {
-    let project = resolve_project(&project_path)?;
-    database.save_project_search_index_enabled(&project.preference_key, enabled)?;
-    if !enabled {
-        cancel_active_job(&state, &project.preference_key);
-        stop_project_watcher(&state, &project.preference_key);
-        let status = disabled_status(project.display_path);
-        let job_id = state.next_job_id.fetch_add(1, Ordering::Relaxed) + 1;
-        state
-            .entries
+    let database = database.inner().clone();
+    let state = state.inner().clone();
+    let project = resolve_project(&state, &project_path)?;
+    crate::commands::run_background_task("set_project_index_enabled", move || {
+        let runtime = state.runtime(&project.preference_key)?;
+        let _control = runtime
+            .control
             .lock()
-            .map_err(|_| "Failed to update search index state".to_string())?
-            .insert(
-                project.preference_key,
-                ActiveEntry {
-                    job_id,
-                    cancel: Arc::new(AtomicBool::new(true)),
-                    pause: Arc::new(AtomicBool::new(false)),
-                    status: status.clone(),
-                },
-            );
-        let _ = app.emit("search-index-status", status.clone());
-        return Ok(status);
-    }
-    if let Some(status) = get_active_status(&state, &project.preference_key).filter(|status| {
-        status.enabled && matches!(status.state.as_str(), "ready" | "preflight" | "building")
-    }) {
-        return Ok(status);
-    }
-    if let Some(status) = restore_project_index(&app, &state, &project)? {
-        return Ok(status);
-    }
-    start_index_build(app, state.inner().clone(), project, false)
+            .map_err(|_| "Failed to lock index settings")?;
+        {
+            let _lifetime = project.live()?;
+            database.save_project_search_index_enabled(&project.preference_key, enabled)?;
+        }
+        ensure_index_mode(&app, &state, &project, enabled).map(content_status)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -2404,8 +2853,16 @@ pub fn rebuild_project_index(
     state: State<'_, SearchIndexState>,
     project_path: String,
 ) -> Result<ProjectSearchIndexStatus, String> {
-    let project = resolve_project(&project_path)?;
-    database.save_project_search_index_enabled(&project.preference_key, true)?;
+    let project = resolve_project(&state, &project_path)?;
+    let runtime = state.runtime(&project.preference_key)?;
+    let _control = runtime
+        .control
+        .lock()
+        .map_err(|_| "Failed to lock index settings")?;
+    {
+        let _lifetime = project.live()?;
+        database.save_project_search_index_enabled(&project.preference_key, true)?;
+    }
     start_index_build(app, state.inner().clone(), project, true)
 }
 
@@ -2415,7 +2872,7 @@ pub fn pause_project_index(
     state: State<'_, SearchIndexState>,
     project_path: String,
 ) -> Result<ProjectSearchIndexStatus, String> {
-    let project = resolve_project(&project_path)?;
+    let project = resolve_project(&state, &project_path)?;
     let status = state
         .entries
         .lock()
@@ -2433,7 +2890,8 @@ pub fn pause_project_index(
             Some(entry.status.clone())
         })
         .ok_or_else(|| "Only an active index build can be paused".to_string())?;
-    let _ = app.emit("search-index-status", status.clone());
+    state.catalog_changed.notify_all();
+    let _ = app.emit("search-index-status", content_status(status.clone()));
     Ok(status)
 }
 
@@ -2443,7 +2901,7 @@ pub fn resume_project_index(
     state: State<'_, SearchIndexState>,
     project_path: String,
 ) -> Result<ProjectSearchIndexStatus, String> {
-    let project = resolve_project(&project_path)?;
+    let project = resolve_project(&state, &project_path)?;
     let status = state
         .entries
         .lock()
@@ -2469,7 +2927,7 @@ pub fn resume_project_index(
             Some(entry.status.clone())
         })
         .ok_or_else(|| "No paused index build is available to resume".to_string())?;
-    let _ = app.emit("search-index-status", status.clone());
+    let _ = app.emit("search-index-status", content_status(status.clone()));
     Ok(status)
 }
 
@@ -2494,7 +2952,11 @@ pub fn delete_project_index_blocking(
     state: SearchIndexState,
     project_path: String,
 ) -> Result<ProjectSearchIndexStatus, String> {
-    let project = resolve_project(&project_path)?;
+    let _storage = state
+        .storage_changes
+        .lock()
+        .map_err(|_| "Failed to lock search index storage")?;
+    let project = resolve_project(&state, &project_path)?;
     if project_has_active_index_write(&state, &project.preference_key) {
         return Err(
             "Wait for the active search index update to finish before deleting it".to_string(),
@@ -2516,7 +2978,7 @@ pub fn delete_project_index_blocking(
         entries.remove(&project.preference_key);
     }
     let status = disabled_status(project.display_path);
-    let _ = app.emit("search-index-status", status.clone());
+    let _ = app.emit("search-index-status", content_status(status.clone()));
     Ok(status)
 }
 
@@ -2559,16 +3021,14 @@ pub fn set_search_index_storage_blocking(
     cache_root: Option<String>,
     quota_bytes: u64,
 ) -> Result<SearchIndexStorageStatus, String> {
+    let _storage = state
+        .storage_changes
+        .lock()
+        .map_err(|_| "Failed to lock search index storage")?;
     const MIN_QUOTA_BYTES: u64 = 256 * 1024 * 1024;
     if quota_bytes < MIN_QUOTA_BYTES {
         return Err("Search index cache limit must be at least 256 MiB".to_string());
     }
-    if has_active_build(&state) {
-        return Err(
-            "Wait for active search index builds to finish before moving the cache".to_string(),
-        );
-    }
-
     let mut settings = database.load_search_index_storage()?;
     let source_root = index_root_from_settings(&app, &settings)?;
     let default_root = default_index_root(&app)?;
@@ -2586,25 +3046,58 @@ pub fn set_search_index_storage_blocking(
         }
     }
     let destination_root = custom_root.unwrap_or_else(|| default_root.clone());
-    relocate_index_root(&source_root, &destination_root)?;
-    settings.cache_root = if destination_root == default_root {
-        None
-    } else {
-        Some(display_path(&destination_root))
-    };
-    settings.quota_bytes = quota_bytes;
-    database.save_search_index_storage(&settings)?;
+    if source_root == destination_root
+        || fs::canonicalize(&source_root).is_ok_and(|source| {
+            fs::canonicalize(&destination_root).is_ok_and(|destination| destination == source)
+        })
+    {
+        settings.quota_bytes = quota_bytes;
+        database.save_search_index_storage(&settings)?;
+        enforce_storage_quota(&app, None)?;
+        return storage_status(&app);
+    }
+    if has_active_build(&state) {
+        return Err(
+            "Wait for active search index builds to finish before moving the cache".to_string(),
+        );
+    }
 
-    if let Ok(mut entries) = state.entries.lock() {
-        for entry in entries.values() {
-            entry.cancel.store(true, Ordering::Relaxed);
+    {
+        // Keep active project watchers. Block new runtimes and writers across
+        // the copy and preference change so their next write uses the new root.
+        let runtimes = state
+            .runtimes
+            .lock()
+            .map_err(|_| "Failed to lock index runtimes")?;
+        let _writers = runtimes
+            .values()
+            .map(|runtime| runtime.writer.try_lock())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| "Wait for active search index writes to finish before moving the cache")?;
+        settings.cache_root = if destination_root == default_root {
+            None
+        } else {
+            Some(display_path(&destination_root))
+        };
+        settings.quota_bytes = quota_bytes;
+        relocate_index_root(&source_root, &destination_root, || {
+            database.save_search_index_storage(&settings)
+        })?;
+        let entries = state
+            .entries
+            .lock()
+            .map_err(|_| "Failed to read active projects")?;
+        for key in entries.keys() {
+            if let Some(runtime) = runtimes.get(key) {
+                runtime
+                    .changes
+                    .lock()
+                    .map_err(|_| "Failed to schedule index reconciliation")?
+                    .record(Vec::new(), true, Instant::now());
+            }
         }
-        entries.clear();
     }
-    if let Ok(mut watchers) = state.watchers.lock() {
-        watchers.clear();
-    }
-    enforce_storage_quota(&app, &destination_root.join(".no-active-index"))?;
+    enforce_storage_quota(&app, None)?;
     storage_status(&app)
 }
 
@@ -2624,6 +3117,10 @@ pub fn clear_search_index_cache_blocking(
     app: AppHandle,
     state: SearchIndexState,
 ) -> Result<SearchIndexStorageStatus, String> {
+    let _storage = state
+        .storage_changes
+        .lock()
+        .map_err(|_| "Failed to lock search index storage")?;
     if has_active_build(&state) {
         return Err(
             "Wait for active search index builds to finish before clearing the cache".to_string(),
@@ -2646,6 +3143,9 @@ pub fn clear_search_index_cache_blocking(
     storage_status(&app)
 }
 
+#[cfg(all(test, windows))]
+mod windows_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2654,6 +3154,8 @@ mod tests {
     fn test_project(path: &Path) -> ResolvedProject {
         let display = display_path(path);
         ResolvedProject {
+            runtime: Arc::default(),
+            generation: 0,
             path: path.to_path_buf(),
             preference_key: display.replace('\\', "/").to_lowercase(),
             display_path: display,
@@ -2677,6 +3179,7 @@ mod tests {
         )
         .unwrap();
         write_index_database(
+            true,
             &database_path,
             &project,
             &candidates,
@@ -2728,6 +3231,7 @@ mod tests {
         fs::rename(&first, &renamed).unwrap();
         fs::write(&second, "答案").unwrap();
         apply_incremental_updates(
+            true,
             &database_path,
             &project,
             &[first, renamed.clone(), second.clone()],
@@ -2744,7 +3248,7 @@ mod tests {
         );
         drop(connection);
         fs::remove_file(&renamed).unwrap();
-        apply_incremental_updates(&database_path, &project, &[renamed]).unwrap();
+        apply_incremental_updates(true, &database_path, &project, &[renamed]).unwrap();
         let connection = Connection::open(&database_path).unwrap();
         assert!(query_candidate_relative_paths(&connection, "问题", 10)
             .unwrap()
@@ -2753,23 +3257,33 @@ mod tests {
 
     #[test]
     fn two_chinese_characters_never_turn_an_unavailable_index_into_a_directory_scan() {
-        for reason in [
-            "index_disabled",
-            "index_not_ready",
-            "index_busy",
-            "index_reconciling",
-            "too_many_index_candidates",
+        for (reason, state, expected) in [
+            ("index_disabled", "disabled", "short-query-index-disabled"),
+            ("index_not_ready", "building", "short-query-index-waiting"),
+            ("index_not_ready", "paused", "short-query-index-paused"),
+            ("index_not_ready", "failed", "short-query-index-unavailable"),
+            ("index_busy", "ready", "short-query-index-waiting"),
+            (
+                "index_reconciling",
+                "reconciling",
+                "short-query-index-waiting",
+            ),
+            (
+                "too_many_index_candidates",
+                "ready",
+                "short-query-index-unavailable",
+            ),
         ] {
             let plan = enforce_short_query_index(
                 "问题",
                 false,
                 IndexCandidateLookup::Fallback {
                     reason: reason.into(),
-                    index_state: "unavailable".into(),
+                    index_state: state.into(),
                 },
             );
             assert!(
-                matches!(plan, IndexCandidateLookup::Unavailable),
+                matches!(plan, IndexCandidateLookup::ShortQueryError(actual) if actual == expected),
                 "{reason}"
             );
         }
@@ -2825,6 +3339,7 @@ mod tests {
 
         let database_path = root.path().join("index.sqlite3");
         write_index_database(
+            true,
             &database_path,
             &project,
             &candidates,
@@ -2871,6 +3386,138 @@ mod tests {
     }
 
     #[test]
+    fn file_catalog_lists_large_files_and_tracks_changes_without_content_indexes() {
+        let root = tempdir().unwrap();
+        let cache = tempdir().unwrap();
+        let project = test_project(root.path());
+        let log = root.path().join("server.log");
+        fs::File::create(&log)
+            .unwrap()
+            .set_len(80 * 1024 * 1024)
+            .unwrap();
+        fs::write(root.path().join("notes.txt"), "needle").unwrap();
+        let flag = AtomicBool::new(false);
+        let candidates = discover_candidates(&project, &flag, &flag, |_, _, _| {}).unwrap();
+        let db = cache.path().join("index.sqlite3");
+        write_index_database(
+            false,
+            &db,
+            &project,
+            &candidates,
+            &flag,
+            &flag,
+            |_, _, _, _| {},
+        )
+        .unwrap();
+        let connection = Connection::open(&db).unwrap();
+        let search = |name| {
+            super::super::file_tree::search_indexed_project_entries(&connection, root.path(), name)
+                .unwrap()
+                .len()
+        };
+        assert_eq!(search("server.log"), 1);
+        assert_eq!(search("notes.txt"), 1);
+        assert_eq!(connection.query_row("SELECT count(*) FROM sqlite_master WHERE name IN ('content_fts','content_cjk_bigrams')", [], |r| r.get::<_, u64>(0)).unwrap(), 0);
+        let moved = root.path().join("archive.log");
+        fs::rename(&log, &moved).unwrap();
+        apply_incremental_updates(false, &db, &project, &[log, moved]).unwrap();
+        assert_eq!(search("server.log"), 0);
+        assert_eq!(search("archive.log"), 1);
+    }
+
+    #[test]
+    fn old_full_text_cache_backfills_large_names_and_handles_size_changes() {
+        let root = tempdir().unwrap();
+        let cache = tempdir().unwrap();
+        let project = test_project(root.path());
+        let file = root.path().join("server.log");
+        let flag = AtomicBool::new(false);
+        let db = cache.path().join("index.sqlite3");
+        // A v2 cache built before large paths were discovered has no row for this log.
+        fs::File::create(&file)
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+        write_index_database(true, &db, &project, &[], &flag, &flag, |_, _, _, _| {}).unwrap();
+        let dirty = reconciliation_paths(&db, &project, &[]).unwrap();
+        assert_eq!(dirty, vec![file.clone()]);
+        let summary = apply_incremental_updates(true, &db, &project, &dirty).unwrap();
+        assert_eq!((summary.total_files, summary.indexed_files), (1, 0));
+        let connection = Connection::open(&db).unwrap();
+        assert_eq!(
+            super::super::file_tree::search_indexed_project_entries(
+                &connection,
+                root.path(),
+                "server.log"
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        fs::write(&file, "needle in small file").unwrap();
+        let dirty = [file.clone()];
+        apply_incremental_updates(true, &db, &project, &dirty).unwrap();
+        assert_eq!(
+            query_candidate_relative_paths(&connection, "needle", 10).unwrap(),
+            vec!["server.log"]
+        );
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+        apply_incremental_updates(true, &db, &project, &dirty).unwrap();
+        assert!(query_candidate_relative_paths(&connection, "needle", 10)
+            .unwrap()
+            .is_empty());
+        fs::remove_file(file).unwrap();
+        assert_eq!(
+            apply_incremental_updates(false, &db, &project, &dirty)
+                .unwrap()
+                .total_files,
+            0
+        );
+    }
+
+    #[test]
+    fn paused_catalog_removes_descendants_on_a_directory_rename_from_event() {
+        let root = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        let project = test_project(root.path());
+        let mut catalog = LiveFileCatalog::default();
+        let cancel = AtomicBool::new(false);
+        let find = |connection: &Connection, project: &ResolvedProject| {
+            super::super::file_tree::search_indexed_project_entries(
+                connection,
+                &project.path,
+                "child.txt",
+            )
+        };
+        assert!(catalog.query(&project, &cancel, find).unwrap().is_empty());
+        let folder = root.path().join("during-pause");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("child.txt"), "").unwrap();
+        project
+            .runtime
+            .changes
+            .lock()
+            .unwrap()
+            .record(Vec::new(), true, Instant::now());
+        assert_eq!(catalog.query(&project, &cancel, find).unwrap().len(), 1);
+        fs::rename(&folder, outside.path().join("moved")).unwrap();
+        // The disk index never saw this folder. A rename-from event may only
+        // carry the old directory path, without individual child removals.
+        project
+            .runtime
+            .changes
+            .lock()
+            .unwrap()
+            .record(vec![folder], false, Instant::now());
+        assert!(catalog.query(&project, &cancel, find).unwrap().is_empty());
+    }
+
+    #[test]
     fn disabled_status_is_explicitly_scan_backed() {
         let status = disabled_status("E:/projects/Krosna".to_string());
         assert!(!status.enabled);
@@ -2885,12 +3532,8 @@ mod tests {
             .add_path(root.path().join("src").join("main.rs"));
         assert!(!event_requires_rebuild(root.path(), &source_event));
 
-        let target_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any)).add_path(
-            root.path()
-                .join("target")
-                .join("debug")
-                .join("krosna.exe"),
-        );
+        let target_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
+            .add_path(root.path().join("target").join("debug").join("krosna.exe"));
         assert!(!event_requires_rebuild(root.path(), &target_event));
 
         let git_exclude_event = Event::new(EventKind::Modify(notify::event::ModifyKind::Any))
@@ -2927,6 +3570,7 @@ mod tests {
         )
         .unwrap();
         write_index_database(
+            true,
             &database_path,
             &project,
             &candidates,
@@ -2992,6 +3636,7 @@ mod tests {
         )
         .unwrap();
         write_index_database(
+            true,
             &database_path,
             &project,
             &candidates,
@@ -3009,7 +3654,7 @@ mod tests {
             paths.iter().cloned().collect::<HashSet<_>>(),
             HashSet::from([changed, deleted, explicit, created])
         );
-        apply_incremental_updates(&database_path, &project, &paths).unwrap();
+        apply_incremental_updates(true, &database_path, &project, &paths).unwrap();
         let connection = Connection::open(&database_path).unwrap();
         assert_eq!(
             query_candidate_relative_paths(&connection, "newneedle", 100)
@@ -3031,6 +3676,10 @@ mod tests {
         reader.busy_timeout(Duration::ZERO).unwrap();
         let error = reader.prepare("SELECT * FROM example").unwrap_err();
         assert!(sqlite_is_busy(&error));
+        assert!(matches!(
+            inspect_index_health(&path),
+            IndexHealth::Unavailable(_)
+        ));
     }
 
     #[test]
@@ -3063,6 +3712,7 @@ mod tests {
         let database_path = root.path().join("index.sqlite3");
         let candidates = discover_candidates(&project, &cancel, &pause, |_, _, _| {}).unwrap();
         write_index_database(
+            true,
             &database_path,
             &project,
             &candidates,
@@ -3074,7 +3724,7 @@ mod tests {
 
         fs::write(&source, "beta second-version").unwrap();
         let summary =
-            apply_incremental_updates(&database_path, &project, &[source.clone()]).unwrap();
+            apply_incremental_updates(true, &database_path, &project, &[source.clone()]).unwrap();
         assert_eq!(summary.indexed_files, 1);
         let connection = Connection::open(&database_path).unwrap();
         assert!(query_candidate_relative_paths(&connection, "alpha", 10)
@@ -3088,7 +3738,7 @@ mod tests {
         let created = root.path().join("created.txt");
         fs::write(&created, "gamma created-file").unwrap();
         let summary =
-            apply_incremental_updates(&database_path, &project, &[created.clone()]).unwrap();
+            apply_incremental_updates(true, &database_path, &project, &[created.clone()]).unwrap();
         assert_eq!(summary.total_files, 2);
         assert_eq!(
             query_candidate_relative_paths(&connection, "gamma", 10).unwrap(),
@@ -3098,7 +3748,8 @@ mod tests {
         fs::write(root.path().join(".ignore"), "ignored.txt\n").unwrap();
         let ignored = root.path().join("ignored.txt");
         fs::write(&ignored, "delta ignored-file").unwrap();
-        let summary = apply_incremental_updates(&database_path, &project, &[ignored]).unwrap();
+        let summary =
+            apply_incremental_updates(true, &database_path, &project, &[ignored]).unwrap();
         assert_eq!(summary.total_files, 2);
         assert!(query_candidate_relative_paths(&connection, "delta", 10)
             .unwrap()
@@ -3106,7 +3757,7 @@ mod tests {
 
         fs::remove_file(&created).unwrap();
         let summary =
-            apply_incremental_updates(&database_path, &project, &[created.clone()]).unwrap();
+            apply_incremental_updates(true, &database_path, &project, &[created.clone()]).unwrap();
         assert_eq!(summary.total_files, 1);
         assert!(query_candidate_relative_paths(&connection, "gamma", 10)
             .unwrap()
@@ -3115,7 +3766,7 @@ mod tests {
         let renamed = root.path().join("renamed.txt");
         fs::rename(&source, &renamed).unwrap();
         let summary =
-            apply_incremental_updates(&database_path, &project, &[source, renamed.clone()])
+            apply_incremental_updates(true, &database_path, &project, &[source, renamed.clone()])
                 .unwrap();
         assert_eq!(summary.total_files, 1);
         assert_eq!(
@@ -3141,7 +3792,11 @@ mod tests {
         fs::create_dir_all(index.parent().unwrap()).unwrap();
         fs::write(&index, "index-content").unwrap();
 
-        relocate_index_root(&source, &destination).unwrap();
+        let failed = relocate_index_root(&source, &destination, || Err("save failed".into()));
+        assert_eq!(failed.unwrap_err(), "save failed");
+        assert!(index.exists());
+        assert!(!destination.exists());
+        relocate_index_root(&source, &destination, || Ok(())).unwrap();
 
         assert!(!source.exists());
         assert_eq!(

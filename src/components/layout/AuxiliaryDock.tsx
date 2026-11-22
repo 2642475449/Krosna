@@ -13,14 +13,13 @@ import { Dropdown, Empty, Input, Modal, Spin, Tooltip, message, type MenuProps }
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MarkdownModeButtons } from "@/components/ui/MarkdownModeButtons";
-import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { useTranslation } from "react-i18next";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
 import { TaskMonitorPanel } from "@/components/TaskMonitorPopover";
 import { getFileDocument } from "@/lib/fileDocument";
-import { cleanupSessionProcess, openInAssociatedApplication, openInFileManager, searchProjectEntries } from "@/lib/api";
+import { cleanupSessionProcess, openInAssociatedApplication, openInFileManager } from "@/lib/api";
 import {
   OPEN_AUXILIARY_FILE_EVENT,
   type OpenAuxiliaryFileDetail,
@@ -34,7 +33,7 @@ import {
   type AuxiliaryTab,
   useAuxiliaryDockStore,
 } from "@/store/auxiliaryDock";
-import type { FileTreeEntry } from "@/types";
+import { useProjectEntrySearch } from "./useProjectEntrySearch";
 
 const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
 const AuxiliaryFileView = lazy(() => import("@/components/AuxiliaryFileView"));
@@ -80,8 +79,8 @@ export default function AuxiliaryDock({
   const [closing, setClosing] = useState(false);
   const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [fileQuery, setFileQuery] = useState("");
-  const [fileResults, setFileResults] = useState<FileTreeEntry[]>([]);
-  const [fileSearching, setFileSearching] = useState(false);
+  const search = useProjectEntrySearch(filePickerOpen ? currentProject?.path : undefined, fileQuery);
+  const fileResults = useMemo(() => search.entries.filter((item) => item.kind === "file").slice(0, 80), [search.entries]);
   const [hostWidth, setHostWidth] = useState(0);
   const [hasOverflow, setHasOverflow] = useState(false);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
@@ -133,29 +132,6 @@ export default function AuxiliaryDock({
     window.addEventListener(OPEN_AUXILIARY_FILE_EVENT, handler);
     return () => window.removeEventListener(OPEN_AUXILIARY_FILE_EVENT, handler);
   }, [openFile]);
-
-  useEffect(() => {
-    if (!filePickerOpen || !currentProject || !fileQuery.trim()) {
-      setFileResults([]);
-      setFileSearching(false);
-      return;
-    }
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setFileSearching(true);
-      void searchProjectEntries(currentProject.path, fileQuery)
-        .then((items) => {
-          if (!cancelled) setFileResults(items.filter((item) => item.kind === "file").slice(0, 80));
-        })
-        .finally(() => {
-          if (!cancelled) setFileSearching(false);
-        });
-    }, 180);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [currentProject, filePickerOpen, fileQuery]);
 
   const syncTerminalLayouts = useCallback(() => {
     const state = useAppStore.getState();
@@ -472,7 +448,7 @@ export default function AuxiliaryDock({
                         tabIndex={active ? 0 : -1}
                         aria-selected={active}
                         data-active={active ? "true" : "false"}
-                        className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${active ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
+                        className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${active ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
                         onMouseDown={(event) => {
                           if (event.button === 1) event.preventDefault();
                         }}
@@ -542,7 +518,6 @@ export default function AuxiliaryDock({
                   </Dropdown>
                 );
               })}
-              <TabSelectionIndicator listRef={tabListRef} tabRefs={tabRefs} activeTabId={activeTabId} tabIds={tabIds} />
             </div>
             <div
               className="shrink-0 flex items-center justify-center px-1.5 gap-1.5"
@@ -767,17 +742,18 @@ export default function AuxiliaryDock({
           autoFocus
           allowClear
           value={fileQuery}
+          suffix={<span>{search.showLoading && fileResults.length === 0 && <Spin size="small" />}</span>}
           placeholder={t("auxiliaryDock.filePlaceholder")}
           onChange={(event) => setFileQuery(event.target.value)}
         />
-        <div className="mt-3 max-h-96 overflow-y-auto">
-          {fileSearching ? (
-            <div className="flex h-24 items-center justify-center"><Spin /></div>
-          ) : !fileQuery.trim() ? (
+        <div className="app-thin-scrollbar mt-3 max-h-96 overflow-y-auto">
+          {!fileQuery.trim() ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("auxiliaryDock.fileHint")} />
+          ) : search.pending && fileResults.length === 0 ? (
+            <div className="min-h-8" aria-busy="true" />
           ) : fileResults.length === 0 ? (
             <div className="px-4 py-4 text-center text-sm text-[var(--cs-text-secondary)]">
-              {t("auxiliaryDock.noFiles")}
+              {t(search.failed ? "titleBar.quickSearchIndexUnavailable" : "auxiliaryDock.noFiles")}
             </div>
           ) : (
             <ul className="divide-y divide-[var(--cs-border)]">

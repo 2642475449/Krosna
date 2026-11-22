@@ -60,6 +60,53 @@ export function getUnambiguousTerminalTarget(resolution: TerminalLinkResolution)
   return !resolution.truncated && resolution.targets.length === 1 ? resolution.targets[0] : null;
 }
 
+type CopyableTerminalLink =
+  | { kind: "external"; href: string }
+  | { kind: "file"; path: { filePath: string }; context: TerminalLinkContext; selectedPath?: string };
+
+// All terminal panes in this window write to the same clipboard.
+let activeLinkCopy: symbol | null = null;
+let lastLinkWrite = Promise.resolve();
+
+export function createTerminalLinkCopier(
+  resolveFile: ReturnType<typeof createTerminalFileLinkResolver>,
+  writeText: (text: string) => Promise<void>,
+) {
+  let menuRequest: symbol | null = null;
+  return {
+    cancel() {
+      if (activeLinkCopy === menuRequest) activeLinkCopy = null;
+    },
+    async copy(link: CopyableTerminalLink): Promise<boolean> {
+      const request = Symbol();
+      menuRequest = request;
+      activeLinkCopy = request;
+      let text = link.kind === "external" ? link.href : link.selectedPath ?? link.path.filePath;
+      if (link.kind === "file" && !link.selectedPath) {
+        try {
+          const result = await resolveFile(link.context, link.path.filePath);
+          text = getUnambiguousTerminalTarget(result)?.path ?? text;
+        } catch {
+          // The original path is still useful when it cannot be resolved.
+        }
+      }
+      if (request !== activeLinkCopy) return false;
+      // A clipboard write already handed to the browser cannot be cancelled.
+      // Let it settle before writing the newer selection.
+      const write = lastLinkWrite.then(() => {
+        if (request === activeLinkCopy) return writeText(text);
+      });
+      lastLinkWrite = write.catch(() => {});
+      try {
+        await write;
+      } catch (error) {
+        if (request === activeLinkCopy) throw error;
+      }
+      return request === activeLinkCopy;
+    },
+  };
+}
+
 // 这些格式即使采样内容碰巧是 UTF-8，也不应进入文本编辑器；未知二进制由内容检测兜底。
 const SYSTEM_FILE_EXTENSIONS = new Set([
   "mp3", "wav", "flac", "aac", "m4a", "ogg", "oga", "opus", "wma", "aiff", "mid", "midi",
@@ -67,9 +114,12 @@ const SYSTEM_FILE_EXTENSIONS = new Set([
   "zip", "7z", "rar", "gz", "bz2", "xz", "tar", "zst", "tgz", "iso",
 ]);
 
+export type TerminalFileOpenMode = "default" | "system" | "explorer" | "preview";
+
 export interface TerminalTargetOpenActions {
   inspect: (projectPath: string, path: string) => Promise<{ kind: "text" | "image" | "pdf" | "binary" }>;
   openSystem: (path: string) => Promise<void>;
+  openExplorer?: (path: string) => Promise<void>;
   openPreview: (path: string) => void;
   openEditor: (path: string, location?: { line: number; column: number }) => void;
 }
@@ -80,8 +130,17 @@ export async function openTerminalFileTarget(
   context: TerminalLinkContext,
   location: { line?: number; column?: number },
   actions: TerminalTargetOpenActions,
+  mode: TerminalFileOpenMode = "default",
 ): Promise<void> {
-  if (!target.inProject || target.kind === "directory") {
+  if (mode === "explorer") {
+    if (actions.openExplorer) {
+      await actions.openExplorer(target.path);
+    } else {
+      await actions.openSystem(target.path);
+    }
+    return;
+  }
+  if (mode === "system" || !target.inProject || target.kind === "directory") {
     await actions.openSystem(target.path);
     return;
   }
@@ -97,7 +156,7 @@ export async function openTerminalFileTarget(
   const status = await actions.inspect(context.projectPath, path);
   if (status.kind === "binary" && !supportsOfficePreview(target.path)) {
     await actions.openSystem(target.path);
-  } else if (status.kind === "pdf" || (/\.(?:md|markdown)$/i.test(target.path) && !location.line)) {
+  } else if (mode === "preview" || status.kind === "pdf" || (/\.(?:md|markdown)$/i.test(target.path) && !location.line)) {
     actions.openPreview(path);
   } else {
     actions.openEditor(path, status.kind === "text" && location.line

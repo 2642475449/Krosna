@@ -96,7 +96,7 @@
 .app-settings-editor { overflow: hidden; min-width: 0; border: 1px solid var(--cs-border-card); border-radius: 8px; background: var(--cs-bg-card); }
 .app-settings-control-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .app-settings-danger { border-top: 1px solid var(--cs-border-card); margin-top: 16px; padding-top: 16px; }
-.app-settings-warning { color: var(--cs-text-secondary); background: var(--cs-bg-hover); border: 1px solid var(--cs-border-card); border-left: 2px solid var(--cs-warning); border-radius: 6px; }
+.app-settings-warning { color: var(--cs-text-secondary); background: var(--cs-bg-hover); border: 1px solid var(--cs-warning); border-radius: 6px; }
 .app-settings-theme { width: 100%; min-width: 0; overflow: hidden; border: 1px solid var(--cs-border); border-radius: 8px; text-align: left; background: var(--cs-bg-card-solid); color: var(--cs-text-primary); transition: border-color 140ms; }
 .app-settings-theme:hover { border-color: var(--cs-primary); }
 .app-settings-theme[aria-checked="true"] { border-color: var(--cs-primary); box-shadow: inset 0 0 0 1px var(--cs-primary); }
@@ -858,6 +858,7 @@
 }
 
 .app-about-highlights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.app-about-settings .app-setting-row__description { font-size: 13px; line-height: 1.5; }
 
 /* Git 设置：精密规则账本与锚定编辑浮层 */
 .app-git-page {

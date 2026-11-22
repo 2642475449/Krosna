@@ -318,7 +318,7 @@ export function ArchivedSessionsPage() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="app-thin-scrollbar overflow-x-auto">
             <div className="app-archived-table">
               <div
                 className="app-archived-grid h-11 items-center gap-4 px-4 text-xs font-medium"

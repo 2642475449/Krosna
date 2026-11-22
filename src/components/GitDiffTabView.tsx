@@ -174,7 +174,7 @@ function GitDiffTabView({ tabId, isActive = true }: GitDiffTabViewProps) {
             {document.path}
           </span>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-px overflow-auto bg-[var(--cs-border-sidebar)] md:grid-cols-2">
+        <div className="app-thin-scrollbar grid min-h-0 flex-1 grid-cols-1 gap-px overflow-auto bg-[var(--cs-border-sidebar)] md:grid-cols-2">
           {imageVersions.map((version) => (
             <section
               key={version.label}

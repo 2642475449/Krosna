@@ -384,21 +384,14 @@ export function SearchIndexPage() {
 
       <SettingsSection title={t("settings.searchIndex.repositories")}>
         <IndexSettingRow
-          title={t("settings.searchIndex.autoIndexTitle")}
-          tag={<Tag className="m-0">{t("settings.searchIndex.comingSoon")}</Tag>}
-          disabled
+          title={t("settings.searchIndex.instantSearchTitle")}
+          description={statusDescription}
+          tag={statusTag}
+          checked={projectIndexEnabled}
+          disabled={!projectPath || loading || saving}
+          loading={loading || saving}
+          onChange={(enabled) => void changeProjectIndexEnabled(enabled)}
         />
-        <div className="border-t border-[var(--cs-border-card)] pt-3">
-          <IndexSettingRow
-            title={t("settings.searchIndex.instantSearchTitle")}
-            description={statusDescription}
-            tag={statusTag}
-            checked={projectIndexEnabled}
-            disabled={!projectPath || loading || saving}
-            loading={loading || saving}
-            onChange={(enabled) => void changeProjectIndexEnabled(enabled)}
-          />
-        </div>
         {projectIndexEnabled && status ? (
           <div
             className="py-4"

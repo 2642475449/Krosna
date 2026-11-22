@@ -23,7 +23,7 @@ const server = await createServer({
     { find: /^antd$/, replacement: path.join(root, "src/lib/antd.ts") },
   ] },
   optimizeDeps: { entries: ["scripts/editor-memory-probe.html"] },
-  server: { host: "127.0.0.1", port: 0 },
+  server: { host: "127.0.0.1", port: Number(option("--port", 0)), watch: null },
 });
 let browser;
 const errors = [], workers = [], nativeCalls = [], samples = [];
@@ -51,9 +51,22 @@ try {
   await page.evaluate(() => window.editorMemoryProbe.position());
   await page.evaluate(() => window.editorMemoryProbe.diffPosition());
   const positioned = await sample("visible-text-and-diff");
+  await setActive(false, false, true);
+  await waitModels(3);
+  await setActive(true, false, true);
+  const quickReturn = await sample("quick-return-to-file");
+  assert.equal(quickReturn.left.model, positioned.left.model);
+  assert.deepEqual(quickReturn.left.position, positioned.left.position);
+  assert(Math.abs(quickReturn.left.scrollTop - positioned.left.scrollTop) < 3, "Quick return moved the viewport");
+  const fileTab = page.locator('[data-tab-kind="file"]');
+  assert.equal(await fileTab.evaluate((el) => getComputedStyle(el).animationName), "none");
+  await page.waitForFunction(() => {
+    const line = document.querySelector('[data-tab-kind="file"] .view-line');
+    return line?.textContent.includes("const") && line.getBoundingClientRect().width > 100;
+  });
   await setActive(false, false, false);
   await waitModels(0);
-  await sample("all-pristine-hidden");
+  await sample("pristine-cache-expired");
   await setActive(false, false, true);
   await waitModels(2);
   await page.waitForFunction(() => window.editorMemoryProbe.snapshot().diff.position.lineNumber === 90);

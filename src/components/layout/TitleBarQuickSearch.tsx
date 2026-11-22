@@ -2,10 +2,10 @@ import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { createDoubleShiftMatcher, getAppShortcut } from "@/lib/appShortcuts";
 import { matchesShortcut, formatShortcutDisplay } from "@/lib/shortcut";
 import { SearchOutlined } from "@ant-design/icons";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Input, Modal, Spin } from "antd";
 import type { InputRef } from "antd";
-import { listProjectDirectory, searchProjectEntries } from "@/lib/api";
+import { listProjectDirectory } from "@/lib/api";
 import { revealExplorerPath } from "@/lib/explorer";
 import { getFileIcon } from "@/lib/fileIcon";
 import { shouldIgnoreShortcut } from "@/hooks/useKeyboardShortcuts";
@@ -13,6 +13,7 @@ import { useAppStore } from "@/store";
 import { EMPTY_GIT_STATUS, useGitStatusStore } from "@/store/slices/gitStatus";
 import { useTranslation } from "react-i18next";
 import type { FileTreeEntry } from "@/types";
+import { useProjectEntrySearch } from "./useProjectEntrySearch";
 import {
   buildDefaultQuickSearchItems,
   buildRelativePath,
@@ -76,16 +77,13 @@ function TitleBarQuickSearch() {
   );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<QuickSearchItem[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const search = useProjectEntrySearch(open ? currentProject?.path : undefined, query);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [recentFilePaths, setRecentFilePaths] = useState<string[]>([]);
   const [fallbackState, setFallbackState] = useState<{
     projectPath: string;
     entries: FileTreeEntry[];
   } | null>(null);
-  const deferredQuery = useDeferredValue(query);
   const inputRef = useRef<InputRef | null>(null);
   const resultListRef = useRef<HTMLDivElement | null>(null);
 
@@ -179,10 +177,22 @@ function TitleBarQuickSearch() {
     recentItemsWithoutFallback,
   ]);
 
-  const visibleItems = useMemo(() => {
-    const trimmedQuery = query.trim();
-    return trimmedQuery ? results : recentItems;
-  }, [query, recentItems, results]);
+  const visibleItems = useMemo<QuickSearchItem[]>(() => {
+    if (!query.trim() || !currentProject) return recentItems;
+    return search.entries.slice(0, 50).map((entry) => {
+      const relativePath = buildRelativePath(currentProject.path, entry.path);
+      return {
+        key: entry.path,
+        path: entry.path,
+        name: entry.name,
+        relativePath,
+        parentPath: getParentPath(relativePath),
+        kind: entry.kind,
+        section: "search",
+      };
+    });
+  }, [query, currentProject, recentItems, search.entries]);
+  const activeIndex = Math.max(0, visibleItems.findIndex((item) => item.path === selectedPath));
 
   const openSearch = useCallback(() => {
     setOpen(true);
@@ -191,10 +201,7 @@ function TitleBarQuickSearch() {
   const closeSearch = useCallback(() => {
     setOpen(false);
     setQuery("");
-    setResults([]);
-    setSearching(false);
-    setSearchError(false);
-    setActiveIndex(0);
+    setSelectedPath(null);
   }, []);
 
   const handleOpenItem = useCallback(
@@ -223,73 +230,11 @@ function TitleBarQuickSearch() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || !currentProject) return;
-
-    const trimmedQuery = deferredQuery.trim();
-    setSearchError(false);
-    if (!trimmedQuery) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-
-    let cancelled = false;
-    setSearching(true);
-
-    const timer = window.setTimeout(() => {
-      void searchProjectEntries(currentProject.path, trimmedQuery)
-        .then((entries) => {
-          if (cancelled) return;
-          const nextItems = entries
-            .slice(0, 50)
-            .map((entry) => {
-              const relativePath = buildRelativePath(currentProject.path, entry.path);
-              return {
-                key: `search:${entry.path}`,
-                path: entry.path,
-                name: entry.name,
-                relativePath,
-                parentPath: getParentPath(relativePath),
-                kind: entry.kind,
-                section: "search" as const,
-              };
-            });
-          setResults(nextItems);
-          setActiveIndex(0);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setResults([]);
-            setSearchError(true);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setSearching(false);
-          }
-        });
-    }, 120);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [currentProject, deferredQuery, open]);
-
-  useEffect(() => {
-    if (visibleItems.length === 0) {
-      setActiveIndex(0);
-      return;
-    }
-    setActiveIndex((prev) => Math.min(prev, visibleItems.length - 1));
-  }, [visibleItems]);
-
-  useEffect(() => {
     const activeRow = resultListRef.current?.querySelector<HTMLElement>(
       `[data-quick-search-index="${activeIndex}"]`
     );
     activeRow?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
+  }, [activeIndex, query]);
 
   useEffect(() => {
     const doubleShift = createDoubleShiftMatcher();
@@ -331,39 +276,19 @@ function TitleBarQuickSearch() {
 
   const handleInputKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        if (visibleItems.length > 0) {
-          setActiveIndex((prev) => (prev + 1) % visibleItems.length);
-        }
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        if (visibleItems.length > 0) {
-          setActiveIndex((prev) => (prev - 1 + visibleItems.length) % visibleItems.length);
-        }
-        return;
-      }
-
+      if (event.nativeEvent.isComposing) return;
       if (event.key === "Enter") {
         event.preventDefault();
         const item = visibleItems[activeIndex];
-        if (item) {
-          handleOpenItem(item);
-        }
+        if (item) handleOpenItem(item);
         return;
       }
-
-      if (event.key === "Tab") {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Tab") {
         event.preventDefault();
-        if (visibleItems.length > 0) {
-          setActiveIndex(
-            (prev) =>
-              (prev + (event.shiftKey ? -1 : 1) + visibleItems.length) % visibleItems.length
-          );
-        }
+        if (!visibleItems.length) return;
+        const backwards = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
+        const next = (activeIndex + (backwards ? -1 : 1) + visibleItems.length) % visibleItems.length;
+        setSelectedPath(visibleItems[next].path);
       }
     },
     [activeIndex, handleOpenItem, visibleItems]
@@ -405,14 +330,21 @@ function TitleBarQuickSearch() {
           <Input
             ref={inputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setSelectedPath(null);
+              setQuery(event.target.value);
+            }}
             onKeyDown={handleInputKeyDown}
             placeholder={
               currentProject
                 ? t("titleBar.quickSearchPlaceholder")
                 : t("titleBar.quickSearchNoProjectPlaceholder")
             }
-            prefix={<SearchOutlined style={{ color: "var(--cs-text-tertiary)" }} />}
+            prefix={
+              search.showLoading && visibleItems.length === 0
+                ? <Spin size="small" />
+                : <SearchOutlined style={{ color: "var(--cs-text-tertiary)" }} />
+            }
             allowClear
             size="middle"
           />
@@ -431,12 +363,14 @@ function TitleBarQuickSearch() {
                   description={t("titleBar.quickSearchNoProject")}
                 />
               </div>
+            ) : search.pending && visibleItems.length === 0 ? (
+              <div className="min-h-8" aria-busy="true" />
             ) : visibleItems.length === 0 ? (
               <div className="px-3 py-8">
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
-                    searchError
+                    search.failed
                       ? t("titleBar.quickSearchIndexUnavailable")
                       : query.trim()
                       ? t("titleBar.quickSearchEmpty")
@@ -447,7 +381,7 @@ function TitleBarQuickSearch() {
             ) : (
               <div
                 ref={resultListRef}
-                className="max-h-[min(520px,65vh)] overflow-y-auto py-1"
+                className="app-thin-scrollbar max-h-[min(520px,65vh)] overflow-y-auto py-1"
                 style={{ background: "var(--cs-bg-card)" }}
               >
                 {visibleItems.map((item, index) => {
@@ -458,11 +392,11 @@ function TitleBarQuickSearch() {
                       key={item.key}
                       type="button"
                       data-quick-search-index={index}
-                      className="flex h-[34px] w-full items-center gap-2 px-2.5 text-left transition-colors"
+                      className="flex h-[34px] w-full items-center gap-2 px-2.5 text-left"
                       style={{
                         background: active ? "var(--cs-bg-hover)" : "var(--cs-bg-card)",
                       }}
-                      onMouseEnter={() => setActiveIndex(index)}
+                      onMouseEnter={() => setSelectedPath(item.path)}
                       onClick={() => handleOpenItem(item)}
                     >
                       <div
@@ -490,23 +424,6 @@ function TitleBarQuickSearch() {
                 })}
               </div>
             )}
-
-            <div
-              className="flex h-7 items-center justify-between gap-3 border-t px-2.5 text-[10px]"
-              style={{
-                borderColor: "var(--cs-border-card, var(--cs-border))",
-                color: "var(--cs-text-tertiary)",
-              }}
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {visibleItems[activeIndex]?.relativePath ??
-                  (query.trim() ? t("titleBar.quickSearchResults") : t("titleBar.quickSearchRecent"))}
-              </span>
-              <span className="flex shrink-0 items-center gap-3">
-                {searching ? <Spin size="small" /> : null}
-                <span>{t("titleBar.quickSearchKeyboardHint")}</span>
-              </span>
-            </div>
           </div>
         </div>
       </Modal>

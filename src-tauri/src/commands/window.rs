@@ -173,12 +173,14 @@ impl WindowRegistry {
 }
 
 pub fn cleanup_window_project_sessions(
+    app: &tauri::AppHandle,
     window_label: &str,
     registry: &WindowRegistry,
     manager: &PtyManager,
 ) {
     if let Some(context) = registry.release_window(window_label) {
         if let Some(project_path) = context.project_path {
+            super::search_index::release_project_watcher(app, &project_path);
             manager.close_project_sessions(&project_path);
         }
     }
@@ -487,6 +489,7 @@ fn open_project_window_blocking(
         let previous_context = registry.get_context(window.label());
         if let Some(previous_project_path) = previous_context.project_path.as_deref() {
             if previous_project_path != project_path {
+                super::search_index::release_project_watcher(&app, previous_project_path);
                 manager.close_project_sessions(previous_project_path);
             }
         }
@@ -586,7 +589,9 @@ pub fn release_window_project_context(
     window: WebviewWindow,
     registry: State<'_, Arc<WindowRegistry>>,
 ) {
-    registry.release_window(window.label());
+    if let Some(path) = registry.release_window(window.label()).and_then(|context| context.project_path) {
+        super::search_index::release_project_watcher(window.app_handle(), &path);
+    }
 }
 
 #[tauri::command]

@@ -135,22 +135,6 @@ export function GitCommitComposer({
     : primaryAction === "sync" ? `${t("sidebar.remoteActions.sync")} ↑${aheadCount} ↓${behindCount}`
     : t("sidebar.gitNoChanges");
 
-  const commitComposerBackground =
-    "color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 93%, var(--cs-bg-sidebar) 7%)";
-  const commitComposerBorder =
-    "color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)";
-  const commitComposerShadow = "none";
-
-  const commitActionBackground = canPrimaryAction
-    ? "color-mix(in srgb, var(--cs-primary) 9%, var(--cs-bg-card-solid, var(--cs-bg-card)) 91%)"
-    : "color-mix(in srgb, var(--cs-bg-hover) 54%, var(--cs-bg-card-solid, var(--cs-bg-card)) 46%)";
-  const commitActionBorder = canPrimaryAction
-    ? "color-mix(in srgb, var(--cs-primary) 28%, var(--cs-border-sidebar) 72%)"
-    : "color-mix(in srgb, var(--cs-border-sidebar) 82%, transparent)";
-  const commitActionText = canPrimaryAction
-    ? "color-mix(in srgb, var(--cs-primary) 64%, var(--cs-text-primary) 36%)"
-    : "var(--cs-text-tertiary)";
-
   const executeCommitAction = useCallback(
     async (
       action: (message: string) => Promise<void>,
@@ -364,22 +348,16 @@ export function GitCommitComposer({
   );
 
   return (
-    <div className="shrink-0 px-2 pb-1.5 pt-1.5">
-      <div
-        className={`git-commit-composer mb-2 overflow-hidden rounded-[8px] ${composerShake ? "app-error-shake" : ""}`}
-        style={{
-          background: commitComposerBackground,
-          border: `1px solid ${commitComposerBorder}`,
-          boxShadow: commitComposerShadow,
-          transition: "border-color 150ms ease, box-shadow 150ms ease",
-        }}
-      >
-        <div className="flex items-start px-2.5 pt-2 pb-1">
+    <div className="shrink-0 px-2 pb-2 pt-2">
+      <div className={`git-commit-composer mb-2 ${composerShake ? "app-error-shake" : ""}`}>
+        <div className="git-commit-composer-body">
           <Input.TextArea
+            className="git-commit-composer-input"
+            aria-label={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
             placeholder={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
-            autoSize={{ minRows: 2, maxRows: 8 }}
+            autoSize={{ minRows: 3, maxRows: 10 }}
             variant="borderless"
             onKeyDown={(e) => {
               if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canCommit) {
@@ -387,31 +365,13 @@ export function GitCommitComposer({
                 void handleCommit();
               }
             }}
-            onFocus={(e) => {
-              const container = e.currentTarget.closest(".git-commit-composer") as HTMLElement | null;
-              if (container) {
-                container.style.borderColor = "var(--cs-primary)";
-                container.style.boxShadow = "0 0 0 1px color-mix(in srgb, var(--cs-primary) 22%, transparent)";
-              }
-            }}
-            onBlur={(e) => {
-              const container = e.currentTarget.closest(".git-commit-composer") as HTMLElement | null;
-              if (container) {
-                container.style.borderColor = commitComposerBorder;
-                container.style.boxShadow = commitComposerShadow;
-              }
-            }}
-            style={{
-              flex: 1,
-              padding: 0,
-              fontSize: 13,
-              lineHeight: 1.5,
-              background: "transparent",
-              color: "var(--cs-text-primary)",
-              minHeight: 0,
-            }}
           />
-          <div className="ml-1 flex shrink-0 items-center">
+        </div>
+        <div className="git-commit-composer-footer">
+          <span className="git-commit-composer-shortcut" aria-hidden="true">
+            Ctrl+Enter
+          </span>
+          <div className="git-commit-ai-group">
             <Tooltip
               title={
                 generatingCommitMessage
@@ -423,22 +383,16 @@ export function GitCommitComposer({
               <Button
                 type="text"
                 size="small"
+                className="git-commit-ai-btn"
+                aria-label={
+                  generatingCommitMessage
+                    ? t("sidebar.gitGenerateCommitMessageLoading")
+                    : generateCommitMessageHint ?? t("sidebar.gitGenerateCommitMessage")
+                }
                 onClick={() => void handleGenerateCommitMessage()}
                 disabled={!canGenerateCommitMessage}
-                style={{
-                  width: 24,
-                  height: 24,
-                  padding: 0,
-                  color: canGenerateCommitMessage
-                    ? "color-mix(in srgb, var(--cs-primary) 76%, var(--cs-text-primary) 24%)"
-                    : "var(--cs-text-tertiary)",
-                }}
               >
-                {generatingCommitMessage ? (
-                  <LoadingOutlined />
-                ) : (
-                  <span className="text-[11px] font-semibold tracking-[0.02em]">AI</span>
-                )}
+                {generatingCommitMessage ? <LoadingOutlined /> : "AI"}
               </Button>
             </Tooltip>
             <Dropdown
@@ -453,28 +407,22 @@ export function GitCommitComposer({
               <Button
                 type="text"
                 size="small"
+                className="git-commit-ai-menu-btn"
                 aria-label={t("sidebar.gitChooseCommitMessageProfile")}
-                icon={<DownOutlined className="text-[9px]" />}
-                style={{
-                  width: 18,
-                  height: 24,
-                  padding: 0,
-                  color: canGenerateCommitMessage
-                    ? "var(--cs-text-secondary)"
-                    : "var(--cs-text-tertiary)",
-                }}
+                icon={<DownOutlined className="text-[10px]" />}
               />
             </Dropdown>
           </div>
         </div>
       </div>
 
-      <div className="flex w-full items-stretch">
+      <div className="git-commit-actions">
         <Tooltip title={canPrimaryAction ? primaryActionText : primaryActionDisabledReason} mouseEnterDelay={0.4}>
           <span className="flex-1">
             <Button
-              className="flex-1 rounded-r-none"
-              size="large"
+              className="git-commit-primary-btn"
+              data-ready={canPrimaryAction ? "true" : "false"}
+              size="middle"
               icon={primaryAction === "commit" || primaryAction === "none" ? <CheckOutlined /> : primaryAction === "sync" ? <SyncOutlined /> : undefined}
               loading={committing}
               disabled={!canPrimaryAction}
@@ -483,22 +431,6 @@ export function GitCommitComposer({
                 if (primaryAction === "commit") void handleCommit();
                 else if (primaryAction === "pull") requestPull();
                 else void (primaryAction === "push" ? onPush() : onSyncChanges()).catch(() => undefined);
-              }}
-              style={{
-                width: "100%",
-                height: 28,
-                borderRadius: "8px 0 0 8px",
-                borderColor: commitActionBorder,
-                background: commitActionBackground,
-                color: commitActionText,
-                fontFamily: "inherit",
-                fontSize: 13,
-                lineHeight: 1.2,
-                fontWeight: 600,
-                letterSpacing: "0.01em",
-                cursor: canPrimaryAction ? "pointer" : "not-allowed",
-                opacity: canPrimaryAction ? 1 : 0.7,
-                boxShadow: "none",
               }}
             >
               <span key={primaryAction} className="app-text-swap">{primaryActionText}</span>
@@ -514,28 +446,11 @@ export function GitCommitComposer({
           <Tooltip title={canOpenCommitMenu ? t("sidebar.moreActions", { defaultValue: "更多提交操作" }) : commitMenuDisabledReason} mouseEnterDelay={0.4}>
             <span>
               <Button
-                className="rounded-l-none"
-                size="large"
+                className="git-commit-menu-btn"
+                data-ready={canPrimaryAction ? "true" : "false"}
+                aria-label={t("sidebar.moreActions", { defaultValue: "更多提交操作" })}
+                size="middle"
                 disabled={!canOpenCommitMenu}
-                style={{
-                  width: 36,
-                  height: 28,
-                  paddingInline: 0,
-                  borderRadius: "0 8px 8px 0",
-                  borderColor: canOpenCommitMenu ? commitActionBorder : "color-mix(in srgb, var(--cs-border-sidebar) 70%, var(--cs-text-primary) 10%)",
-                  borderLeftColor: canOpenCommitMenu
-                    ? "color-mix(in srgb, var(--cs-primary) 46%, var(--cs-border-sidebar) 54%)"
-                    : "color-mix(in srgb, var(--cs-border-sidebar) 70%, var(--cs-text-primary) 10%)",
-                  background: canOpenCommitMenu
-                    ? "color-mix(in srgb, var(--cs-primary) 9%, var(--cs-bg-card-solid, var(--cs-bg-card)) 91%)"
-                    : "color-mix(in srgb, var(--cs-bg-hover) 54%, var(--cs-bg-card-solid, var(--cs-bg-card)) 46%)",
-                  color: canOpenCommitMenu
-                    ? "color-mix(in srgb, var(--cs-primary) 64%, var(--cs-text-primary) 36%)"
-                    : "var(--cs-text-tertiary)",
-                  cursor: canOpenCommitMenu ? "pointer" : "not-allowed",
-                  opacity: canOpenCommitMenu ? 1 : 0.7,
-                  boxShadow: "none",
-                }}
               >
                 <DownOutlined className="text-[10px]" />
               </Button>
@@ -546,13 +461,8 @@ export function GitCommitComposer({
 
       {hasMixedChanges ? (
         <div
-          className="mt-1.5 px-1 text-[11px] leading-[1.4]"
-          style={{
-            color: "var(--cs-text-tertiary)",
-            userSelect: "text",
-            WebkitUserSelect: "text",
-            cursor: "text",
-          }}
+          className="mt-1.5 px-1 text-xs leading-[1.4] select-text cursor-text"
+          style={{ color: "var(--cs-text-tertiary)" }}
         >
           {t("sidebar.gitCommitStagedOnlyHint", {
             defaultValue: "将仅提交已暂存更改，未暂存更改会保留。",

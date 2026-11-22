@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { assertTerminalLinkProject, createTerminalFileLinkResolver, createTerminalLinkActivationGate, getUnambiguousTerminalTarget, openTerminalFileTarget } from "./terminalFileLinks";
+import { assertTerminalLinkProject, createTerminalFileLinkResolver, createTerminalLinkActivationGate, createTerminalLinkCopier, getUnambiguousTerminalTarget, openTerminalFileTarget } from "./terminalFileLinks";
 import type { TerminalLinkTarget } from "./api/terminalLinks";
 
 const context = { projectPath: "E:/project", workingDirectory: "E:/project/src" };
@@ -67,9 +67,67 @@ function actions(kind: "text" | "image" | "pdf" | "binary" = "text") {
   return {
     inspect: vi.fn().mockResolvedValue({ kind }),
     openSystem: vi.fn().mockResolvedValue(undefined),
+    openExplorer: vi.fn().mockResolvedValue(undefined),
     openPreview: vi.fn(), openEditor: vi.fn(),
   };
 }
+
+it("discards a cancelled link lookup even when a newer link has already been copied", async () => {
+  let finishLookup!: (result: typeof resolution) => void;
+  const resolveFile = vi.fn(() => new Promise<typeof resolution>((resolve) => { finishLookup = resolve; }));
+  const write = vi.fn().mockResolvedValue(undefined);
+  const copier = createTerminalLinkCopier(resolveFile, write);
+  const first = copier.copy({ kind: "file", context, path: { filePath: "example.custom" } });
+  copier.cancel();
+  await expect(copier.copy({ kind: "external", href: "https://example.com" })).resolves.toBe(true);
+  finishLookup(resolution);
+  await expect(first).resolves.toBe(false);
+  expect(write).toHaveBeenCalledExactlyOnceWith("https://example.com");
+});
+
+it("finishes an in-flight write before the next copy, suppressing stale feedback on failure", async () => {
+  let rejectFirst!: (error: Error) => void;
+  const write = vi.fn().mockImplementationOnce(() => new Promise<void>((_, reject) => { rejectFirst = reject; }))
+    .mockResolvedValue(undefined);
+  const copier = createTerminalLinkCopier(vi.fn(), write);
+  const first = copier.copy({ kind: "external", href: "first" });
+  await Promise.resolve();
+  expect(write).toHaveBeenCalledExactlyOnceWith("first");
+  copier.cancel();
+  const second = copier.copy({ kind: "file", context, path: { filePath: "example.custom" }, selectedPath: target.path });
+  await Promise.resolve();
+  expect(write).toHaveBeenCalledTimes(1);
+  rejectFirst(new Error("clipboard denied"));
+  await expect(first).resolves.toBe(false);
+  await expect(second).resolves.toBe(true);
+  expect(write).toHaveBeenLastCalledWith(target.path);
+});
+
+it("keeps the original file path on resolution failure and reports a current clipboard failure", async () => {
+  const write = vi.fn().mockRejectedValue(new Error("clipboard denied"));
+  const copier = createTerminalLinkCopier(vi.fn().mockRejectedValue(new Error("file disappeared")), write);
+  await expect(copier.copy({ kind: "file", context, path: { filePath: "example.custom" } })).rejects.toThrow("clipboard denied");
+  expect(write).toHaveBeenCalledExactlyOnceWith("example.custom");
+});
+
+it("orders clipboard writes across terminal instances without letting an old menu cancel the new one", async () => {
+  let finishFirst!: () => void;
+  const writeA = vi.fn(() => new Promise<void>((resolve) => { finishFirst = resolve; }));
+  const writeB = vi.fn().mockResolvedValue(undefined);
+  const a = createTerminalLinkCopier(vi.fn(), writeA);
+  const b = createTerminalLinkCopier(vi.fn(), writeB);
+  const first = a.copy({ kind: "external", href: "first" });
+  await Promise.resolve();
+  expect(writeA).toHaveBeenCalledExactlyOnceWith("first");
+  const second = b.copy({ kind: "external", href: "second" });
+  a.cancel();
+  await Promise.resolve();
+  expect(writeB).not.toHaveBeenCalled();
+  finishFirst();
+  await expect(first).resolves.toBe(false);
+  await expect(second).resolves.toBe(true);
+  expect(writeB).toHaveBeenCalledExactlyOnceWith("second");
+});
 
 it.each(["song.MP3", "movie.webm", "backup.tar.gz", "archive.7z"])("opens %s with the system application without reading it as text", async (file) => {
   const calls = actions();
@@ -141,4 +199,18 @@ it("propagates system opening and inspection failures to the visible UI error ha
   await expect(openTerminalFileTarget(target, context, {}, calls)).rejects.toThrow("no associated application");
   calls.inspect.mockRejectedValueOnce(new Error("file disappeared"));
   await expect(openTerminalFileTarget(target, context, {}, calls)).rejects.toThrow("file disappeared");
+});
+
+it("supports explicit system, explorer, and side-preview open modes", async () => {
+  const calls = actions("text");
+  await openTerminalFileTarget(target, context, { line: 10 }, calls, "system");
+  expect(calls.openSystem).toHaveBeenCalledExactlyOnceWith(target.path);
+  expect(calls.inspect).not.toHaveBeenCalled();
+
+  await openTerminalFileTarget(target, context, { line: 10 }, calls, "explorer");
+  expect(calls.openExplorer).toHaveBeenCalledExactlyOnceWith(target.path);
+
+  await openTerminalFileTarget(target, context, { line: 10 }, calls, "preview");
+  expect(calls.openPreview).toHaveBeenCalledExactlyOnceWith(target.path);
+  expect(calls.openEditor).not.toHaveBeenCalled();
 });

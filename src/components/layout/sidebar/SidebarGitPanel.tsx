@@ -4,7 +4,6 @@ import type { MenuProps } from "antd";
 import {
   BranchesOutlined,
   CheckOutlined,
-  DownOutlined,
   EllipsisOutlined,
   LoadingOutlined,
   ReloadOutlined,
@@ -100,9 +99,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
       ? `${diffDocument.staged ? "staged" : "unstaged"}-${diffDocument.path}`
       : null;
   });
-  const gitChangesCollapsed = useAppStore((s) => s.sidebarGitChangesCollapsed);
   const gitGraphCollapsed = useAppStore((s) => s.sidebarGitGraphCollapsed);
-  const toggleGitChangesCollapsed = useAppStore((s) => s.toggleGitChangesCollapsed);
   const toggleGitGraphCollapsed = useAppStore((s) => s.toggleGitGraphCollapsed);
   const setGitChangeCount = useAppStore((s) => s.setGitChangeCount);
   const setGitSyncCounts = useAppStore((s) => s.setGitSyncCounts);
@@ -732,7 +729,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     <div className="app-sidebar-panel flex h-full min-h-0 flex-col">
       {/* Header */}
       <div
-        className="flex items-center justify-between px-2"
+        className="flex shrink-0 items-center justify-between px-2"
         style={{ height: 32, borderBottom: "1px solid var(--cs-border-sidebar)" }}
       >
         <Tooltip title={t("sidebar.gitBranchList")} mouseEnterDelay={0.4}>
@@ -746,15 +743,35 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
             <span className="max-w-[120px] truncate">{branchName}</span>
           </button>
         </Tooltip>
-        <GitRemoteToolbar
-          key={`${currentProject.path}:${rawBranchName}`}
-          projectPath={currentProject.path}
-          branch={branchInfo}
-          disabled={loading || !!statusError || committing || gitActionsBlocked}
-          refresh={loadGitData}
-          menuItems={collapsePanelMenuItems}
-          onMenuClick={handleCollapsePanelMenuClick}
-        />
+        <div className="flex shrink-0 items-center gap-0.5">
+          {showGitChangesPanel && !fileHistoryPath && (
+            <Tooltip title={statusError || t("sidebar.gitLocalRefresh")} mouseEnterDelay={0.4}>
+              <Button
+                type="text"
+                size="small"
+                aria-label={t("sidebar.gitLocalRefresh")}
+                icon={loading ? <LoadingOutlined /> : <ReloadOutlined />}
+                style={{
+                  width: 24,
+                  height: 24,
+                  padding: 0,
+                  color: statusError ? "var(--cs-error)" : "var(--cs-text-secondary)",
+                }}
+                onClick={() => void loadGitData()}
+                disabled={loading || committing || remoteBusy || gitOperationInProgress}
+              />
+            </Tooltip>
+          )}
+          <GitRemoteToolbar
+            key={`${currentProject.path}:${rawBranchName}`}
+            projectPath={currentProject.path}
+            branch={branchInfo}
+            disabled={loading || !!statusError || committing || gitActionsBlocked}
+            refresh={loadGitData}
+            menuItems={collapsePanelMenuItems}
+            onMenuClick={handleCollapsePanelMenuClick}
+          />
+        </div>
       </div>
 
       {/* Branch panel (collapsible) */}
@@ -770,8 +787,8 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         />
       )}
 
-      {/* Scrollable content */}
-      <div className="flex flex-1 min-h-0 flex-col overflow-y-auto app-project-tree-scroll px-1 py-1">
+      {/* 展开长分支列表时，为更改和提交图形至少保留一半高度。 */}
+      <div className="flex min-h-0 grow shrink-0 basis-1/2 flex-col overflow-y-auto app-project-tree-scroll px-1 py-1 empty:hidden">
         {/* Conflict panel */}
         {!fileHistoryPath && (() => {
           const conflictFiles = unstagedFiles.filter(
@@ -798,127 +815,93 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         {/* Changes section */}
         {showGitChangesPanel && !fileHistoryPath && (
           <div>
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <button
-                className="flex items-center gap-1.5 text-left text-[13px] font-semibold"
-                style={{ color: "var(--cs-text-primary)" }}
-                onClick={toggleGitChangesCollapsed}
-              >
-                <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!gitChangesCollapsed} />
-                <span>{t("sidebar.gitChangesPanel")}</span>
-              </button>
-              <div className="flex items-center gap-1">
-                <Tooltip title={statusError || t("sidebar.gitLocalRefresh")} mouseEnterDelay={0.4}>
+            {/* Commit composer */}
+            <GitCommitComposer
+              remoteReady={remoteReady}
+              branchName={branchName}
+              hasLocalChanges={hasLocalChanges}
+              stagedChangeCount={stagedFiles.length}
+              unstagedChangeCount={unstagedFiles.length}
+              aheadCount={branchInfo?.ahead ?? 0}
+              behindCount={branchInfo?.behind ?? 0}
+              hasSyncChanges={hasSyncChanges}
+              syncChangeCount={syncChangeCount}
+              operationState={operationState}
+              committing={committing || remoteBusy || !!statusError}
+              canGenerateCommitMessage={canGenerateCommitMessage}
+              generateCommitMessageHint={
+                defaultAgentId
+                  ? t("sidebar.gitGenerateCommitMessage")
+                  : t("settings.agents.defaultRequired")
+              }
+              generatingCommitMessage={generatingCommitMessage}
+              commitMessageProfiles={gitCommitMessageProfiles}
+              defaultCommitMessageProfileId={defaultGitCommitMessageProfileId}
+              onCommit={commit}
+              onCommitAmend={commitAmend}
+              onCommitAndPush={commitAndPush}
+              onCommitAndSync={commitAndSync}
+              onPush={push}
+              onPull={pull}
+              onPullWithStash={pullWithStash}
+              onSyncChanges={syncChanges}
+              onGenerateCommitMessage={handleGenerateCommitMessage}
+            />
+
+            {/* Staged files */}
+            <GitFileList
+              files={stagedFiles}
+              staged={true}
+              sectionTitle={t("sidebar.gitStagedSection")}
+              actionText={t("sidebar.gitUnstage")}
+              collapsed={stagedCollapsed}
+              onToggleCollapse={() => setStagedCollapsed(!stagedCollapsed)}
+              openingDiffPath={openingDiffPath}
+              activeDiffKey={activeDiffKey}
+              onViewDiff={handleViewDiff}
+              onToggleFile={handleUnstageFile}
+              onToggleAll={handleUnstageAll}
+              buildFileMenu={buildFileMenu}
+              actionsDisabled={gitActionsBlocked}
+            />
+
+            {/* Unstaged files */}
+            <GitFileList
+              files={unstagedFiles}
+              staged={false}
+              sectionTitle={t("sidebar.gitChangesSection")}
+              actionText={t("sidebar.gitStage")}
+              collapsed={changesCollapsed}
+              onToggleCollapse={() => setChangesCollapsed(!changesCollapsed)}
+              openingDiffPath={openingDiffPath}
+              activeDiffKey={activeDiffKey}
+              onViewDiff={handleViewDiff}
+              onToggleFile={handleStageFile}
+              onToggleAll={handleStageAll}
+              buildFileMenu={buildFileMenu}
+              actionsDisabled={gitActionsBlocked}
+              extraActions={
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{ items: changesMenuItems, onClick: handleChangesMenuClick }}
+                >
                   <Button
                     type="text"
                     size="small"
-                    icon={loading ? <LoadingOutlined /> : <ReloadOutlined />}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      padding: 0,
-                      color: statusError ? "var(--cs-error)" : "var(--cs-text-secondary)",
-                    }}
-                    onClick={() => void loadGitData()}
-                    disabled={loading || committing || remoteBusy || gitOperationInProgress}
+                    icon={<EllipsisOutlined />}
+                    style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
                   />
-                </Tooltip>
+                </Dropdown>
+              }
+            />
+
+            {/* 刷新时保留空状态高度，首次加载仅隐藏内容，避免下方图形跳动。 */}
+            {fileStatuses.length === 0 && (
+              <div className={`flex flex-col items-center justify-center gap-2 py-8 text-[var(--cs-text-tertiary)]${loading && isRepo !== true ? " invisible" : ""}`}>
+                <CheckOutlined className="text-2xl" />
+                <span className="text-sm">{t("sidebar.gitNoChanges")}</span>
               </div>
-            </div>
-
-            <div className="app-accordion" data-open={!gitChangesCollapsed ? "true" : "false"} aria-hidden={gitChangesCollapsed}>
-              <div className="app-accordion__inner">
-                <div>
-                {/* Commit composer */}
-                <GitCommitComposer
-                  remoteReady={remoteReady}
-                  branchName={branchName}
-                  hasLocalChanges={hasLocalChanges}
-                  stagedChangeCount={stagedFiles.length}
-                  unstagedChangeCount={unstagedFiles.length}
-                  aheadCount={branchInfo?.ahead ?? 0}
-                  behindCount={branchInfo?.behind ?? 0}
-                  hasSyncChanges={hasSyncChanges}
-                  syncChangeCount={syncChangeCount}
-                  operationState={operationState}
-                  committing={committing || remoteBusy || !!statusError}
-                  canGenerateCommitMessage={canGenerateCommitMessage}
-                  generateCommitMessageHint={
-                    defaultAgentId
-                      ? t("sidebar.gitGenerateCommitMessage")
-                      : t("settings.agents.defaultRequired")
-                  }
-                  generatingCommitMessage={generatingCommitMessage}
-                  commitMessageProfiles={gitCommitMessageProfiles}
-                  defaultCommitMessageProfileId={defaultGitCommitMessageProfileId}
-                  onCommit={commit}
-                  onCommitAmend={commitAmend}
-                  onCommitAndPush={commitAndPush}
-                  onCommitAndSync={commitAndSync}
-                  onPush={push}
-                  onPull={pull}
-                  onPullWithStash={pullWithStash}
-                  onSyncChanges={syncChanges}
-                  onGenerateCommitMessage={handleGenerateCommitMessage}
-                />
-
-                {/* Staged files */}
-                <GitFileList
-                  files={stagedFiles}
-                  staged={true}
-                  sectionTitle={t("sidebar.gitStagedSection")}
-                  actionText={t("sidebar.gitUnstage")}
-                  collapsed={stagedCollapsed}
-                  onToggleCollapse={() => setStagedCollapsed(!stagedCollapsed)}
-                  openingDiffPath={openingDiffPath}
-                  activeDiffKey={activeDiffKey}
-                  onViewDiff={handleViewDiff}
-                  onToggleFile={handleUnstageFile}
-                  onToggleAll={handleUnstageAll}
-                  buildFileMenu={buildFileMenu}
-                  actionsDisabled={gitActionsBlocked}
-                />
-
-                {/* Unstaged files */}
-                <GitFileList
-                  files={unstagedFiles}
-                  staged={false}
-                  sectionTitle={t("sidebar.gitChangesSection")}
-                  actionText={t("sidebar.gitStage")}
-                  collapsed={changesCollapsed}
-                  onToggleCollapse={() => setChangesCollapsed(!changesCollapsed)}
-                  openingDiffPath={openingDiffPath}
-                  activeDiffKey={activeDiffKey}
-                  onViewDiff={handleViewDiff}
-                  onToggleFile={handleStageFile}
-                  onToggleAll={handleStageAll}
-                  buildFileMenu={buildFileMenu}
-                  actionsDisabled={gitActionsBlocked}
-                  extraActions={
-                    <Dropdown
-                      trigger={["click"]}
-                      menu={{ items: changesMenuItems, onClick: handleChangesMenuClick }}
-                    >
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<EllipsisOutlined />}
-                        style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
-                      />
-                    </Dropdown>
-                  }
-                />
-
-                {/* 刷新时保留空状态高度，首次加载仅隐藏内容，避免下方图形跳动。 */}
-                {fileStatuses.length === 0 && (
-                  <div className={`flex flex-col items-center justify-center gap-2 py-8 text-[var(--cs-text-tertiary)]${loading && isRepo !== true ? " invisible" : ""}`}>
-                    <CheckOutlined className="text-2xl" />
-                    <span className="text-sm">{t("sidebar.gitNoChanges")}</span>
-                  </div>
-                )}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -926,7 +909,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         {showGitGraphPanel && (
           <div className={fileHistoryPath
             ? "flex min-h-0 flex-1 flex-col"
-            : showGitChangesPanel && !gitChangesCollapsed
+            : showGitChangesPanel
               ? "mt-auto shrink-0"
               : "shrink-0"}
           >

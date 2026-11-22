@@ -393,7 +393,7 @@ function TitleBarProjectSwitcher() {
           >
             {t("titleBar.projectSwitcherCurrentProject")}
           </div>
-          <div className="flex max-h-[min(220px,32vh)] flex-col overflow-y-auto">
+          <div className="app-thin-scrollbar flex max-h-[min(220px,32vh)] flex-col overflow-y-auto">
             {openProjects.map((project) => renderProjectRow(project, {
               current: !!currentProject && projectPathKey(project.path) === projectPathKey(currentProject.path),
             }))}
@@ -422,7 +422,7 @@ function TitleBarProjectSwitcher() {
             {t("projectLauncher.noRecentProjects")}
           </div>
         ) : (
-          <div className="flex max-h-[min(308px,48vh)] flex-col overflow-y-auto pr-0.5">
+          <div className="app-thin-scrollbar flex max-h-[min(308px,48vh)] flex-col overflow-y-auto pr-0.5">
             {otherRecentProjects.map((project) =>
               renderProjectRow(project, { removable: true }),
             )}

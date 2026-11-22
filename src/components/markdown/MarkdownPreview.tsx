@@ -661,7 +661,7 @@ function RawHtmlBlock({
 }) {
   const renderedHtml = useRenderedRawHtml(html, filePath, projectPath);
 
-  return <div className="overflow-auto" dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
+  return <div className="app-thin-scrollbar overflow-auto" dangerouslySetInnerHTML={{ __html: renderedHtml }} />;
 }
 
 function InlineRawHtml({
@@ -954,7 +954,7 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
         </button>
       </div>
       <pre
-        className="m-0 overflow-x-auto p-4 text-xs leading-6"
+        className="app-thin-scrollbar m-0 overflow-x-auto p-4 text-xs leading-6"
         style={{ color: "var(--cs-text-secondary)" }}
       >
         <code><HighlightedCode code={code} language={language} /></code>
@@ -1332,7 +1332,7 @@ function MarkdownPreviewRenderer({
     blocks.push(
       <div
         key={`table-${blocks.length}`}
-        className="overflow-x-auto rounded-xl"
+        className="app-thin-scrollbar overflow-x-auto rounded-xl"
         style={{ border: "1px solid var(--cs-border-card)" }}
       >
         <table className="w-full border-collapse text-sm">

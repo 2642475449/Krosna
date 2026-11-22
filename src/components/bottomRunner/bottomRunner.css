@@ -20,9 +20,7 @@
 .app-bottom-runner-tool:focus-visible, .app-bottom-runner-tab button:focus-visible { outline: 1px solid var(--cs-primary); outline-offset: -1px; }
 .app-bottom-runner-icon[data-status="running"], .app-bottom-runner-icon[data-status="starting"] { color: var(--cs-primary); }
 .app-bottom-runner-icon[data-status="success"] { color: var(--cs-success); }
-.app-bottom-runner-icon[data-status="error"], .app-bottom-runner-badge { color: var(--cs-danger); }
-.app-bottom-runner-badge { background: var(--cs-danger); border: 2px solid var(--cs-bg-card-solid); }
-.app-bottom-runner-running-count { color: var(--cs-text-on-primary); background: var(--cs-primary); border: 2px solid var(--cs-bg-sidebar); box-shadow: 0 0 0 1px color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent); }
+.app-bottom-runner-icon[data-status="error"] { color: var(--cs-danger); }
 @media (prefers-reduced-motion: reduce) { .app-bottom-runner-icon .anticon-spin { animation: none; } }
 
 .app-bottom-runner-panel[data-word-wrap="false"] .app-terminal-surface { overflow-x: auto; overflow-y: hidden; }

@@ -16,6 +16,7 @@ import {
   ShopOutlined,
   ReloadOutlined,
   DownOutlined,
+  AimOutlined,
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
@@ -32,7 +33,6 @@ import { useResumeSession } from "@/hooks/useResumeSession";
 import { AgentIcon } from "@/components/AgentIcon";
 import { AgentActivityIcon } from "@/components/AgentActivityIcon";
 import { AgentSessionStatus } from "@/components/AgentSessionStatus";
-import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { MarkdownModeButtons } from "@/components/ui/MarkdownModeButtons";
 import { SCHEDULED_TASKS_TAB_ID } from "@/lib/scheduledTasks";
 import {
@@ -480,17 +480,18 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
         ),
         icon: <CloseOutlined />,
       },
-      {
-        key: "close-others",
-        label: t("tabBar.closeOtherTabs"),
-        icon: <StopOutlined />,
-        disabled: openTabs.length <= 1,
-      },
-      {
-        key: "close-all",
-        label: t("tabBar.closeAllTabs"),
-        icon: <CloseCircleOutlined />,
-      },
+      ...(openTabs.length > 1 ? [
+        {
+          key: "close-others",
+          label: t("tabBar.closeOtherTabs"),
+          icon: <StopOutlined />,
+        },
+        {
+          key: "close-all",
+          label: t("tabBar.closeAllTabs"),
+          icon: <CloseCircleOutlined />,
+        },
+      ] : []),
       { type: "divider" },
       {
         key: "split-right-move",
@@ -508,18 +509,23 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
 
     if (session || isFile || isDiff) {
       items.push({ type: "divider" });
-      if (session || isFile) {
-        items.push({
-          key: "open-folder",
-          label: t("common.openInFileManager"),
-          icon: <FolderOpenFilled />,
-        });
-      }
       items.push({
         key: "copy-path",
         label: t("common.copyPath"),
         icon: <CopyOutlined />,
       });
+      items.push({
+        key: "reveal-in-explorer",
+        label: t("common.openInExplorer"),
+        icon: <AimOutlined />,
+      });
+      if (session || isFile) {
+        items.push({
+          key: "open-folder",
+          label: t("tabBar.openInSystemFileManager"),
+          icon: <FolderOpenFilled />,
+        });
+      }
       if (isFile || isDiff) {
         items.push({
           key: "open-associated-app",
@@ -527,11 +533,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           icon: <ExportOutlined />,
         });
       }
-      items.push({
-        key: "reveal-in-explorer",
-        label: t("common.openInExplorer"),
-        icon: <FolderOpenFilled />,
-      });
     }
 
     return items;
@@ -744,7 +745,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       <div
         ref={tabListRef}
         className="app-tabbar-tabs"
-        data-reordering={draggingTabId ? "true" : "false"}
         onWheel={(event) => {
           const list = event.currentTarget;
           if (list.scrollWidth <= list.clientWidth || event.deltaX !== 0) return;
@@ -799,7 +799,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               )}
               <div
                 data-active={isActive ? "true" : "false"}
-                className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${isActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
+                className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${isActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
                 style={{
                   opacity: isDragging ? 0.2 : 1,
                   transform: isDragging ? "scale(0.98)" : "none",
@@ -932,7 +932,6 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           </Dropdown>
         );
       })}
-      <TabSelectionIndicator listRef={tabListRef} tabRefs={tabRefs} activeTabId={activeTabId} tabIds={tabIds} />
       </div>
       {currentProject && (
         <div

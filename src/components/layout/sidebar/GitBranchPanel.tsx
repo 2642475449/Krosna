@@ -243,7 +243,7 @@ export function GitBranchPanel({
     >
       {/* 标题栏 */}
       <div
-        className="flex items-center justify-between px-2"
+        className="flex shrink-0 items-center justify-between px-2"
         style={{ height: 32 }}
       >
         <div
@@ -286,7 +286,7 @@ export function GitBranchPanel({
       </div>
 
       {/* 创建分支输入框 */}
-      <div className="app-accordion" data-open={showCreateInput ? "true" : "false"} aria-hidden={!showCreateInput}>
+      <div className="app-accordion shrink-0" data-open={showCreateInput ? "true" : "false"} aria-hidden={!showCreateInput}>
         <div className="app-accordion__inner">
           <div className="flex items-center gap-1 px-2 pb-1.5">
             <Input

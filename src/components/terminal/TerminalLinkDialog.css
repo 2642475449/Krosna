@@ -1,4 +1,4 @@
-/* 浮层外框由 overlays.css 的 .ant-popover-container 统一提供；这里约束气泡尺寸、排版与选项布局。 */
+/* 浮层外框由 overlays.css 的 .ant-popover-container 统一提供；这里约束命令面板式气泡的尺寸与排版。 */
 .app-terminal-link-anchor {
   position: fixed;
   width: 1px;
@@ -7,7 +7,7 @@
 }
 
 .app-terminal-link-popover .ant-popover-container {
-  width: min(360px, calc(100vw - 24px));
+  width: min(372px, calc(100vw - 24px));
   padding: 0;
   overflow: hidden;
 }
@@ -18,7 +18,7 @@
 
 .app-terminal-link-dialog {
   display: flex;
-  max-height: min(440px, calc(100dvh - 32px));
+  max-height: min(480px, calc(100dvh - 32px));
   flex-direction: column;
   color: var(--cs-text-primary);
 }
@@ -28,54 +28,86 @@
 }
 
 .app-terminal-link-dialog__header {
-  flex: none;
-  padding: 12px 16px 0;
-}
-
-.app-terminal-link-dialog__title {
-  margin: 0;
-  color: var(--cs-text-primary);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.app-terminal-link-dialog__body {
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 10px 16px 14px;
-}
-
-.app-terminal-link-dialog__reference {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.app-terminal-link-dialog__reference > .anticon {
   flex: none;
-  margin-top: 2px;
-  color: var(--cs-text-secondary);
-  font-size: 15px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cs-overlay-divider);
 }
 
-.app-terminal-link-dialog__reference-text,
+.app-terminal-link-dialog__identity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-terminal-link-dialog__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .app-terminal-link-dialog__location-text {
   display: flex;
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+}
+
+.app-terminal-link-dialog__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 .app-terminal-link-dialog__filename {
   margin: 0;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cs-text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-terminal-link-dialog__header-path {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--cs-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.app-terminal-link-dialog__line-badge {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-control);
+  background: var(--cs-bg-active);
+  color: var(--cs-text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .app-terminal-link-dialog__path {
@@ -88,22 +120,52 @@
   line-height: 1.4;
 }
 
+.app-terminal-link-dialog__copy-btn {
+  display: grid;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-control);
+  background: var(--cs-bg-card-solid);
+  color: var(--cs-text-secondary);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.app-terminal-link-dialog__copy-btn:hover:not(:disabled) {
+  border-color: var(--cs-primary);
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+}
+
+.app-terminal-link-dialog__copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .app-terminal-link-dialog__locations {
-  margin-top: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--cs-overlay-divider);
+  background: var(--cs-overlay-footer-bg);
 }
 
 .app-terminal-link-dialog__summary {
   margin: 0 0 8px;
   color: var(--cs-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .app-terminal-link-dialog__options {
   display: flex;
-  max-height: 240px;
+  max-height: 180px;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   overflow-y: auto;
   padding: 2px;
   margin: -2px;
@@ -113,10 +175,10 @@
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   margin: 0;
-  padding: 8px 12px;
+  padding: 7px 10px;
   border: 1px solid var(--cs-border);
   border-radius: var(--cs-radius-control);
   background: var(--cs-bg-elevated);
@@ -145,7 +207,9 @@
   color: var(--cs-text-primary);
 }
 
-.app-terminal-link-dialog__option:has(:focus-visible) {
+.app-terminal-link-dialog__option:has(:focus-visible),
+.app-terminal-link-dialog__action-item:focus-visible,
+.app-terminal-link-dialog__copy-btn:focus-visible {
   outline: 2px solid var(--cs-focus-ring);
   outline-offset: 1px;
 }
@@ -172,14 +236,14 @@
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .app-terminal-link-dialog__notice {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--cs-text-secondary);
   font-size: 12px;
   line-height: 1.4;
@@ -188,33 +252,111 @@
 .app-terminal-link-dialog__notice > .anticon {
   flex: none;
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.app-terminal-link-dialog__description {
-  margin: 8px 0 0;
+.app-terminal-link-dialog__actions {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+}
+
+.app-terminal-link-dialog__action-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--cs-radius-control);
+  background: transparent;
+  color: var(--cs-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 110ms ease, border-color 110ms ease;
+}
+
+.app-terminal-link-dialog__action-item:hover:not(:disabled) {
+  background: var(--cs-bg-hover);
+}
+
+.app-terminal-link-dialog__action-item.is-active {
+  border-color: color-mix(in srgb, var(--cs-primary) 26%, transparent);
+  background: var(--cs-bg-active);
+}
+
+.app-terminal-link-dialog__action-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.app-terminal-link-dialog__action-icon {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--cs-radius-control);
+  background: var(--cs-bg-app);
+  color: var(--cs-text-secondary);
+  font-size: 13px;
+  transition: background-color 110ms ease, color 110ms ease;
+}
+
+.app-terminal-link-dialog__action-item.is-active .app-terminal-link-dialog__action-icon {
+  background: var(--cs-primary);
+  color: var(--cs-text-on-primary);
+}
+
+.app-terminal-link-dialog__action-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+}
+
+.app-terminal-link-dialog__action-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.app-terminal-link-dialog__action-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--cs-text-secondary);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.25;
 }
 
-.app-terminal-link-dialog__footer {
-  display: flex;
+.app-terminal-link-dialog__kbd {
   flex: none;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--cs-overlay-divider);
-  background: var(--cs-overlay-footer-bg);
-}
-
-.app-terminal-link-dialog__footer .ant-btn {
-  min-height: 32px;
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid var(--cs-border);
   border-radius: var(--cs-radius-control);
+  background: var(--cs-bg-app);
+  color: var(--cs-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-terminal-link-dialog__option.ant-radio-wrapper {
+  .app-terminal-link-dialog__option.ant-radio-wrapper,
+  .app-terminal-link-dialog__action-item,
+  .app-terminal-link-dialog__action-icon,
+  .app-terminal-link-dialog__copy-btn {
     transition: none;
   }
 }

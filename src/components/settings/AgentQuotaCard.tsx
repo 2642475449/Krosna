@@ -62,7 +62,7 @@ export function AgentQuotaCard({ agentId, quota, loading, onRefresh }: AgentQuot
         </button>
       </div>
 
-      <div className="max-h-[60vh] space-y-3 overflow-y-auto px-3 py-3">
+      <div className="app-thin-scrollbar max-h-[60vh] space-y-3 overflow-y-auto px-3 py-3">
         {agentId === "antigravity" ? (
           <AntigravityQuotaCardBody usage={quota as AntigravityUsage | null} />
         ) : agentId === "qoder" ? (

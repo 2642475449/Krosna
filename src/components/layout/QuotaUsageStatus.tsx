@@ -87,7 +87,7 @@ export function QuotaUsageStatus({
         </button>
       </div>
 
-      <div className="max-h-[65vh] space-y-3 overflow-y-auto px-3 py-3">
+      <div className="app-thin-scrollbar max-h-[65vh] space-y-3 overflow-y-auto px-3 py-3">
         {agentId === "opencode" ? (
           <>
             <p className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>{t("statusBar.opencodeUsage.accountsHint")}</p>
@@ -136,7 +136,7 @@ export function QuotaUsageStatus({
             {statusError && hasData ? (
               <div className="flex items-start gap-1.5" style={{ color: "var(--cs-text-tertiary)" }}>
                 <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
-                <span className="min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
+                <span className="app-thin-scrollbar min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-all">
                   {statusError}
                 </span>
               </div>

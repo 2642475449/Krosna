@@ -7,6 +7,7 @@ import { createTerminalInputQueue } from "@/lib/terminalInputQueue";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { createPtyResizeGate } from "@/lib/terminalResize";
 import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
+import { attachTerminalScrollbar } from "@/lib/terminalScrollbar";
 import { registerMemoryDiagnosticTerminal } from "@/lib/memoryDiagnostics";
 import { attachRemoteTerminalClipboard } from "@/lib/remoteTerminalClipboard";
 import { decodeRemoteOutput, reconcileRemoteRead, remoteErrorText, type RemoteSession } from "@/lib/remote";
@@ -52,6 +53,7 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
+    const detachScrollbar = attachTerminalScrollbar(container, term);
     termRef.current = term;
     cursorRef.current = 0;
     let decoder = new TextDecoder();
@@ -131,6 +133,7 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
       container.removeEventListener("compositionend", onCompositionEnd);
       detachClipboard();
       output.dispose();
+      detachScrollbar();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -155,7 +158,7 @@ export function RemoteTerminal({ hostId, session, active }: RemoteTerminalProps)
     return () => window.cancelAnimationFrame(frame);
   }, [active, connection?.state, cursorBlink, fontSize, session.processState, theme]);
 
-  return <div ref={containerRef} className="app-remote-terminal" data-remote-session={session.id} />;
+  return <div ref={containerRef} className="app-remote-terminal app-terminal-surface" data-remote-session={session.id} />;
 }
 
 export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: string; active: boolean }) {
@@ -178,6 +181,7 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
+    const detachScrollbar = attachTerminalScrollbar(container, term);
     termRef.current = term;
     const fitTerminal = () => { if (containerRef.current && containerRef.current.clientWidth > 16) fit.fit(); };
     fitRef.current = fitTerminal;
@@ -204,6 +208,7 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
       detachClipboard();
       observer.disconnect();
       input.dispose();
+      detachScrollbar();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -229,5 +234,5 @@ export function RemoteAuthenticationTerminal({ hostId, active }: { hostId: strin
     return () => window.cancelAnimationFrame(frame);
   }, [active, connection?.authOutput, connection?.authRevision, connection?.state, theme]);
 
-  return <div className="app-remote-auth-frame"><div ref={containerRef} className="app-remote-auth-terminal" /></div>;
+  return <div className="app-remote-auth-frame"><div ref={containerRef} className="app-remote-auth-terminal app-terminal-surface" /></div>;
 }

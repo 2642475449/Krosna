@@ -29,7 +29,6 @@
 
 .app-workspace-tab-content[data-active="true"] {
   display: block;
-  animation: app-content-enter var(--cs-motion-fast) var(--cs-motion-ease-out);
 }
 
 .app-tabbar-tab {
@@ -44,28 +43,6 @@
 .app-launcher-pills button:active {
   transform: scale(0.96);
 }
-
-/* 指示线随标签列表滚动，连续点击时由当前位置转向新目标。 */
-.app-tabbar-tabs { position: relative; }
-
-.app-tab-selection-indicator {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  z-index: 3;
-  height: var(--cs-marker-thickness);
-  width: var(--cs-tab-indicator-width, 0px);
-  transform: translateX(var(--cs-tab-indicator-x, 0px));
-  background: var(--cs-primary);
-  pointer-events: none;
-  opacity: 0;
-}
-
-.app-tab-selection-indicator[data-visible="true"] { opacity: 1; }
-.app-tab-selection-indicator[data-ready="true"] {
-  transition: transform 180ms var(--cs-motion-ease), width 180ms var(--cs-motion-ease), opacity var(--cs-motion-fast) ease;
-}
-.app-tabbar-tabs[data-reordering="true"] .app-tab-selection-indicator { transition: none; }
 
 .app-nav-artwork { width: 22px; height: 22px; overflow: visible; }
 /* 圆环固定，播放符号在圆内翻面并实心化，始终保留完整的播放按钮轮廓。 */
@@ -294,7 +271,6 @@
     transition: none !important;
   }
 
-  .app-tab-selection-indicator,
   .app-nav-settings-gear,
   .app-nav-artwork *,
   .app-text-swap,

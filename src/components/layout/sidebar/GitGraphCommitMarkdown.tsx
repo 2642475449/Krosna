@@ -126,7 +126,7 @@ export function GitGraphCommitMarkdown({ source, className }: GitGraphCommitMark
       return (
         <pre
           key={key}
-          className="m-0 overflow-x-auto rounded-sm border px-2 py-1 font-mono text-[11px] leading-[16px]"
+          className="app-thin-scrollbar m-0 overflow-x-auto rounded-sm border px-2 py-1 font-mono text-[11px] leading-[16px]"
           style={{
             background: "var(--cs-bg-hover)",
             color: "var(--cs-text-primary)",

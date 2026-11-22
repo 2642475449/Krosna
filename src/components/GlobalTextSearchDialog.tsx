@@ -18,7 +18,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
-import { cancelContentSearch, openInAssociatedApplication, readProjectFile, searchProjectText } from "@/lib/api";
+import { cancelContentSearch, getSearchIndexStatus, openInAssociatedApplication, readProjectFile, resumeProjectIndex, searchProjectText, setProjectIndexEnabled } from "@/lib/api";
 import { requestFileNavigation } from "@/lib/fileNavigation";
 import { getFilePreviewErrorMessage, isFilePreviewSizeLimitError } from "@/lib/filePreviewError";
 import { message } from "@/lib/toast";
@@ -114,6 +114,8 @@ function GlobalTextSearchDialog({
   const [summary, setSummary] = useState<ContentSearchSummary | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shortQueryState, setShortQueryState] = useState<"disabled" | "paused" | "waiting" | null>(null);
+  const [retrySearch, setRetrySearch] = useState(0);
   const [splitRatio, setSplitRatio] = useState(DEFAULT_GLOBAL_SEARCH_SPLIT_RATIO);
   const [splitDragging, setSplitDragging] = useState(false);
   const inputRef = useRef<TextAreaRef | null>(null);
@@ -222,6 +224,7 @@ function GlobalTextSearchDialog({
 
   useEffect(() => {
     const trimmedQuery = query.trim();
+    setShortQueryState(null);
     const previousSearchId = activeSearchIdRef.current;
     activeSearchIdRef.current = null;
     if (previousSearchId && searchInFlightRef.current) {
@@ -250,7 +253,9 @@ function GlobalTextSearchDialog({
     setSelectedMatch(null);
     setSummary(null);
     setError(null);
-    const timer = window.setTimeout(() => {
+    let timer: number;
+    const search = () => {
+      settled = false;
       const searchId = crypto.randomUUID();
       activeSearchIdRef.current = searchId;
       searchInFlightRef.current = true;
@@ -270,12 +275,27 @@ function GlobalTextSearchDialog({
         .then((nextSummary) => {
           settled = true;
           if (disposed || activeSearchIdRef.current !== searchId) return;
+          setShortQueryState(null);
           setSummary(nextSummary);
         })
         .catch((nextError: unknown) => {
           settled = true;
           if (disposed || activeSearchIdRef.current !== searchId) return;
           const errorMessage = nextError instanceof Error ? nextError.message : String(nextError);
+          if (errorMessage === "short-query-index-disabled") {
+            setShortQueryState("disabled");
+            return;
+          }
+          if (errorMessage === "short-query-index-paused") {
+            setShortQueryState("paused");
+            return;
+          }
+          if (errorMessage === "short-query-index-waiting") {
+            setShortQueryState("waiting");
+            timer = window.setTimeout(search, 1500);
+            return;
+          }
+          setShortQueryState(null);
           setError(errorMessage === "short-query-index-unavailable"
             ? t("globalSearch.shortQueryIndexUnavailable") : errorMessage);
         })
@@ -287,12 +307,14 @@ function GlobalTextSearchDialog({
             setSearching(false);
           }
         });
-    }, 280);
+    };
+    timer = window.setTimeout(search, 280);
 
     return () => {
       disposed = true;
       window.clearTimeout(timer);
       const searchId = activeSearchIdRef.current;
+      activeSearchIdRef.current = null;
       if (!settled && searchId && searchInFlightRef.current) {
         void cancelContentSearch(searchId);
       }
@@ -308,7 +330,33 @@ function GlobalTextSearchDialog({
     useRegex,
     wholeWord,
     t,
+    retrySearch,
   ]);
+
+  const continueShortQuery = async () => {
+    if (!currentProject || (shortQueryState !== "disabled" && shortQueryState !== "paused")) return;
+    const searchId = activeSearchIdRef.current;
+    setError(null);
+    setShortQueryState("waiting");
+    try {
+      if (shortQueryState === "paused") await resumeProjectIndex(currentProject.path);
+      else await setProjectIndexEnabled(currentProject.path, true);
+      if (activeSearchIdRef.current === searchId) setRetrySearch((revision) => revision + 1);
+    } catch (cause) {
+      if (activeSearchIdRef.current !== searchId) return;
+      if (shortQueryState === "paused") {
+        // Another view may already have resumed the build.
+        const status = await getSearchIndexStatus(currentProject.path).catch(() => null);
+        if (activeSearchIdRef.current !== searchId) return;
+        if (status && status.state !== "paused") {
+          setRetrySearch((revision) => revision + 1);
+          return;
+        }
+      }
+      setShortQueryState(shortQueryState);
+      setError(t(shortQueryState === "paused" ? "settings.searchIndex.pauseFailed" : "settings.searchIndex.saveFailed", { error: String(cause) }));
+    }
+  };
 
   const handleOpenMatch = useCallback(
     (match: ContentSearchMatch, keepOpen: boolean) => {
@@ -526,7 +574,17 @@ function GlobalTextSearchDialog({
 
         {matches.length === 0 ? (
           <div className="app-global-search-empty">
-            {error ? <p role="alert">{error}</p> : searching ? <Spin /> : query.trim() && summary ? (
+            {shortQueryState ? <>
+              <p role="status">{t({
+                disabled: "globalSearch.shortQueryIndexDisabled",
+                paused: "globalSearch.shortQueryIndexPaused",
+                waiting: "globalSearch.shortQueryIndexWaiting",
+              }[shortQueryState])}</p>
+              {shortQueryState !== "waiting" && <Button onClick={() => void continueShortQuery()}>
+                {t(shortQueryState === "paused" ? "globalSearch.resumeIndexAndSearch" : "globalSearch.enableIndexAndSearch")}
+              </Button>}
+              {error && <p role="alert">{error}</p>}
+            </> : error ? <p role="alert">{error}</p> : searching ? <Spin /> : query.trim() && summary ? (
               <><SearchOutlined /><strong>{t("globalSearch.noResults")}</strong><p>{t("globalSearch.noResultsHint")}</p></>
             ) : <div className="app-global-search-guide">
               <span><kbd>*.ts</kbd> {t("globalSearch.fileFilter")}</span>

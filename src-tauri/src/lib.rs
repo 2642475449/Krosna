@@ -154,6 +154,7 @@ pub fn run() {
                     }
                 }
                 commands::window::cleanup_window_project_sessions(
+                    window.app_handle(),
                     window.label(),
                     &registry,
                     &manager,

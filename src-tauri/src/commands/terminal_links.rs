@@ -46,6 +46,14 @@ pub async fn resolve_terminal_link(
     working_directory: String,
     path: String,
 ) -> Result<TerminalLinkResolution, String> {
+    // Only bare names can fall back to the project index. Absolute paths and
+    // terminal-relative hits also work when the project directory is unavailable.
+    let text = path.trim();
+    let project = if is_bare_name(Path::new(text), text) {
+        super::search_index::capture_search_project(&app, &project_path).ok()
+    } else {
+        None
+    };
     crate::commands::run_background_task("resolve_terminal_link", move || {
         resolve_terminal_link_blocking(
             &project_path,
@@ -53,7 +61,8 @@ pub async fn resolve_terminal_link(
             &path,
             dirs_next::home_dir().as_deref(),
             &|root, name| {
-                super::search_index::terminal_entry_index(&app, &project_path, root, name)
+                let project = project.as_ref().ok_or("search-index-unavailable")?;
+                super::search_index::terminal_entry_index(&app, project, root, name)
             },
         )
     })

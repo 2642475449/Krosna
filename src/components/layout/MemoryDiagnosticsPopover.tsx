@@ -244,17 +244,59 @@ function MemoryDiagnosticsCard({ id, panel, dismiss, onEscape }: {
     { metric: "editorCodeUnits", value: formatCount(latest?.editorCodeUnits) },
   ];
 
+  const firstSample = samples[0];
+  const computeSeriesRange = (selector: (sample: MemorySample) => number | null) => {
+    const values = samples.map(selector).filter((v): v is number => v !== null);
+    if (values.length <= 1) return null;
+    let min = values[0];
+    let max = values[0];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i] < min) min = values[i];
+      if (values[i] > max) max = values[i];
+    }
+    return { min, max };
+  };
+
   const copySummary = () => {
-    const lines = [
-      t("settings.memoryDiagnostics.title"),
+    const lines: string[] = [
+      `${t("settings.memoryDiagnostics.title")} (${t(statusKey)})`,
       ...(renderer ? [t("settings.memoryDiagnostics.process", { pid: renderer.pid, count: renderer.frameCount })] : []),
-      ...MEMORY_SERIES.map(({ key, value }) => `${t(`settings.memoryDiagnostics.metrics.${key}`)}: ${formatBytes(latest ? value(latest) : null)}`),
-      ...(latest ? [t("settings.memoryDiagnostics.workspaceSummary", {
-        terminals: number.format(latest.activeTerminals),
-        mounted: number.format(latest.terminals.mounted),
-        rows: number.format(latest.terminals.scrollbackRows),
-        editors: number.format(latest.editorModels),
-      })] : []),
+      ...(latest ? [t("settings.memoryDiagnostics.updated", { time: time.format(latest.at) })] : []),
+      ...(firstSample && latest && samples.length > 1 ? [
+        t("settings.memoryDiagnostics.trendSrSummary", {
+          start: time.format(firstSample.at),
+          end: time.format(latest.at),
+          count: samples.length,
+          resident: formatBytes(MEMORY_SERIES[0].value(latest)),
+        }),
+      ] : []),
+      "",
+      ...MEMORY_SERIES.map(({ key, value }) => {
+        const current = formatBytes(latest ? value(latest) : null);
+        const range = computeSeriesRange(value);
+        const rangeText = range ? ` (${formatBytes(range.min)} ~ ${formatBytes(range.max)})` : "";
+        return `${t(`settings.memoryDiagnostics.metrics.${key}`)}: ${current}${rangeText}`;
+      }),
+      ...(latest ? [
+        t("settings.memoryDiagnostics.workspaceSummary", {
+          terminals: number.format(latest.activeTerminals),
+          mounted: number.format(latest.terminals.mounted),
+          rows: number.format(latest.terminals.scrollbackRows),
+          editors: number.format(latest.editorModels),
+        }),
+        "",
+        `[${t("settings.memoryDiagnostics.workspace")}]`,
+        ...details.map(({ metric, value }) => `${t(`settings.memoryDiagnostics.metrics.${metric}`)}: ${value}`),
+      ] : []),
+      ...(breakdown ? [
+        "",
+        `[${t("settings.memoryDiagnostics.allocations")}] ${t("settings.memoryDiagnostics.captureInfo", { pid: breakdown.pid, time: time.format(breakdown.at) })}`,
+        ...breakdown.allocations.map(({ category, bytes }) => {
+          const before = previous?.allocations.find((item) => item.category === category)?.bytes;
+          const delta = before === undefined ? "" : ` (${formatBytes(bytes - before, true)})`;
+          return `${t(`settings.memoryDiagnostics.categories.${category}`, { defaultValue: category })}: ${formatBytes(bytes)}${delta}`;
+        }),
+      ] : []),
     ];
     void navigator.clipboard?.writeText(lines.join("\n")).then(() => {
       setCopied(true);
@@ -280,7 +322,7 @@ function MemoryDiagnosticsCard({ id, panel, dismiss, onEscape }: {
             className="app-memory-diagnostics-icon"
             aria-label={t(copied ? "settings.memoryDiagnostics.copied" : "settings.memoryDiagnostics.copy")}
             title={t(copied ? "settings.memoryDiagnostics.copied" : "settings.memoryDiagnostics.copy")}
-            disabled={!latest}
+            disabled={!latest && !breakdown}
             onClick={copySummary}
           >
             {copied ? <CheckOutlined aria-hidden="true" /> : <CopyOutlined aria-hidden="true" />}

@@ -1,5 +1,5 @@
 use crate::commands::search_index::{
-    begin_content_search, lookup_index_candidates, IndexCandidateLookup,
+    capture_search_project, lookup_index_candidates, IndexCandidateLookup, ResolvedProject,
 };
 use crate::path_utils::{display_path, normalize_input_path};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
@@ -201,6 +201,7 @@ pub async fn search_project_text(
     state: State<'_, ContentSearchState>,
     request: ContentSearchRequest,
 ) -> Result<ContentSearchSummary, String> {
+    let project = capture_search_project(&app, &request.project_path)?;
     let cancelled_searches = state.cancelled_searches.clone();
     let search_id = request.search_id.clone();
     state
@@ -210,7 +211,7 @@ pub async fn search_project_text(
         .insert(search_id.clone());
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        run_content_search(app, request, cancelled_searches)
+        run_content_search(app, project, request, cancelled_searches)
     })
     .await
     .map_err(|error| format!("Search task failed: {error}"))?;
@@ -239,18 +240,23 @@ pub fn cancel_content_search(
 
 fn run_content_search(
     app: AppHandle,
+    project: ResolvedProject,
     request: ContentSearchRequest,
     cancelled_searches: Arc<Mutex<HashSet<String>>>,
 ) -> Result<ContentSearchSummary, String> {
-    let _search_activity = begin_content_search(&app, &request.project_path);
-    let lookup = lookup_index_candidates(
-        &app,
-        &request.project_path,
-        &request.query,
-        request.use_regex,
-    );
+    if search_is_cancelled(&cancelled_searches, &request.search_id) {
+        return Ok(ContentSearchSummary {
+            search_id: request.search_id,
+            cancelled: true,
+            backend: "scan".into(),
+            index_state: "not_checked".into(),
+            ..Default::default()
+        });
+    }
+    let _search_activity = project.begin_content_search()?;
+    let lookup = lookup_index_candidates(&app, &project, &request.query, request.use_regex)?;
     let (candidate_paths, backend, fallback_reason, index_generation, index_state) = match lookup {
-        IndexCandidateLookup::Unavailable => return Err("short-query-index-unavailable".into()),
+        IndexCandidateLookup::ShortQueryError(reason) => return Err(reason.into()),
         IndexCandidateLookup::Ready { paths, generation } => (
             Some(paths),
             "index".to_string(),

@@ -48,6 +48,11 @@ typography:
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.4
+  badge:
+    fontFamily: "Inter, system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Noto Sans CJK SC', sans-serif"
+    fontSize: "10px"
+    fontWeight: 600
+    lineHeight: 1
 rounded:
   control: "6px"
   overlay: "8px"
@@ -142,6 +147,7 @@ Krosna 是一套面向高频开发者的桌面工作台视觉系统：温润纸�
 - **Title**（500, 15px, 1.4）：用于弹窗标题、设置分组标题与当前激活标签页（激活标签加粗至 `500`）。
 - **Body**（400, 13px, 1.5）：用于桌面端正文、列表项、说明文案与错误栈信息（开发错误面板为 `13px`，行高 `1.6`）。
 - **Label**（400, 12px, 1.4）：用于状态栏信息、快捷方式提示、时间戳与代码/终端路径等辅助元信息。
+- **Badge**（600, 10px, 1）：用于侧边栏图标角标与紧凑计数胶囊（配合等宽数字 `tabular-nums`）。
 
 ### Named Rules
 **The Mono-For-Telemetry Rule.** 文件路径、命令行参数、快捷键提示与终端/状态栏计数优先使用 `--font-mono` 等宽字体，确保数字与路径在高频扫视时不发生横向抖动。

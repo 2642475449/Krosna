@@ -255,8 +255,9 @@ pub async fn search_project_entries(
     project_path: String,
     query: String,
 ) -> Result<Vec<FileTreeEntry>, String> {
+    let project = super::search_index::capture_search_project(&app, &project_path)?;
     crate::commands::run_background_task("search_project_entries", move || {
-        crate::commands::search_index::search_project_entry_index(&app, &project_path, &query)
+        super::search_index::search_project_entry_index(&app, &project, &query)
     })
     .await
 }

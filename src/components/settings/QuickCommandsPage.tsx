@@ -153,7 +153,7 @@ export function QuickCommandsPage() {
       {error && <Alert type="error" showIcon title={t("quickCommands.loadFailed", { error })} />}
 
       {/* 命令列表 */}
-      <div className="flex-1 overflow-y-auto" aria-busy={projectLoading}>
+      <div className="app-thin-scrollbar flex-1 overflow-y-auto" aria-busy={projectLoading}>
         {projectLoading && filteredCommands.length === 0 && <div className="flex justify-center py-12"><Spin /></div>}
         {repositoryId && !projectLoading && filteredCommands.length === 0 && !error && (
           <Empty

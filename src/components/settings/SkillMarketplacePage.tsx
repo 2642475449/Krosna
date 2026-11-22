@@ -118,7 +118,7 @@ export default function SkillMarketplacePage({ isActive }: Props) {
             <Button type="link" className="!px-0" icon={<LinkOutlined />} onClick={() => void openSource(detail.sourceUrl)}>{t("settings.skillMarket.viewSource")}</Button>
             {!detail.previewOnly && <details className="mt-3">
               <summary className="app-skills-secondary text-xs cursor-pointer">{t("settings.skillMarket.resourceFiles")} ({detail.fileCount})</summary>
-              <ul className="max-h-40 overflow-y-auto mt-2">{detail.files.map((path) => <li className="app-skills-path" key={path}>{path}</li>)}</ul>
+              <ul className="app-thin-scrollbar max-h-40 overflow-y-auto mt-2">{detail.files.map((path) => <li className="app-skills-path" key={path}>{path}</li>)}</ul>
             </details>}
           </> : marketplaceIsGitHubSource(market.selected) && <Button type="link" className="!px-0" icon={<LinkOutlined />} onClick={() => market.selected && void openSource(marketplaceRepositoryUrl(market.selected))}>{t("settings.skillMarket.viewRepository")}</Button>}
         </aside>

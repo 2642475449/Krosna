@@ -132,30 +132,60 @@
 /*
  * Keep xterm's scrollbar easy to target without giving it the visual weight
  * of its 14px default. The transparent interaction rail overlaps the terminal
- * padding so its 4px slider sits flush against the panel edge. Do not enable
- * xterm's overview ruler here: its border remains visible even when the
+ * padding so its 4px pill slider sits cleanly near the panel edge. Do not
+ * enable xterm's overview ruler here: its border remains visible even when the
  * scrollbar itself is hidden.
  */
-.app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical {
-  right: -4px !important;
-  opacity: 0 !important;
-  pointer-events: auto !important;
+.xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
   background: transparent !important;
   border: 0 !important;
   outline: 0 !important;
+}
+
+.xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider {
+  left: auto !important;
+  right: 2px !important;
+  width: 6px !important;
+  border-radius: 999px;
+  transition: width 120ms ease, background-color 120ms ease;
+}
+
+.xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical:hover > .xterm-slider,
+.xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider.xterm-active {
+  width: 8px !important;
+}
+
+.app-terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
+  right: -4px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
   transition: opacity 160ms ease !important;
 }
 
-.app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
-  left: 4px !important;
-  width: 4px !important;
-  border-radius: 999px;
-  transition: background-color 120ms ease;
+.app-terminal-surface[data-scrollbar-needed="true"] .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
+  pointer-events: auto !important;
 }
 
-.app-terminal-surface[data-scrollbar-active="true"] .xterm .xterm-scrollable-element > .scrollbar.vertical,
-.app-terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical:hover {
+.app-terminal-surface[data-scrollbar-needed="true"][data-scrollbar-active="true"] .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical,
+.app-terminal-surface[data-scrollbar-needed="true"] .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical:hover,
+.app-terminal-surface[data-scrollbar-needed="true"] .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical:has(> .xterm-slider.xterm-active) {
   opacity: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider,
+  .app-terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
+    transition: none !important;
+  }
+}
+
+.monaco-editor .monaco-scrollable-element > .scrollbar {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.monaco-editor .scrollbar > .slider {
+  border-radius: 999px;
 }
 
 [data-theme="light-glass"] .app-main-content {
@@ -348,6 +378,7 @@ html, body, #root {
 }
 
 .app-tab-chrome {
+  --cs-marker-color: var(--cs-primary);
   height: 36px;
   min-width: 100px;
   margin-top: 0;
@@ -356,7 +387,6 @@ html, body, #root {
   border-radius: 0;
   background: transparent;
   color: var(--cs-text-secondary);
-  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .app-tab-chrome:hover {
@@ -427,6 +457,180 @@ html, body, #root {
   border-color: color-mix(in srgb, var(--cs-border-sidebar) 68%, transparent);
 }
 
+.git-commit-composer {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 94%, var(--cs-bg-sidebar) 6%);
+  border: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 90%, var(--cs-text-primary) 10%);
+  box-shadow: none;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.git-commit-composer:hover:not(:focus-within) {
+  border-color: color-mix(in srgb, var(--cs-border-sidebar) 65%, var(--cs-text-secondary) 35%);
+}
+
+.git-commit-composer:focus-within {
+  border-color: var(--cs-primary);
+  background: var(--cs-bg-card-solid, var(--cs-bg-card));
+}
+
+.git-commit-composer-body {
+  padding: 10px 12px 6px;
+}
+
+.git-commit-composer .git-commit-composer-input,
+.git-commit-composer .git-commit-composer-input:hover,
+.git-commit-composer .git-commit-composer-input:focus,
+.git-commit-composer .git-commit-composer-input:focus-visible {
+  width: 100%;
+  min-height: 60px;
+  padding: 0;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--cs-text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  resize: none;
+}
+
+.git-commit-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 6px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--cs-border-sidebar) 52%, transparent);
+}
+
+.git-commit-composer-shortcut {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--cs-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-commit-ai-group {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cs-bg-hover) 55%, transparent);
+}
+
+.git-commit-ai-btn.ant-btn,
+.git-commit-ai-menu-btn.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.git-commit-ai-btn.ant-btn {
+  color: var(--cs-primary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 6px 0 0 6px;
+}
+
+.git-commit-ai-menu-btn.ant-btn {
+  width: 24px;
+  padding: 0;
+  color: var(--cs-text-secondary);
+  border-radius: 0 6px 6px 0;
+}
+
+.git-commit-ai-btn.ant-btn:not(:disabled):hover,
+.git-commit-ai-menu-btn.ant-btn:not(:disabled):hover {
+  background: var(--cs-bg-hover) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.git-commit-ai-btn.ant-btn:disabled,
+.git-commit-ai-menu-btn.ant-btn:disabled {
+  color: var(--cs-text-tertiary);
+  opacity: 0.6;
+}
+
+.git-commit-actions {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+}
+
+.git-commit-primary-btn.ant-btn,
+.git-commit-menu-btn.ant-btn {
+  height: 32px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: none !important;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.git-commit-primary-btn.ant-btn {
+  width: 100%;
+  border-radius: 8px 0 0 8px;
+}
+
+.git-commit-menu-btn.ant-btn {
+  width: 34px;
+  padding-inline: 0;
+  border-radius: 0 8px 8px 0;
+  border-left-width: 1px;
+}
+
+.git-commit-primary-btn.ant-btn[data-ready="true"],
+.git-commit-menu-btn.ant-btn[data-ready="true"] {
+  background: var(--cs-primary);
+  border-color: var(--cs-primary);
+  color: var(--cs-text-on-primary);
+}
+
+.git-commit-menu-btn.ant-btn[data-ready="true"] {
+  border-left-color: color-mix(in srgb, var(--cs-text-on-primary) 24%, var(--cs-primary) 76%);
+}
+
+.git-commit-primary-btn.ant-btn[data-ready="true"]:not(:disabled):hover,
+.git-commit-menu-btn.ant-btn[data-ready="true"]:not(:disabled):hover {
+  background: color-mix(in srgb, var(--cs-primary) 88%, var(--cs-text-primary) 12%) !important;
+  border-color: color-mix(in srgb, var(--cs-primary) 88%, var(--cs-text-primary) 12%) !important;
+  color: var(--cs-text-on-primary) !important;
+}
+
+.git-commit-primary-btn.ant-btn[data-ready="false"],
+.git-commit-menu-btn.ant-btn[data-ready="false"] {
+  background: color-mix(in srgb, var(--cs-bg-hover) 68%, var(--cs-bg-card-solid, var(--cs-bg-card)) 32%);
+  border-color: color-mix(in srgb, var(--cs-border-sidebar) 88%, transparent);
+  color: var(--cs-text-secondary);
+}
+
+.git-commit-menu-btn.ant-btn[data-ready="false"]:not(:disabled):hover {
+  background: var(--cs-bg-hover) !important;
+  border-color: var(--cs-border-sidebar) !important;
+  color: var(--cs-text-primary) !important;
+}
+
+.git-commit-primary-btn.ant-btn:disabled,
+.git-commit-menu-btn.ant-btn:disabled {
+  cursor: not-allowed;
+}
+
 .git-file-diff-stats {
   display: inline-flex;
   align-items: center;
@@ -494,6 +698,21 @@ html, body, #root {
   box-shadow: none;
 }
 
+.app-rail-badge-count {
+  color: var(--cs-text-on-primary);
+  background: var(--cs-primary);
+  border: 2px solid var(--cs-bg-sidebar);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-rail-badge-count[data-variant="error"] {
+  background: var(--cs-danger);
+}
+
 .app-sidebar-switcher,
 .app-sidebar-list-item,
 .app-sidebar-section-header {
@@ -521,39 +740,266 @@ html, body, #root {
   padding-bottom: 8px;
 }
 
+:is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+) {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
 .app-project-tree-scroll {
   min-height: 0;
   outline: none;
   overflow-anchor: none;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  scrollbar-color: transparent transparent;
 }
 
-.app-project-tree-scroll:hover {
-  scrollbar-color: transparent transparent;
+:is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+):hover {
+  scrollbar-color: var(--cs-scrollbar-thumb) transparent;
 }
 
-.app-project-tree-scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+:is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+)::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+  height: 6px;
 }
 
-.app-project-tree-scroll::-webkit-scrollbar-track {
+:is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.app-project-tree-scroll::-webkit-scrollbar-thumb {
-  background: transparent;
+[data-theme] :is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+)::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent !important;
 }
 
-.app-project-tree-scroll:hover::-webkit-scrollbar-thumb {
-  background: transparent;
+[data-theme] :is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+):hover::-webkit-scrollbar-thumb {
+  background: var(--cs-scrollbar-thumb) !important;
 }
 
-.app-project-tree-scroll::-webkit-scrollbar-thumb:hover {
-  background: transparent;
+[data-theme] :is(
+  .app-project-tree-scroll,
+  .app-thin-scrollbar,
+  .app-settings-nav,
+  .app-settings-scroll,
+  .app-ledger-popover,
+  .app-skill-market-page,
+  .app-skills-detail-modal .ant-tabs-content-holder,
+  .app-skill-market-content,
+  .app-markdown-preview-shell,
+  .app-markdown-preview pre,
+  .app-markdown-mermaid-placeholder,
+  .app-office-file-preview *,
+  .app-home-page-scroll,
+  .app-global-search-results,
+  .app-global-search-preview,
+  .app-global-search-preview-code,
+  .app-task-monitor-projects,
+  .app-memory-diagnostics__scroll,
+  .app-scheduled-tasks,
+  .app-scheduled-log,
+  .app-remote-overview-scroll,
+  .app-remote-error--banner,
+  .app-terminal-link-dialog__locations,
+  .app-terminal-link-dialog__options,
+  .app-terminal-link-dialog__actions,
+  .app-update-modal .ant-modal-body,
+  .app-update-modal__error-code,
+  .app-update-modal__notes,
+  .app-tabbar-overflow-menu,
+  .app-session-resume,
+  .app-mcp-test-detail
+)::-webkit-scrollbar-thumb:hover {
+  background: var(--cs-scrollbar-hover) !important;
 }
 
 .app-project-tree-scroll:focus-visible {
@@ -697,17 +1143,6 @@ html, body, #root {
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
     0 6px 18px color-mix(in srgb, var(--cs-primary) 10%, transparent);
-}
-
-.tab-item {
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease,
-    box-shadow 150ms ease,
-    margin-top 150ms ease,
-    opacity 150ms ease,
-    transform 150ms ease;
 }
 
 .tab-item[data-active="true"] {
@@ -2921,6 +3356,7 @@ html, body, #root {
 .app-task-monitor.app-task-monitor-embedded {
   height: 100%;
   max-height: none;
+  background: var(--cs-bg-card);
 }
 
 /* 顶部概览统计条 */

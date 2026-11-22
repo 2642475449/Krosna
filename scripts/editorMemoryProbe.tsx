@@ -5,20 +5,29 @@ import "../src/i18n";
 import MonacoTextEditor from "../src/components/editors/MonacoTextEditor";
 import { MonacoDiffEditor } from "../src/components/editors/MonacoDiffEditor";
 import * as monaco from "../src/lib/monacoRuntime";
+import { createRecentFileEditorCache, RecentFileEditorContext } from "../src/lib/recentFileEditor";
+import "../src/styles/motion.css";
 
 const root = createRoot(document.getElementById("root")!);
 const original = Array.from({ length: 200 }, (_, i) => `const value${i}: number = ${i};`).join("\n");
 let value = original;
 let active = { left: true, right: false, diff: true };
+const retainLeft = createRecentFileEditorCache();
+const retainRight = createRecentFileEditorCache();
 function render() {
   flushSync(() => root.render(<main style={{ display: "flex", height: 500 }}>
-    <section style={{ display: active.left ? "flex" : "none", width: 550 }}>
-      <MonacoTextEditor filePath="C:/synthetic-editor-probe/left.ts" value={value} readOnly={false}
-        isActive={active.left} onChange={(next) => { value = next; }} />
+    <section className="app-workspace-tab-content" data-tab-kind="file" data-active={active.left}
+      style={{ position: "relative", display: active.left ? "flex" : "none", width: 550 }}>
+      <RecentFileEditorContext.Provider value={retainLeft}>
+        <MonacoTextEditor filePath="C:/synthetic-editor-probe/left.ts" value={value} readOnly={false}
+          isActive={active.left} onChange={(next) => { value = next; }} />
+      </RecentFileEditorContext.Provider>
     </section>
     <section style={{ display: active.right ? "flex" : "none", width: 550 }}>
-      <MonacoTextEditor filePath="C:/synthetic-editor-probe/right.html" value="<h1>Review</h1>" readOnly
-        isActive={active.right} onChange={() => {}} />
+      <RecentFileEditorContext.Provider value={retainRight}>
+        <MonacoTextEditor filePath="C:/synthetic-editor-probe/right.html" value="<h1>Review</h1>" readOnly
+          isActive={active.right} onChange={() => {}} />
+      </RecentFileEditorContext.Provider>
     </section>
     <section style={{ display: active.diff ? "block" : "none", width: 550 }}>
       <MonacoDiffEditor original={original} modified={original.replace("= 42;", "= 43;")} language="typescript"

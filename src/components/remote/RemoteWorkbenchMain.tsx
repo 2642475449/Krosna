@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Button, Input, Select, Spin, Tooltip, message } from "antd";
 import {
   CloseOutlined,
@@ -14,7 +14,6 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { AgentIcon } from "@/components/AgentIcon";
-import { TabSelectionIndicator } from "@/components/ui/TabSelectionIndicator";
 import { openExternalUrl } from "@/lib/api";
 import {
   isRemoteConnectionBusy,
@@ -38,14 +37,11 @@ import {
 import { RemoteAuthenticationTerminal, RemoteTerminal } from "./RemoteTerminal";
 import { RemoteErrorMessage } from "./RemoteWorkspaceModals";
 
-const OVERVIEW_TAB_ID = "__overview__";
 
 /** 远程工作台主工作区：顶部多标签终端栏 + 主机概览/认证/会话终端舞台。 */
 export function RemoteWorkbenchMain({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
   const id = useId();
-  const tabListRef = useRef<HTMLDivElement | null>(null);
-  const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const hosts = useRemoteWorkspaceStore((state) => state.hosts);
   const selectedHostId = useRemoteWorkspaceStore((state) => state.selectedHostId);
@@ -79,14 +75,6 @@ export function RemoteWorkbenchMain({ visible }: { visible: boolean }) {
 
   const distinctOpenHostCount = useMemo(
     () => new Set(openTabs.map((item) => item.hostId)).size,
-    [openTabs],
-  );
-
-  const activeTabKey = activeTab
-    ? remoteTabKey(activeTab.hostId, activeTab.sessionId)
-    : OVERVIEW_TAB_ID;
-  const allTabKeys = useMemo(
-    () => [OVERVIEW_TAB_ID, ...openTabs.map((tab) => remoteTabKey(tab.hostId, tab.sessionId))],
     [openTabs],
   );
 
@@ -147,25 +135,14 @@ export function RemoteWorkbenchMain({ visible }: { visible: boolean }) {
     <div className="app-main-stage flex min-h-0 flex-1 flex-col">
       <div className="app-shell-chrome app-glass-tabbar app-tabbar flex items-end shrink-0">
         <div className="flex min-w-0 flex-1 items-end">
-          <div ref={tabListRef} className="app-tabbar-tabs" role="tablist" aria-label={t("remote.title")}>
-            <TabSelectionIndicator
-              listRef={tabListRef}
-              tabRefs={tabRefs}
-              activeTabId={activeTabKey}
-              tabIds={allTabKeys}
-            />
-            <div
-              ref={(element) => {
-                tabRefs.current[OVERVIEW_TAB_ID] = element;
-              }}
-              className="app-tabbar-tab app-remote-overview-tab relative"
-            >
+          <div className="app-tabbar-tabs" role="tablist" aria-label={t("remote.title")}>
+            <div className="app-tabbar-tab app-remote-overview-tab relative">
               <div
                 role="tab"
                 tabIndex={0}
                 aria-selected={activeTab === null}
                 data-active={activeTab === null ? "true" : "false"}
-                className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${activeTab === null ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
+                className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${activeTab === null ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
                 onClick={() => useRemoteWorkspaceStore.getState().openHostOverview()}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -200,19 +177,13 @@ export function RemoteWorkbenchMain({ visible }: { visible: boolean }) {
                 : baseTitle;
 
               return (
-                <div
-                  key={key}
-                  ref={(element) => {
-                    tabRefs.current[key] = element;
-                  }}
-                  className="app-tabbar-tab relative"
-                >
+                <div key={key} className="app-tabbar-tab relative">
                   <div
                     role="tab"
                     tabIndex={0}
                     aria-selected={isTabActive}
                     data-active={isTabActive ? "true" : "false"}
-                    className={`tab-item app-tab-chrome app-marker-host app-glass-tab ${isTabActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
+                    className={`tab-item app-tab-chrome app-marker-host app-marker-bottom app-glass-tab ${isTabActive ? "app-glass-tab-active" : ""} flex items-center gap-1.5 px-3 cursor-pointer`}
                     onClick={() => useRemoteWorkspaceStore.getState().openRemoteTab(tab.hostId, tab.sessionId)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {

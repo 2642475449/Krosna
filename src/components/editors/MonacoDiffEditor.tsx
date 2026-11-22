@@ -1,6 +1,7 @@
 import type { DiffEditorProps } from "@monaco-editor/react";
 import { useLayoutEffect, useRef } from "react";
 import * as monaco from "@/lib/monacoRuntime";
+import { MONACO_SCROLLBAR_OPTIONS } from "@/lib/monaco";
 import { disposeMonacoDiffModels } from "@/lib/disposeMonacoDiffModels";
 
 type MonacoDiffEditorProps = Pick<DiffEditorProps,
@@ -31,7 +32,11 @@ export function MonacoDiffEditor(props: MonacoDiffEditorProps) {
     const initial = latestProps.current;
     // Keep selection highlighting, but do not schedule semantic word highlights
     // that can reject an unobserved Delayer promise during rapid disposal.
-    const instance = monaco.editor.createDiffEditor(container, { occurrencesHighlight: "off", ...initial.options });
+    const instance = monaco.editor.createDiffEditor(container, {
+      occurrencesHighlight: "off",
+      ...MONACO_SCROLLBAR_OPTIONS,
+      ...initial.options,
+    });
     editorRef.current = instance;
     let original: monaco.editor.ITextModel | undefined;
     let modified: monaco.editor.ITextModel | undefined;

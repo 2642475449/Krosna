@@ -432,7 +432,7 @@ export function QuickCommandsButton() {
       )}
 
       {/* 命令列表 */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-1 py-1" style={{ maxHeight: 260 }}>
+      <div ref={listRef} className="app-thin-scrollbar flex-1 overflow-y-auto px-1 py-1" style={{ maxHeight: 260 }}>
         {filteredCommands.length === 0 ? (
           <div
             className="text-xs text-center py-4"

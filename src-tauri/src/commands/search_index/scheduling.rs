@@ -15,6 +15,8 @@ pub(super) struct ProjectRuntime {
     pub changes: Mutex<PendingChanges>,
     // 手动重建与后台增量写入必须串行，搜索仍可读取已提交的数据库。
     pub writer: Mutex<()>,
+    pub control: Mutex<()>,
+    pub generation: Mutex<u64>,
 }
 
 #[derive(Default)]

@@ -51,7 +51,7 @@ const mocks = {
     export const ptyResize = async (...args) => { window.fixture.resizes.push(args); };
     export const ptyGetSize = async () => null;
     export const inspectAgentClis = async () => [];
-    ${noopExports("inferAgentUserResponse inferAgentInterrupt inspectProjectFile resolveTerminalLink openInAssociatedApplication readImagePreview saveTerminalClipboardImage retainClipboardImage openExternalUrl")}
+    ${noopExports("inferAgentUserResponse inferAgentInterrupt inspectProjectFile resolveTerminalLink openInAssociatedApplication openInFileManager readImagePreview saveTerminalClipboardImage retainClipboardImage openExternalUrl")}
   `,
   "@/store/slices/terminalRecovery": `
     export const registerTerminalRecovery = () => () => {};

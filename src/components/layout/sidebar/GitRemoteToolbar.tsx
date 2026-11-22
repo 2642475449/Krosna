@@ -226,7 +226,7 @@ export function GitRemoteToolbar({
           </Button>,
         ]}
       >
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all select-text font-mono text-xs p-3 rounded bg-[var(--cs-bg-hover)] text-[var(--cs-text-secondary)]">
+        <pre className="app-thin-scrollbar max-h-80 overflow-auto whitespace-pre-wrap break-all select-text font-mono text-xs p-3 rounded bg-[var(--cs-bg-hover)] text-[var(--cs-text-secondary)]">
           {errorDetails}
         </pre>
       </Modal>

@@ -547,13 +547,8 @@ function PrimarySidebarRail() {
           </RailButton>
           {gitChangeCount > 0 && (
             <span
-              className="pointer-events-none absolute bottom-[1px] right-[1px] flex h-[20px] min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none"
-              style={{
-                background: "var(--cs-primary)",
-                color: "#fff",
-                border: "2px solid var(--cs-bg-sidebar)",
-                boxShadow: "0 0 0 1px color-mix(in srgb, var(--cs-border-sidebar) 72%, transparent)",
-              }}
+              aria-hidden="true"
+              className="app-rail-badge-count pointer-events-none absolute bottom-0 right-0 flex h-5 min-w-5 items-center justify-center rounded-full px-1"
             >
               {gitChangeCount > 99 ? "99+" : gitChangeCount}
             </span>

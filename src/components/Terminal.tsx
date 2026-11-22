@@ -2,8 +2,8 @@ import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { useResumeSession } from "@/hooks/useResumeSession";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { matchesShortcut } from "@/lib/shortcut";
-import { useEffect, useRef, useCallback, useState, useId } from "react";
-import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useId } from "react";
+import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent, SetStateAction } from "react";
 import { Button, Dropdown, Modal, message } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -32,6 +32,7 @@ import {
   inspectProjectFile,
   resolveTerminalLink,
   openInAssociatedApplication,
+  openInFileManager,
   inspectAgentClis,
   readImagePreview,
   saveTerminalClipboardImage,
@@ -41,11 +42,13 @@ import {
 import type { TerminalLinkResolution } from "@/lib/api";
 import {
   createTerminalFileLinkResolver,
+  createTerminalLinkCopier,
   createTerminalLinkActivationGate,
   getUnambiguousTerminalTarget,
   openTerminalFileTarget,
   assertTerminalLinkProject,
   TERMINAL_LINK_CONTEXT_CHANGED,
+  type TerminalFileOpenMode,
   type TerminalLinkContext,
 } from "@/lib/terminalFileLinks";
 import { requestFileNavigation } from "@/lib/fileNavigation";
@@ -85,6 +88,7 @@ import {
 import { createTerminalLayoutScheduler } from "@/lib/terminalResize";
 import { createTerminalSizeReconciler } from "@/lib/terminalSizeReconcile";
 import { initializePtyTextLayout } from "@/lib/terminalTextLayout";
+import { attachTerminalScrollbar } from "@/lib/terminalScrollbar";
 import { registerMemoryDiagnosticTerminal } from "@/lib/memoryDiagnostics";
 import { createTerminalImeOutputGate } from "@/lib/terminalImeOutput";
 import { installTerminalImeComposition } from "@/lib/terminalImeComposition";
@@ -135,7 +139,6 @@ import "@xterm/xterm/css/xterm.css";
 const TERMINAL_LAYOUT_SYNC_EVENT = "terminal:layout-sync";
 const AGENT_FILE_DRAG_MIME = "application/x-krosna-agent-files";
 const TERMINAL_FOCUS_RETRY_DELAYS_MS = [0, 50, 150, 300];
-const TERMINAL_SCROLLBAR_HIDE_DELAY_MS = 700;
 let cachedWebglSupport: boolean | null = null;
 
 function canUseWebglRenderer(): boolean {
@@ -281,7 +284,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const [installedAgents, setInstalledAgents] = useState<AgentCliInfo[]>([]);
   const [sideQuestionDraft, setSideQuestionDraft] = useState<SideQuestionDraft | null>(null);
   const [sideQuestionText, setSideQuestionText] = useState("");
-  const [pendingTerminalLink, setPendingTerminalLink] = useState<PendingTerminalLink | null>(null);
+  const [pendingTerminalLink, updatePendingTerminalLink] = useState<PendingTerminalLink | null>(null);
   const [imagePreview, setImagePreview] = useState<TerminalImagePreview | null>(null);
   const [openingTerminalLink, setOpeningTerminalLink] = useState(false);
   const openingTerminalLinkRef = useRef(false);
@@ -291,6 +294,13 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const currentSessionAgentIdRef = useRef<string | undefined>(undefined);
   const currentTerminalDirectoryRef = useRef("");
   const resolveLinkedFileRef = useRef(createTerminalFileLinkResolver(resolveTerminalLink));
+  const [linkCopier] = useState(() => createTerminalLinkCopier(
+    resolveLinkedFileRef.current, (text) => navigator.clipboard.writeText(text),
+  ));
+  const setPendingTerminalLink = useCallback((next: SetStateAction<PendingTerminalLink | null>) => {
+    linkCopier.cancel();
+    updatePendingTerminalLink(next);
+  }, [linkCopier]);
   const linkActivationGateRef = useRef(createTerminalLinkActivationGate(() => terminalRef.current?.hasSelection() ?? false));
   const currentSessionNameRef = useRef("");
   const isNativePowerShellTerminalRef = useRef(false);
@@ -324,6 +334,11 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
   const termTheme = getTerminalTheme(activeTheme);
   const currentSessionPath = currentSession?.path ?? "";
   currentTerminalDirectoryRef.current = currentSession?.terminalWorkingDirectory ?? currentSessionPath;
+
+  useLayoutEffect(() => {
+    setPendingTerminalLink(null);
+    return linkCopier.cancel;
+  }, [currentSessionPath, sessionId, linkCopier, setPendingTerminalLink]);
 
   useEffect(() => {
     if (currentSession?.agentId !== "powershell") {
@@ -411,34 +426,6 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       return text;
     });
   }, [sessionId, t]);
-
-
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    let hideTimer: number | null = null;
-    const revealScrollbar = () => {
-      container.dataset.scrollbarActive = "true";
-      if (hideTimer !== null) {
-        window.clearTimeout(hideTimer);
-      }
-      hideTimer = window.setTimeout(() => {
-        delete container.dataset.scrollbarActive;
-        hideTimer = null;
-      }, TERMINAL_SCROLLBAR_HIDE_DELAY_MS);
-    };
-
-    container.addEventListener("wheel", revealScrollbar, { passive: true, capture: true });
-    return () => {
-      container.removeEventListener("wheel", revealScrollbar, true);
-      if (hideTimer !== null) {
-        window.clearTimeout(hideTimer);
-      }
-      delete container.dataset.scrollbarActive;
-    };
-  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -639,9 +626,10 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     setContextMenuSelection(term?.hasSelection() ? term.getSelection() : "");
   }, []);
 
-  const openTerminalLink = useCallback(async (link: PendingTerminalLink) => {
+  const openTerminalLink = useCallback(async (link: PendingTerminalLink, mode: TerminalFileOpenMode = "default") => {
     if (openingTerminalLinkRef.current) return;
 
+    linkCopier.cancel();
     openingTerminalLinkRef.current = true;
     setOpeningTerminalLink(true);
     try {
@@ -668,6 +656,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       await openTerminalFileTarget(target, link.context, link.path, {
         inspect: inspectProjectFile,
         openSystem: openInAssociatedApplication,
+        openExplorer: openInFileManager,
         openPreview: (path) => {
           assertTerminalLinkProject(link.context, useAppStore.getState().currentProject?.path);
           openAuxiliaryFile({ projectPath: link.context.projectPath, path, preview: true });
@@ -685,7 +674,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
             });
           }
         },
-      });
+      }, mode);
       return true;
     } catch (error) {
       const path = link.kind === "file" ? link.path.filePath : link.href;
@@ -702,7 +691,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       openingTerminalLinkRef.current = false;
       setOpeningTerminalLink(false);
     }
-  }, [openFileTab, t]);
+  }, [linkCopier, openFileTab, setPendingTerminalLink, t]);
 
   const resolveLinkAnchor = useCallback((event?: Pick<MouseEvent, "clientX" | "clientY">): TerminalLinkAnchor | undefined => {
     if (event && (event.clientX !== 0 || event.clientY !== 0)) {
@@ -733,19 +722,32 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       () => openDirectly ? openTerminalLink(link) : setPendingTerminalLink(link),
       openDirectly,
     );
-  }, [openTerminalLink, resolveLinkAnchor]);
+  }, [openTerminalLink, resolveLinkAnchor, setPendingTerminalLink]);
 
   useEffect(() => () => linkActivationGateRef.current.dispose(), [sessionId]);
 
-  const handleConfirmTerminalLinkOpen = useCallback(async () => {
+  const handleConfirmTerminalLinkOpen = useCallback(async (mode: TerminalFileOpenMode = "default") => {
     if (!pendingTerminalLink || openingTerminalLink) return;
 
-    if (await openTerminalLink(pendingTerminalLink)) setPendingTerminalLink(null);
+    if (await openTerminalLink(pendingTerminalLink, mode)) {
+      updatePendingTerminalLink((current) => current === pendingTerminalLink ? null : current);
+    }
   }, [openTerminalLink, openingTerminalLink, pendingTerminalLink]);
+
+  const handleCopyTerminalLink = useCallback(async () => {
+    if (!pendingTerminalLink || openingTerminalLinkRef.current) return;
+    try {
+      if (!await linkCopier.copy(pendingTerminalLink)) return;
+      message.success(t("terminal.fileLinkPathCopied"));
+      updatePendingTerminalLink((current) => current === pendingTerminalLink ? null : current);
+    } catch {
+      message.error(t("common.copyFailed"));
+    }
+  }, [linkCopier, pendingTerminalLink, t]);
 
   const handleCancelTerminalLink = useCallback(() => {
     if (!openingTerminalLink) setPendingTerminalLink(null);
-  }, [openingTerminalLink]);
+  }, [openingTerminalLink, setPendingTerminalLink]);
 
   const handleTerminalPointerUpCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -1035,6 +1037,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     const filePathDisposable = term.registerLinkProvider(filePathProvider);
     // FitAddon 读取 parentElement 尺寸，必须挂载到无内边距、无边框的宿主节点。
     term.open(terminalHost);
+    const detachScrollbar = attachTerminalScrollbar(container, term);
     const disposeTextSelection = installTerminalTextSelection(term);
     term.attachCustomWheelEventHandler(createTerminalWheelHandler(() => {
       const screen = term.element?.querySelector<HTMLElement>(".xterm-screen");
@@ -1924,6 +1927,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       runnerSearch?.dispose();
       runnerScrollController?.dispose();
       runnerScroll.dispose();
+      detachScrollbar();
       if (fallbackAnimationFrame !== null) {
         window.cancelAnimationFrame(fallbackAnimationFrame);
         fallbackAnimationFrame = null;
@@ -1992,6 +1996,7 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
     forceStableCursor,
     openTerminalLink,
     activateTerminalFileLink,
+    setPendingTerminalLink,
     t,
     openFileTab,
     resolveLinkAnchor,
@@ -2144,12 +2149,15 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
         open={Boolean(pendingTerminalLink)}
         kind={pendingTerminalLink?.kind ?? "file"}
         value={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.path.filePath : pendingTerminalLink?.href ?? ""}
+        line={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.path.line : undefined}
+        column={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.path.column : undefined}
         anchor={pendingTerminalLink?.anchor}
         resolution={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.resolution : undefined}
         selectedPath={pendingTerminalLink?.kind === "file" ? pendingTerminalLink.selectedPath : undefined}
         opening={openingTerminalLink}
         onSelectPath={(path) => setPendingTerminalLink((link) => link?.kind === "file" ? { ...link, selectedPath: path } : link)}
-        onConfirm={() => void handleConfirmTerminalLinkOpen()}
+        onConfirm={(mode) => void handleConfirmTerminalLinkOpen(mode)}
+        onCopy={() => void handleCopyTerminalLink()}
         onCancel={handleCancelTerminalLink}
       />
     </>

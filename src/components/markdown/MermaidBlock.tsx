@@ -89,7 +89,7 @@ export function MermaidBlock({ code }: { code: string }) {
           <div className="mb-2 text-[var(--cs-error)]">{t("fileTabs.mermaidRenderFailed")}: {error}</div>
           <details>
             <summary className="cursor-pointer text-[var(--cs-text-tertiary)]">{t("fileTabs.mermaidViewSource")}</summary>
-            <pre className="mt-2 overflow-x-auto text-xs leading-6"><code>{code}</code></pre>
+            <pre className="app-thin-scrollbar mt-2 overflow-x-auto text-xs leading-6"><code>{code}</code></pre>
           </details>
         </div>
       ) : svg ? (

@@ -241,7 +241,7 @@ export const AboutPage: FC = () => {
 
       {/* Positioning / Mission */}
       <SettingsSection title={t("settings.menu.about")}>
-        <p className="m-0 text-sm leading-7 text-[var(--cs-text-secondary)]">
+        <p className="m-0 text-[15px] leading-7 text-[var(--cs-text-secondary)]">
           {t("settings.about.description")}
         </p>
       </SettingsSection>
@@ -251,13 +251,13 @@ export const AboutPage: FC = () => {
         <div className="app-about-highlights">
           {productHighlights.map((item) => (
             <div key={item.key} className="min-w-0">
-              <h3 className="m-0 flex items-center gap-2 text-sm font-medium text-[var(--cs-text-primary)]">
+              <h3 className="m-0 flex items-center gap-2 text-[15px] font-medium text-[var(--cs-text-primary)]">
                 <span className="text-[var(--cs-primary)]" aria-hidden="true">
                   {item.icon}
                 </span>
                 {item.title}
               </h3>
-              <p className="mb-0 mt-2 text-xs leading-6 text-[var(--cs-text-secondary)]">
+              <p className="mb-0 mt-1.5 text-sm leading-6 text-[var(--cs-text-secondary)]">
                 {item.desc}
               </p>
             </div>
@@ -266,10 +266,7 @@ export const AboutPage: FC = () => {
       </SettingsSection>
 
       {/* License & Legal Agreements (重点：协议与合规) */}
-      <SettingsSection
-        title={t("settings.about.licenseAndLegal")}
-        description={t("settings.about.licenseAndLegalDesc")}
-      >
+      <SettingsSection title={t("settings.about.licenseAndLegal")}>
         <SettingRow
           label={t("settings.about.license")}
           description={t("settings.about.licenseDesc")}
@@ -278,12 +275,6 @@ export const AboutPage: FC = () => {
             {t("settings.about.viewLicense")}
           </Button>
         </SettingRow>
-
-        <SettingRow
-          label={t("settings.about.privacyPolicy")}
-          description={t("settings.about.privacyPolicyDesc")}
-          children={null}
-        />
 
         <SettingRow
           label={t("settings.about.thirdPartyNotices")}
@@ -298,8 +289,8 @@ export const AboutPage: FC = () => {
         </SettingRow>
 
         <SettingRow
-          label={t("settings.about.disclaimer")}
-          description={t("settings.about.disclaimerDesc")}
+          label={t("settings.about.privacyPolicy")}
+          description={t("settings.about.privacyPolicyDesc")}
         >
           <Tag icon={<FileProtectOutlined />} color="default">
             {t("settings.about.localExecutionBadge")}
@@ -322,7 +313,7 @@ export const AboutPage: FC = () => {
           </span>
         </SettingRow>
         <SettingRow label={t("settings.about.appId")}>
-          <span className="break-all font-mono text-xs text-[var(--cs-text-secondary)]">
+          <span className="break-all font-mono text-sm text-[var(--cs-text-secondary)]">
             com.krosna.desktop
           </span>
         </SettingRow>
@@ -348,7 +339,7 @@ export const AboutPage: FC = () => {
           <p className="mb-3 text-xs text-[var(--cs-text-tertiary)]">
             Krosna is released under the MIT License.
           </p>
-          <pre className="max-h-80 overflow-auto rounded-lg border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-4 font-mono text-xs leading-relaxed text-[var(--cs-text-secondary)] whitespace-pre-wrap select-text">
+          <pre className="app-thin-scrollbar max-h-80 overflow-auto rounded-lg border border-[var(--cs-border-card)] bg-[var(--cs-bg-card)] p-4 font-mono text-xs leading-relaxed text-[var(--cs-text-secondary)] whitespace-pre-wrap select-text">
             {MIT_LICENSE_TEXT}
           </pre>
         </div>
@@ -367,7 +358,7 @@ export const AboutPage: FC = () => {
         ]}
         width={720}
       >
-        <div className="flex max-h-96 flex-col gap-3 overflow-auto py-2 pr-1">
+        <div className="app-thin-scrollbar flex max-h-96 flex-col gap-3 overflow-auto py-2 pr-1">
           <p className="m-0 text-xs text-[var(--cs-text-secondary)]">
             {t("settings.about.thirdPartyNoticeIntro")}
           </p>

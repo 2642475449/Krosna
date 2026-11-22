@@ -1,0 +1,44 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/settings.css"
+        ],
+        "createdAt": "2026-11-22T08:30:30.941Z",
+        "reason": "Project design system (DESIGN.md, Style & Indicator) specifies a 2px primary marker for the current navigation item. Settings uses it only on aria-current=page."
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "files": [
+          "src/styles/global.css"
+        ],
+        "createdAt": "2026-11-22T09:53:40.171Z",
+        "reason": "Krosna DESIGN.md specifies Geist Mono as the Label/Mono font for paths, command arguments, shortcuts and counters. global.css declares this shared font."
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/components/TabBar.tsx"
+        ],
+        "createdAt": "2026-11-22T11:00:08.013Z",
+        "reason": "Reviewed against the tab drag preview: its left, right and top edges use the same 1px neutral border. The active-tab marker runs along the bottom."
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles/global.css"
+        ],
+        "createdAt": "2026-11-22T12:55:50.282Z",
+        "reason": "Code review: GitCommitComposer renders adjacent primary-action and more-actions buttons. The menu button has square inner corners and a 1px left divider between the two click targets."
+      }
+    ]
+  }
+}

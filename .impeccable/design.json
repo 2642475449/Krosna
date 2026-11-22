@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-20T10:27:00+08:00",
+  "generatedAt": "2026-11-22T19:00:45+08:00",
   "title": "Design System: Krosna",
   "extensions": {
     "colorMeta": {
@@ -65,6 +65,10 @@
       "label": {
         "displayName": "Label / Mono",
         "purpose": "文件路径、快捷键提示、状态栏与时间戳等高对齐元信息。"
+      },
+      "badge": {
+        "displayName": "Badge",
+        "purpose": "侧边栏图标角标与紧凑计数胶囊，配合等宽数字。"
       }
     },
     "shadows": [

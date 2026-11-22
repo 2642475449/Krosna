@@ -51,8 +51,8 @@
   --cs-accent-primary: var(--cs-primary);
   --cs-accent-green: #16a34a;
   --cs-accent-yellow: #d97706;
-  --cs-scrollbar-thumb: rgba(79,108,247,0.16);
-  --cs-scrollbar-hover: rgba(79,108,247,0.24);
+  --cs-scrollbar-thumb: rgba(100,100,100,0.28);
+  --cs-scrollbar-hover: rgba(100,100,100,0.48);
   --cs-danger: #ef4444;
   --cs-success: var(--cs-accent-green);
   --cs-error: var(--cs-danger);
@@ -132,8 +132,8 @@
   --cs-accent-primary: var(--cs-primary);
   --cs-accent-green: #16a34a;
   --cs-accent-yellow: #d97706;
-  --cs-scrollbar-thumb: rgba(61,50,40,0.12);
-  --cs-scrollbar-hover: rgba(61,50,40,0.22);
+  --cs-scrollbar-thumb: rgba(100,100,100,0.28);
+  --cs-scrollbar-hover: rgba(100,100,100,0.48);
   --cs-danger: #dc2626;
   --cs-success: var(--cs-accent-green);
   --cs-error: var(--cs-danger);
@@ -213,8 +213,8 @@
   --cs-accent-primary: var(--cs-primary);
   --cs-accent-green: #22c55e;
   --cs-accent-yellow: #f59e0b;
-  --cs-scrollbar-thumb: rgba(92,123,163,0.2);
-  --cs-scrollbar-hover: rgba(92,123,163,0.32);
+  --cs-scrollbar-thumb: rgba(121,121,121,0.35);
+  --cs-scrollbar-hover: rgba(121,121,121,0.55);
   --cs-danger: #ff7575;
   --cs-success: var(--cs-accent-green);
   --cs-error: var(--cs-danger);
@@ -294,8 +294,8 @@
   --cs-accent-primary: var(--cs-primary);
   --cs-accent-green: #22c55e;
   --cs-accent-yellow: #f59e0b;
-  --cs-scrollbar-thumb: rgba(245,189,105,0.15);
-  --cs-scrollbar-hover: rgba(245,189,105,0.3);
+  --cs-scrollbar-thumb: rgba(121,121,121,0.35);
+  --cs-scrollbar-hover: rgba(121,121,121,0.55);
   --cs-danger: #ff7575;
   --cs-success: var(--cs-accent-green);
   --cs-error: var(--cs-danger);

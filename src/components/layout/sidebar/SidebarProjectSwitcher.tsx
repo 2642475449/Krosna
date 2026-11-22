@@ -18,6 +18,7 @@ function SidebarProjectSwitcher({
   return (
     <Dropdown
       menu={{
+        className: "app-thin-scrollbar",
         items,
         style: {
           maxHeight,

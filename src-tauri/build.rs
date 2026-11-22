@@ -4,6 +4,11 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
     {
+        // Windows unit tests that create a Tauri host link this crate's generated resource.lib.
+        println!(
+            "cargo:rustc-link-search=native={}",
+            std::env::var("OUT_DIR").unwrap()
+        );
         println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-examples=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'");
     }

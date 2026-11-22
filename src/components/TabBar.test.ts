@@ -13,7 +13,6 @@ vi.mock("@/store", () => ({ useAppStore: Object.assign(
 vi.mock("@/lib/tabClose", () => ({ confirmCloseTab: mocks.confirm, closeTabRuntime: mocks.runtime }));
 vi.mock("@/hooks/useResumeSession", () => ({ useResumeSession: () => vi.fn() }));
 vi.mock("@/lib/api", () => ({ openInAssociatedApplication: vi.fn(), openInFileManager: vi.fn(), inspectAgentClis: vi.fn() }));
-vi.mock("@/components/ui/TabSelectionIndicator", () => ({ TabSelectionIndicator: () => null }));
 vi.mock("react-i18next", () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };

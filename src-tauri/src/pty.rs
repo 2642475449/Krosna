@@ -4,8 +4,8 @@ use crate::events::{emit_session_event, SessionEvent, SessionEventSeverity, Sess
 use crate::hook_ingest::HookIngestConfig;
 use crate::opencode_control::{with_tui_server_args, OpenCodePromptControl};
 use crate::powershell_integration::{
-    POWERSHELL_COMPLETION_INTEGRATION_COMMAND, POWERSHELL_COMPLETION_INTEGRATION_ENV,
-    POWERSHELL_COMPLETION_INTEGRATION_SCRIPT,
+    powershell_integration_script, POWERSHELL_COMPLETION_INTEGRATION_COMMAND,
+    POWERSHELL_COMPLETION_INTEGRATION_ENV,
 };
 use crate::runtime_output::{RuntimeOutputStore, RuntimeTerminalMetadata};
 use parking_lot::{Condvar, Mutex};
@@ -579,7 +579,7 @@ impl PtyManager {
         if enable_powershell_completion_integration {
             cmd.env(
                 POWERSHELL_COMPLETION_INTEGRATION_ENV,
-                POWERSHELL_COMPLETION_INTEGRATION_SCRIPT,
+                powershell_integration_script(runtime_metadata.as_ref().map(|meta| &meta.kind)),
             );
         }
         crate::network_proxy::apply_proxy_to_pty_command(&mut cmd, &network_proxy);

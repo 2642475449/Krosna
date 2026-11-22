@@ -1,19 +1,21 @@
 import { registerRichCodeTokens } from "@/lib/monaco";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import * as monaco from "@/lib/monacoRuntime";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MonacoContextMenu from "@/components/editors/MonacoContextMenu";
 import {
   disableMonacoCommandPalette,
   getMonacoLanguage,
   getMonacoThemeName,
   getMonacoTypography,
+  MONACO_SCROLLBAR_OPTIONS,
   observeMonacoTheme,
 } from "@/lib/monaco";
 import { useAppStore } from "@/store";
 import { useFileEditorStatusStore } from "@/store/slices/fileEditorStatus";
 import { useWorkspaceRecoveryStore } from "@/store/slices/workspaceRecovery";
 import type { FileRevealTarget } from "@/lib/fileNavigation";
+import { RecentFileEditorContext } from "@/lib/recentFileEditor";
 
 loader.config({ monaco });
 
@@ -58,9 +60,23 @@ function MonacoTextEditor({
   const modelPath = useMemo(() => monaco.Uri.file(filePath)
     .with({ query: `krosna-editor=${encodeURIComponent(editorId)}` }).toString(), [filePath, editorId]);
   const [editedModelPath, setEditedModelPath] = useState<string | null>(null);
+  const retainRecentEditor = useContext(RecentFileEditorContext);
+  const [recentModelPath, setRecentModelPath] = useState<string | null>(null);
+  const isRecent = recentModelPath === modelPath && !!retainRecentEditor;
   // View state cannot restore undo history. Once edited, keep this model alive
   // until its host closes, including after saving or undoing back to clean text.
-  const mounted = isActive || editedModelPath === modelPath || saveEnabled;
+  const preserveEdits = editedModelPath === modelPath || saveEnabled;
+  const mounted = isActive || preserveEdits || isRecent;
+  useLayoutEffect(() => {
+    if (isActive || preserveEdits || !isRecent || !retainRecentEditor) return;
+    return retainRecentEditor(() => setRecentModelPath(null));
+  }, [isActive, preserveEdits, isRecent, retainRecentEditor]);
+  const activeRef = useRef(isActive);
+  const currentRevealTarget = useRef(revealTarget);
+  useLayoutEffect(() => {
+    activeRef.current = isActive;
+    currentRevealTarget.current = revealTarget;
+  }, [isActive, revealTarget]);
   const savedView = useRef<{ path: string; state: monaco.editor.ICodeEditorViewState | null } | null>(null);
   const lastRevealedTarget = useRef<FileRevealTarget | null>(null);
   const statusDisposables = useRef<monaco.IDisposable[]>([]);
@@ -114,17 +130,18 @@ function MonacoTextEditor({
     // Monaco 首次挂载时可能尚未完成布局，导致定位请求被后续的首轮布局覆盖。
     // 下一帧重新布局后再定位，确保搜索预览和文件跳转都落在目标行。
     window.requestAnimationFrame(() => {
-      if (editorRef.current !== editorInstance) return;
+      if (editorRef.current !== editorInstance || !activeRef.current) return;
+      if (currentRevealTarget.current !== target || lastRevealedTarget.current === target) return;
       editorInstance.layout();
       revealLocation(editorInstance, target);
     });
   };
 
   useEffect(() => {
-    if (editorRef.current && revealTarget) {
-      revealLocation(editorRef.current, revealTarget);
+    if (isActive && editorRef.current && revealTarget && lastRevealedTarget.current !== revealTarget) {
+      revealLocationAfterLayout(editorRef.current, revealTarget);
     }
-  }, [revealTarget, focusOnReveal]);
+  }, [isActive, revealTarget, focusOnReveal]);
 
   const isDark = useMemo(() => {
     if (themeCategory === "system") return systemPrefersDark;
@@ -144,8 +161,10 @@ function MonacoTextEditor({
     statusDisposables.current.forEach((disposable) => disposable.dispose());
     statusDisposables.current = [];
     editorRef.current = editor;
+    if (retainRecentEditor && activeRef.current) setRecentModelPath(modelPath);
     const view = savedView.current?.path === modelPath ? savedView.current.state : null;
     if (view) editor.restoreViewState(view);
+    else lastRevealedTarget.current = null;
     const recovered = useWorkspaceRecoveryStore.getState().editorViews[filePath];
     if (!view && recovered && !revealTarget) {
       editor.setPosition({ lineNumber: recovered.lineNumber, column: recovered.column });
@@ -242,6 +261,7 @@ function MonacoTextEditor({
           wordWrap: "off",
           smoothScrolling: true,
           scrollBeyondLastLine: false,
+          ...MONACO_SCROLLBAR_OPTIONS,
           renderWhitespace: "selection",
           lineNumbers: "on",
           tabSize: 2,

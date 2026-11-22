@@ -834,7 +834,7 @@ function HomePage() {
   return (
     <div className="app-home-page">
     <div
-      className="app-home-page-scroll app-scrollbar-none flex h-full overflow-y-auto px-[clamp(12px,2vw,24px)] py-5"
+      className="app-home-page-scroll flex h-full overflow-y-auto px-[clamp(12px,2vw,24px)] py-5"
     >
       <div className="app-home-overview-container mx-auto flex min-h-full w-full max-w-[1120px] items-start justify-center">
         <div className="w-full">
@@ -950,15 +950,13 @@ function HomePage() {
             <div className="space-y-5">
               <div className="app-home-summary-grid grid gap-5">
                 <section
-                  className="app-home-summary-card rounded-[14px] border px-5 py-5"
+                  className="app-home-summary-card rounded-[10px] border px-5 py-4"
                   style={{
-                    borderColor: `color-mix(in srgb, var(--cs-border-card) 82%, ${surfaceMixBase} 18%)`,
-                    background: `color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 96%, ${surfaceMixBase} 4%)`,
-                    boxShadow: panelShadow,
+                    borderColor: "var(--cs-border-card)",
+                    background: "var(--cs-bg-card-solid, var(--cs-bg-card))",
                   }}
                 >
-                  <div className="mb-7 flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-50 text-[14px] text-amber-600">☀</span>
+                  <div className="mb-5 flex items-center">
                     <h2 className="m-0 text-[15px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>
                       {t("home.overview.todayTitle")}
                     </h2>
@@ -979,23 +977,21 @@ function HomePage() {
                       ],
                     ].map(([value, label]) => (
                       <div key={label} className="min-w-0 px-3 first:pl-0 last:pr-0">
-                        <div className="truncate text-[20px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
-                        <div className="mt-1.5 text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
+                        <div className="truncate text-[20px] font-semibold tabular-nums" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
+                        <div className="mt-1.5 text-[12px] leading-snug" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
                       </div>
                     ))}
                   </div>
                 </section>
 
                 <section
-                  className="app-home-summary-card rounded-[14px] border px-5 py-5"
+                  className="app-home-summary-card rounded-[10px] border px-5 py-4"
                   style={{
-                    borderColor: `color-mix(in srgb, var(--cs-border-card) 82%, ${surfaceMixBase} 18%)`,
-                    background: `color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 96%, ${surfaceMixBase} 4%)`,
-                    boxShadow: panelShadow,
+                    borderColor: "var(--cs-border-card)",
+                    background: "var(--cs-bg-card-solid, var(--cs-bg-card))",
                   }}
                 >
-                  <div className="mb-7 flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-[15px] text-emerald-600">◷</span>
+                  <div className="mb-5 flex items-center">
                     <h2 className="m-0 text-[15px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>
                       {t("home.overview.rhythmTitle")}
                     </h2>
@@ -1023,35 +1019,33 @@ function HomePage() {
                         >
                           {value}
                         </div>
-                        <div className="mt-1.5 text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
+                        <div className="mt-1.5 text-[12px] leading-snug" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
                       </div>
                     ))}
                   </div>
                 </section>
 
                 <section
-                  className="app-home-summary-card rounded-[14px] border px-5 py-5"
+                  className="app-home-summary-card rounded-[10px] border px-5 py-4"
                   style={{
-                    borderColor: `color-mix(in srgb, var(--cs-border-card) 82%, ${surfaceMixBase} 18%)`,
-                    background: `color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 96%, ${surfaceMixBase} 4%)`,
-                    boxShadow: panelShadow,
+                    borderColor: "var(--cs-border-card)",
+                    background: "var(--cs-bg-card-solid, var(--cs-bg-card))",
                   }}
                 >
-                  <div className="mb-7 flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-[13px] text-blue-600">▥</span>
+                  <div className="mb-5 flex items-center">
                     <h2 className="m-0 text-[15px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>
                       {homeCopy(i18n.language, "使用规模", "Usage", "使用状況")}
                     </h2>
                   </div>
-                  <div className="grid grid-cols-3 divide-x divide-[var(--cs-border-card)]" style={{ borderColor: "var(--cs-border-card)" }}>
+                  <div className="grid grid-cols-[0.88fr_1.24fr_0.88fr] divide-x divide-[var(--cs-border-card)]" style={{ borderColor: "var(--cs-border-card)" }}>
                     {[
                       [metrics.sessions.toLocaleString(locale), t("home.overview.sessionThreads")],
                       [metrics.messages.toLocaleString(locale), t("home.overview.messages")],
                       [formatCompactTokenCount(metrics.totalTokens, i18n.language), t("home.overview.measuredTotalTokens")],
                     ].map(([value, label]) => (
                       <div key={label} className="min-w-0 px-3 first:pl-0 last:pr-0">
-                        <div className="truncate text-[20px] font-semibold" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
-                        <div className="mt-1.5 text-[12px]" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
+                        <div className="truncate text-[20px] font-semibold tabular-nums" style={{ color: "var(--cs-text-primary)" }}>{value}</div>
+                        <div className="mt-1.5 text-[12px] leading-snug" style={{ color: "var(--cs-text-secondary)" }}>{label}</div>
                       </div>
                     ))}
                   </div>
@@ -1059,12 +1053,10 @@ function HomePage() {
               </div>
 
               <div
-                className="rounded-[14px] border px-5 py-4"
+                className="rounded-[10px] border px-5 py-4"
                 style={{
-                  borderColor: `color-mix(in srgb, var(--cs-border-card) 78%, ${surfaceMixBase} 22%)`,
-                  background:
-                    `linear-gradient(180deg, color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 97%, ${surfaceMixBase} 3%) 0%, color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 99%, var(--cs-bg-hover) 1%) 100%)`,
-                  boxShadow: "0 6px 18px rgba(15,23,42,0.028)",
+                  borderColor: "var(--cs-border-card)",
+                  background: "var(--cs-bg-card-solid, var(--cs-bg-card))",
                 }}
               >
                 <div className="mb-4 flex items-start justify-between gap-5">
@@ -1160,12 +1152,10 @@ function HomePage() {
               </div>
 
               <div
-                className="rounded-[14px] border px-5 py-5"
+                className="rounded-[10px] border px-5 py-5"
                 style={{
-                  borderColor: `color-mix(in srgb, var(--cs-border-card) 78%, ${surfaceMixBase} 22%)`,
-                  background:
-                    `linear-gradient(180deg, color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 97%, ${surfaceMixBase} 3%) 0%, color-mix(in srgb, var(--cs-bg-card-solid, var(--cs-bg-card)) 99%, var(--cs-bg-hover) 1%) 100%)`,
-                  boxShadow: "0 6px 18px rgba(15,23,42,0.028)",
+                  borderColor: "var(--cs-border-card)",
+                  background: "var(--cs-bg-card-solid, var(--cs-bg-card))",
                 }}
               >
                   <div className="mb-4 flex items-start justify-between gap-6">
@@ -1850,7 +1840,7 @@ function HomePage() {
                   {homeCopy(i18n.language, "模型明细", "Model details", "モデル詳細")}
                 </div>
 
-                <div className="overflow-x-auto px-4 pb-3">
+                <div className="app-thin-scrollbar overflow-x-auto px-4 pb-3">
                   <div className="min-w-[680px]">
                     <div
                       className="grid grid-cols-[minmax(200px,1.7fr)_minmax(110px,1fr)_80px_90px_120px] gap-4 border-b px-2 py-2.5 text-[11px] font-semibold"

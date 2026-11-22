@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, { error: Error 
         style={{ color: "var(--cs-text-primary)", background: "var(--cs-bg-content)" }}>
         <strong>{i18n.t("errorBoundary.title")}</strong>
         <p>{i18n.t("errorBoundary.description")}</p>
-        <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap text-xs">{String(this.state.error)}</pre>
+        <pre className="app-thin-scrollbar max-h-40 max-w-full overflow-auto whitespace-pre-wrap text-xs">{String(this.state.error)}</pre>
         <div className="flex gap-3">
           <button className="cursor-pointer rounded border px-3 py-1" onClick={() => this.setState({ error: null })}>
             {i18n.t("errorBoundary.retry")}

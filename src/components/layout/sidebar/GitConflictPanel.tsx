@@ -360,7 +360,7 @@ export function GitConflictPanel({
                       {/* 冲突内容预览 */}
                       {conflictDetail?.mergedContent && (
                         <div
-                          className="mt-1 rounded-[4px] px-2 py-1 text-[10px] leading-[14px] overflow-auto"
+                          className="app-thin-scrollbar mt-1 rounded-[4px] px-2 py-1 text-[10px] leading-[14px] overflow-auto"
                           style={{
                             maxHeight: 80,
                             background: "rgba(0, 0, 0, 0.05)",

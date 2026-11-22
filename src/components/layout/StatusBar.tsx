@@ -361,7 +361,7 @@ function StatusBar() {
           {t("statusBar.backgroundTasks.count", { count: backgroundTaskSummary.totalCount })}
         </span>
       </div>
-      <div className="max-h-[420px] overflow-y-auto px-3 py-2">
+      <div className="app-thin-scrollbar max-h-[420px] overflow-y-auto px-3 py-2">
         {backgroundTaskSummary.indexVisible ? (
           <div className="px-1 py-2.5">
             <div className="flex items-center gap-2">

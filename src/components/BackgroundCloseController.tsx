@@ -68,7 +68,7 @@ export function BackgroundCloseController() {
           </Button>,
         ]}>
         <p>{t("background.unsavedDescription")}</p>
-        <ul className="max-h-48 overflow-auto break-all pl-5">
+        <ul className="app-thin-scrollbar max-h-48 overflow-auto break-all pl-5">
           {unsavedPaths.map((path) => <li key={path}>{path}</li>)}
         </ul>
       </Modal>

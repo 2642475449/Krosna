@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { gitConflictDetail, gitResolveConflict } from "@/lib/api";
 import { getGitConflictResolutionLabelKeys, getGitOperationLabelKey } from "@/lib/gitOperationState";
 import { requestGitStatusRefresh } from "@/lib/gitStatusEvents";
-import { getMonacoLanguage, getMonacoThemeName, getMonacoTypography, observeMonacoTheme } from "@/lib/monaco";
+import { getMonacoLanguage, getMonacoThemeName, getMonacoTypography, MONACO_SCROLLBAR_OPTIONS, observeMonacoTheme } from "@/lib/monaco";
 import { useAppStore } from "@/store";
 import { hasGitConflictMarkers, parseGitConflictBlocks, resolveGitConflictBlock } from "@/lib/gitConflict";
 import { useGitConflictDraftStore } from "@/store/slices/gitConflictDraft";
@@ -85,6 +85,7 @@ function ConflictSourcePane({
               smoothScrolling: true,
               renderWhitespace: "selection",
               wordWrap: "off",
+              ...MONACO_SCROLLBAR_OPTIONS,
               ...typography,
             }}
           />
@@ -351,7 +352,7 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
             value={result}
             onMount={(editor) => { editorRef.current = editor; decorationsRef.current = editor.createDecorationsCollection(blockDecorations); }}
             onChange={(value) => setResult(value ?? "")}
-            options={{ readOnly: resolving || remoteBusy, contextmenu: false, automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, smoothScrolling: true, renderWhitespace: "selection", wordWrap: "off", ...typography }}
+            options={{ readOnly: resolving || remoteBusy, contextmenu: false, automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, smoothScrolling: true, renderWhitespace: "selection", wordWrap: "off", ...MONACO_SCROLLBAR_OPTIONS, ...typography }}
           />
         </div>
       </section>

@@ -14,7 +14,7 @@ vi.mock("@/lib/monacoRuntime", () => ({
 vi.mock("@/lib/monaco", () => ({
   registerRichCodeTokens: vi.fn(), disableMonacoCommandPalette: vi.fn(),
   getMonacoLanguage: () => "typescript", getMonacoThemeName: () => "vs-dark",
-  getMonacoTypography: () => ({}), observeMonacoTheme: () => ({ dispose: vi.fn() }),
+  getMonacoTypography: () => ({}), MONACO_SCROLLBAR_OPTIONS: {}, observeMonacoTheme: () => ({ dispose: vi.fn() }),
 }));
 vi.mock("@/store", () => ({ useAppStore: Object.assign((select: (state: unknown) => unknown) => select(fixture.app), {
   getState: () => fixture.app,
@@ -73,6 +73,7 @@ vi.mock("@monaco-editor/react", () => ({
   },
 }));
 import MonacoTextEditor from "./MonacoTextEditor";
+import { createRecentFileEditorCache, RecentFileEditorContext } from "@/lib/recentFileEditor";
 import { useWorkspaceRecoveryStore } from "@/store/slices/workspaceRecovery";
 
 let root: Root;
@@ -93,6 +94,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -134,6 +136,39 @@ it("retains an edited model across hiding and saving so its undo history survive
   expect(first.dispose).toHaveBeenCalledTimes(1);
 });
 
+it("reuses the last hidden file per pane, evicts older files and expires only inactive models", () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const left = createRecentFileEditorCache();
+  const right = createRecentFileEditorCache();
+  function pane(cache: typeof left, paths: string[], active: string | null) {
+    return createElement(RecentFileEditorContext.Provider, { value: cache }, paths.map((name) =>
+      createElement(MonacoTextEditor, { key: name, filePath: name, isActive: active === name,
+        value: name, readOnly: true, onChange: vi.fn() })));
+  }
+  function show(leftFile: string, rightFile: string | null) {
+    act(() => root.render(createElement("main", null,
+      pane(left, ["a", "b", "c"], leftFile), pane(right, ["d"], rightFile))));
+  }
+  show("a", "d");
+  const [a, d] = fixture.editors;
+  expect(fixture.editors).toHaveLength(2);
+  show("b", null);
+  const b = fixture.editors[2];
+  act(() => vi.advanceTimersByTime(10_000));
+  show("a", null);
+  expect(fixture.editors).toHaveLength(3);
+  act(() => vi.advanceTimersByTime(5_000));
+  expect(d.dispose).toHaveBeenCalledOnce();
+  expect(a.dispose).not.toHaveBeenCalled();
+  expect(b.dispose).not.toHaveBeenCalled();
+  show("c", null);
+  expect(b.dispose).toHaveBeenCalledOnce();
+  expect(a.dispose).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(15_000));
+  expect(a.dispose).toHaveBeenCalledOnce();
+  expect(fixture.editors[3].dispose).not.toHaveBeenCalled();
+});
+
 it("does not carry another file's retained model or view into a replacement preview", () => {
   render();
   const first = fixture.editors[0];
@@ -143,6 +178,26 @@ it("does not carry another file's retained model or view into a replacement prev
   expect(fixture.editors).toHaveLength(1);
   render({ isActive: true, filePath: "D:/synthetic/other.ts" });
   expect(fixture.editors[1].restoreViewState).not.toHaveBeenCalled();
+});
+
+it("applies pending navigation only when the cached file is visible again", () => {
+  const cache = createRecentFileEditorCache();
+  const target = { requestId: "jump", lineNumber: 40, startColumn: 2, endColumn: 3 };
+  function show(isActive: boolean, revealTarget: typeof target | null) {
+    act(() => root.render(createElement(RecentFileEditorContext.Provider, { value: cache },
+      createElement(MonacoTextEditor, { filePath: "a.ts", value: "", readOnly: true,
+        isActive, revealTarget, onChange: vi.fn() }))));
+  }
+  show(true, null);
+  const first = fixture.editors[0];
+  show(true, target);
+  show(false, target);
+  act(() => frames.splice(0).forEach((callback) => callback(0)));
+  expect(first.focus).not.toHaveBeenCalled();
+  show(true, target);
+  act(() => frames.splice(0).forEach((callback) => callback(0)));
+  expect(first.focus).toHaveBeenCalledOnce();
+  expect(fixture.editors).toHaveLength(1);
 });
 
 it("preserves restored position instead of repeating an old navigation, but applies new hidden navigation", () => {

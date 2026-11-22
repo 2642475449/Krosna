@@ -54,7 +54,7 @@ vi.mock("antd", () => ({
 vi.mock("@ant-design/icons", () => Object.fromEntries([
   "CloseOutlined", "ExportOutlined", "LoadingOutlined", "SettingOutlined", "PlusOutlined",
   "FolderOpenFilled", "CopyOutlined", "StopOutlined", "CloseCircleOutlined", "ClockCircleOutlined",
-  "ShopOutlined", "ReloadOutlined",
+  "ShopOutlined", "ReloadOutlined", "AimOutlined",
 ].map((name) => [name, `test-${name}`])));
 vi.mock("@/store", () => ({ useAppStore: Object.assign(
   (select: (state: TestState) => unknown) => select(mocks.state),
@@ -73,7 +73,6 @@ vi.mock("@/components/ui/ShortcutHint", () => ({ ShortcutHint: "test-shortcut" }
 vi.mock("@/components/AgentIcon", () => ({ AgentIcon: "test-agent-icon" }));
 vi.mock("@/components/AgentActivityIcon", () => ({ AgentActivityIcon: "test-agent-activity" }));
 vi.mock("@/components/AgentSessionStatus", () => ({ AgentSessionStatus: "test-agent-status" }));
-vi.mock("@/components/ui/TabSelectionIndicator", () => ({ TabSelectionIndicator: "test-selection" }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 import TabBar from "./TabBar";

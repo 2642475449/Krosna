@@ -121,7 +121,7 @@ export function SideQuestionComposer({
               </span>
             </div>
             <pre
-              className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border p-3 text-xs"
+              className="app-thin-scrollbar m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border p-3 text-xs"
               style={{
                 borderColor: "var(--cs-border-secondary)",
                 background: "var(--cs-bg-hover)",
@@ -152,7 +152,7 @@ export function SideQuestionComposer({
               </span>
             </div>
             <div
-              className="max-h-40 overflow-auto rounded-md border p-2"
+              className="app-thin-scrollbar max-h-40 overflow-auto rounded-md border p-2"
               style={{
                 borderColor: "var(--cs-border-secondary)",
                 background: "var(--cs-bg-hover)",

@@ -1,5 +1,16 @@
 import * as monaco from "@/lib/monacoRuntime";
 
+export const MONACO_SCROLLBAR_OPTIONS = {
+  overviewRulerBorder: false,
+  scrollbar: {
+    verticalScrollbarSize: 10,
+    horizontalScrollbarSize: 10,
+    verticalSliderSize: 6,
+    horizontalSliderSize: 6,
+    useShadows: false,
+  },
+} as const;
+
 export function getMonacoLanguage(filePath: string): string {
   const normalizedPath = filePath.replace(/[\\/]+$/, "");
   const fileName = normalizedPath.split(/[\\/]/).filter(Boolean).pop()?.toLowerCase() ?? "";
