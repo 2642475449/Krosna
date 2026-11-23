@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckOutlined,
-  CloseOutlined,
   FolderOpenOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -11,6 +10,7 @@ import { AgentIcon } from "@/components/AgentIcon";
 import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { useProjectLauncher } from "@/hooks/useProjectLauncher";
+import { formatShortAgentVersion } from "@/lib/agentSettingsView";
 import { AGENT_DEFINITIONS, AI_AGENT_ORDER } from "@/lib/agents";
 import { inspectAgentClis, setExplorerContextMenuEnabled } from "@/lib/api";
 import {
@@ -139,14 +139,29 @@ export function OnboardingModal() {
   const [agentInfos, setAgentInfos] = useState<AgentCliInfo[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [agentsScanned, setAgentsScanned] = useState(false);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(
     null,
   );
   const [openingProject, setOpeningProject] = useState(false);
   const [updatingContextMenu, setUpdatingContextMenu] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const prevStepRef = useRef<OnboardingStepId>(activeStep);
+
+  useEffect(() => {
+    if (!modalOpen) {
+      prevStepRef.current = activeStep;
+      return;
+    }
+    if (prevStepRef.current !== activeStep) {
+      prevStepRef.current = activeStep;
+      titleRef.current?.focus();
+    }
+  }, [modalOpen, activeStep]);
 
   const scanAgents = useCallback(async () => {
     setAgentsLoading(true);
+    setAgentsError(null);
     try {
       const results = await inspectAgentClis();
       setAgentInfos(results);
@@ -162,11 +177,12 @@ export function OnboardingModal() {
       }
     } catch (error) {
       console.error("Failed to inspect agent CLIs during onboarding:", error);
+      setAgentsError(t("onboarding.agents.scanFailed"));
       setAgentsScanned(true);
     } finally {
       setAgentsLoading(false);
     }
-  }, [setDefaultAgentId]);
+  }, [setDefaultAgentId, t]);
 
   useEffect(() => {
     if (!modalOpen || agentsScanned || agentsLoading) return;
@@ -183,15 +199,20 @@ export function OnboardingModal() {
   const handleSelectThemeCard = (option: ThemeOption) => {
     if (option.category === "light") {
       setLightTheme(option.id);
-      if (isDarkEffective) {
+      if (themeCategory !== "system" && isDarkEffective) {
         setThemeCategory("light");
       }
     } else {
       setDarkTheme(option.id);
-      if (!isDarkEffective) {
+      if (themeCategory !== "system" && !isDarkEffective) {
         setThemeCategory("dark");
       }
     }
+  };
+
+  const handleSkipOnboarding = () => {
+    skipOnboarding();
+    message.info(t("onboarding.skipToast"));
   };
 
   const agentInfoMap = useMemo(() => {
@@ -202,11 +223,25 @@ export function OnboardingModal() {
     return map;
   }, [agentInfos]);
 
-  const installedCount = useMemo(
-    () =>
-      AI_AGENT_ORDER.filter((id) => agentInfoMap.get(id)?.installed).length,
-    [agentInfoMap],
-  );
+  const { installedAgents, missingAgents } = useMemo(() => {
+    const installed: AiAgentId[] = [];
+    const missing: AiAgentId[] = [];
+    for (const id of AI_AGENT_ORDER) {
+      if (agentInfoMap.get(id)?.installed) {
+        installed.push(id);
+      } else {
+        missing.push(id);
+      }
+    }
+    return { installedAgents: installed, missingAgents: missing };
+  }, [agentInfoMap]);
+
+  const installedCount = installedAgents.length;
+
+  const activeThemeOption = THEME_OPTIONS.find((o) => o.id === activeThemeId);
+  const defaultAgentDisplayName = defaultAgentId
+    ? AGENT_DEFINITIONS[defaultAgentId]?.displayName
+    : null;
 
   const handleCopyInstallCommand = async (agentId: AiAgentId, cmd: string) => {
     try {
@@ -273,7 +308,7 @@ export function OnboardingModal() {
       width={760}
       mask={{ closable: false }}
       keyboard
-      onCancel={skipOnboarding}
+      onCancel={handleSkipOnboarding}
       className="app-onboarding-modal"
       destroyOnHidden
     >
@@ -321,26 +356,26 @@ export function OnboardingModal() {
               );
             })}
           </ol>
+
+          <p className="app-onboarding-rail-note">
+            {t("onboarding.localFirstNote")}
+          </p>
         </aside>
 
         <section className="app-onboarding-main">
           <header className="app-onboarding-header">
             <div className="min-w-0">
-              <h2 className="app-onboarding-title">
+              <h2
+                ref={titleRef}
+                tabIndex={-1}
+                className="app-onboarding-title"
+              >
                 {t(STEP_HEADER_KEYS[activeStep].title)}
               </h2>
               <p className="app-onboarding-subtitle">
                 {t(STEP_HEADER_KEYS[activeStep].subtitle)}
               </p>
             </div>
-            <button
-              type="button"
-              className="app-onboarding-close"
-              aria-label={t("onboarding.close")}
-              onClick={skipOnboarding}
-            >
-              <CloseOutlined />
-            </button>
           </header>
 
           <div className="app-onboarding-body app-thin-scrollbar">
@@ -406,17 +441,36 @@ export function OnboardingModal() {
                 <div className="app-onboarding-section-label">
                   {t("onboarding.appearance.themeStyleLabel")}
                 </div>
-                <div className="app-onboarding-theme-grid">
+                <div
+                  className="app-onboarding-theme-grid"
+                  role="radiogroup"
+                  aria-label={t("onboarding.appearance.themeStyleLabel")}
+                >
                   {THEME_OPTIONS.map((option) => {
                     const selected = activeThemeId === option.id;
+                    const isPairedSystemTheme =
+                      themeCategory === "system" &&
+                      !selected &&
+                      ((option.category === "light" && option.id === lightTheme) ||
+                        (option.category === "dark" && option.id === darkTheme));
+                    const pairedTag =
+                      option.category === "light"
+                        ? t("onboarding.appearance.systemLightPaired")
+                        : t("onboarding.appearance.systemDarkPaired");
+
                     return (
                       <button
                         key={option.id}
                         type="button"
+                        role="radio"
+                        aria-checked={selected}
                         className={`app-onboarding-theme-card ${
-                          selected ? "app-onboarding-theme-card--selected" : ""
+                          selected
+                            ? "app-onboarding-theme-card--selected"
+                            : isPairedSystemTheme
+                              ? "app-onboarding-theme-card--paired"
+                              : ""
                         }`}
-                        aria-pressed={selected}
                         onClick={() => handleSelectThemeCard(option)}
                       >
                         <div
@@ -434,11 +488,25 @@ export function OnboardingModal() {
                           </div>
                         </div>
                         <div className="app-onboarding-theme-meta">
-                          <span className="app-onboarding-theme-name">
-                            {t(option.labelKey)}
+                          <span className="app-onboarding-theme-name-wrap">
+                            {selected && (
+                              <CheckOutlined
+                                className="app-onboarding-theme-check"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <span className="app-onboarding-theme-name">
+                              {t(option.labelKey)}
+                            </span>
                           </span>
-                          <span className="app-onboarding-theme-tag">
-                            {t(option.modeKey)}
+                          <span
+                            className={`app-onboarding-theme-tag ${
+                              isPairedSystemTheme
+                                ? "app-onboarding-theme-tag--paired"
+                                : ""
+                            }`}
+                          >
+                            {isPairedSystemTheme ? pairedTag : t(option.modeKey)}
                           </span>
                         </div>
                       </button>
@@ -451,7 +519,10 @@ export function OnboardingModal() {
             {activeStep === "agents" && (
               <div>
                 <div className="app-onboarding-agents-toolbar">
-                  <span className="app-onboarding-agents-summary">
+                  <span
+                    className="app-onboarding-agents-summary"
+                    aria-live="polite"
+                  >
                     {agentsLoading
                       ? t("onboarding.agents.scanning")
                       : t("onboarding.agents.detectedSummary", {
@@ -469,87 +540,141 @@ export function OnboardingModal() {
                   </Button>
                 </div>
 
+                {agentsError && (
+                  <div
+                    className="app-onboarding-agents-notice app-onboarding-agents-notice--error"
+                    role="alert"
+                  >
+                    <span>{agentsError}</span>
+                    <Button
+                      size="small"
+                      onClick={() => void scanAgents()}
+                      disabled={agentsLoading}
+                    >
+                      {t("onboarding.agents.rescan")}
+                    </Button>
+                  </div>
+                )}
+
+                {!agentsError && agentsScanned && installedCount === 0 && (
+                  <div className="app-onboarding-agents-notice">
+                    <span>{t("onboarding.agents.noneInstalledHint")}</span>
+                  </div>
+                )}
+
                 {agentsLoading && !agentsScanned ? (
                   <div className="flex items-center justify-center py-12">
                     <Spin />
                   </div>
                 ) : (
-                  <div className="app-onboarding-group">
-                    {AI_AGENT_ORDER.map((agentId) => {
-                      const def = AGENT_DEFINITIONS[agentId];
-                      const info = agentInfoMap.get(agentId);
-                      const installed = Boolean(info?.installed);
-                      const isDefault = defaultAgentId === agentId;
-                      const installCmd = def.installCommands[0]?.command;
+                  <>
+                    {installedAgents.length > 0 && (
+                      <div className="app-onboarding-group">
+                        {installedAgents.map((agentId) => {
+                          const def = AGENT_DEFINITIONS[agentId];
+                          const info = agentInfoMap.get(agentId);
+                          const shortVersion = formatShortAgentVersion(info?.version, def.displayName);
+                          const isDefault = defaultAgentId === agentId;
 
-                      return (
-                        <div key={agentId} className="app-onboarding-row">
-                          <div className="app-onboarding-row-meta">
-                            <div className="app-onboarding-row-title">
-                              <AgentIcon agentId={agentId} size={16} />
-                              <span>{def.displayName}</span>
-                              <span
-                                className={`app-onboarding-agent-status ${
-                                  installed
-                                    ? "app-onboarding-agent-status--installed"
-                                    : "app-onboarding-agent-status--missing"
-                                }`}
-                              >
-                                {installed
-                                  ? info?.version
-                                    ? `${t("onboarding.agents.installed")} ${info.version}`
-                                    : t("onboarding.agents.installed")
-                                  : t("onboarding.agents.notInstalled")}
-                              </span>
-                            </div>
-                            {!installed && installCmd && (
-                              <div
-                                className="app-onboarding-install-cmd"
-                                title={installCmd}
-                              >
-                                {installCmd}
+                          return (
+                            <div key={agentId} className="app-onboarding-row">
+                              <div className="app-onboarding-row-meta">
+                                <div className="app-onboarding-row-title">
+                                  <AgentIcon agentId={agentId} size={16} />
+                                  <span>{def.displayName}</span>
+                                  <span className="app-onboarding-agent-status app-onboarding-agent-status--installed">
+                                    {shortVersion
+                                      ? `${t("onboarding.agents.installed")} ${shortVersion}`
+                                      : t("onboarding.agents.installed")}
+                                  </span>
+                                </div>
                               </div>
-                            )}
-                          </div>
+                              <div className="app-onboarding-row-control">
+                                <Button
+                                  size="small"
+                                  type={isDefault ? "primary" : "default"}
+                                  onClick={() => setDefaultAgentId(agentId)}
+                                >
+                                  {isDefault
+                                    ? t("onboarding.agents.defaultBadge")
+                                    : t("onboarding.agents.setDefault")}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                          <div className="app-onboarding-row-control">
-                            {installed ? (
-                              <Button
-                                size="small"
-                                type={isDefault ? "primary" : "default"}
-                                onClick={() => setDefaultAgentId(agentId)}
-                              >
-                                {isDefault
-                                  ? t("onboarding.agents.defaultBadge")
-                                  : t("onboarding.agents.setDefault")}
-                              </Button>
-                            ) : installCmd ? (
-                              <Button
-                                size="small"
-                                icon={
-                                  <CopyFeedbackIcon
-                                    copied={isCopied(`install-${agentId}`)}
-                                  />
-                                }
-                                onClick={() =>
-                                  void handleCopyInstallCommand(
-                                    agentId,
-                                    installCmd,
-                                  )
-                                }
-                              >
-                                {t(
-                                  isCopied(`install-${agentId}`)
-                                    ? "common.copied"
-                                    : "onboarding.agents.copyInstall",
-                                )}
-                              </Button>
-                            ) : null}
-                          </div>
+                    {missingAgents.length > 0 && (() => {
+                      const missingGroup = (
+                        <div className="app-onboarding-group">
+                          {missingAgents.map((agentId) => {
+                            const def = AGENT_DEFINITIONS[agentId];
+                            const installCmd = def.installCommands[0]?.command;
+
+                            return (
+                              <div key={agentId} className="app-onboarding-row">
+                                <div className="app-onboarding-row-meta">
+                                  <div className="app-onboarding-row-title">
+                                    <AgentIcon agentId={agentId} size={16} />
+                                    <span>{def.displayName}</span>
+                                    <span className="app-onboarding-agent-status app-onboarding-agent-status--missing">
+                                      {t("onboarding.agents.notInstalled")}
+                                    </span>
+                                  </div>
+                                  {installCmd && (
+                                    <div className="app-onboarding-install-cmd">
+                                      {installCmd}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="app-onboarding-row-control">
+                                  {installCmd && (
+                                    <Button
+                                      size="small"
+                                      icon={
+                                        <CopyFeedbackIcon
+                                          copied={isCopied(
+                                            `install-${agentId}`,
+                                          )}
+                                        />
+                                      }
+                                      onClick={() =>
+                                        void handleCopyInstallCommand(
+                                          agentId,
+                                          installCmd,
+                                        )
+                                      }
+                                    >
+                                      {t(
+                                        isCopied(`install-${agentId}`)
+                                          ? "common.copied"
+                                          : "onboarding.agents.copyInstall",
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
-                    })}
-                  </div>
+
+                      return installedAgents.length > 0 ? (
+                        <details className="app-onboarding-agents-disclosure">
+                          <summary className="app-onboarding-agents-disclosure-summary">
+                            {t("onboarding.agents.availableOthers", {
+                              count: missingAgents.length,
+                            })}
+                          </summary>
+                          {missingGroup}
+                        </details>
+                      ) : (
+                        missingGroup
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             )}
@@ -627,97 +752,117 @@ export function OnboardingModal() {
             )}
 
             {activeStep === "preferences" && (
-              <div className="app-onboarding-group">
-                <div className="app-onboarding-row">
-                  <div className="app-onboarding-row-meta">
-                    <div className="app-onboarding-row-title">
-                      {t("onboarding.preferences.contextMenuTitle")}
+              <div>
+                <div className="app-onboarding-group">
+                  <div className="app-onboarding-row">
+                    <div className="app-onboarding-row-meta">
+                      <div className="app-onboarding-row-title">
+                        {t("onboarding.preferences.contextMenuTitle")}
+                      </div>
+                      <div className="app-onboarding-row-desc">
+                        {t("onboarding.preferences.contextMenuDesc")}
+                      </div>
                     </div>
-                    <div className="app-onboarding-row-desc">
-                      {t("onboarding.preferences.contextMenuDesc")}
+                    <div className="app-onboarding-row-control">
+                      <Switch
+                        checked={explorerContextMenuEnabled}
+                        loading={updatingContextMenu}
+                        aria-label={t("onboarding.preferences.contextMenuTitle")}
+                        onChange={(checked) =>
+                          void handleToggleContextMenu(checked)
+                        }
+                      />
                     </div>
                   </div>
-                  <div className="app-onboarding-row-control">
-                    <Switch
-                      checked={explorerContextMenuEnabled}
-                      loading={updatingContextMenu}
-                      aria-label={t("onboarding.preferences.contextMenuTitle")}
-                      onChange={(checked) =>
-                        void handleToggleContextMenu(checked)
-                      }
-                    />
+
+                  <div className="app-onboarding-row">
+                    <div className="app-onboarding-row-meta">
+                      <div className="app-onboarding-row-title">
+                        {t("onboarding.preferences.notificationsTitle")}
+                      </div>
+                      <div className="app-onboarding-row-desc">
+                        {t("onboarding.preferences.notificationsDesc")}
+                      </div>
+                    </div>
+                    <div className="app-onboarding-row-control">
+                      <Switch
+                        checked={notificationEnabled}
+                        aria-label={t(
+                          "onboarding.preferences.notificationsTitle",
+                        )}
+                        onChange={(checked) => setNotificationEnabled(checked)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="app-onboarding-row">
+                    <div className="app-onboarding-row-meta">
+                      <div className="app-onboarding-row-title">
+                        {t("onboarding.preferences.restoreProjectTitle")}
+                      </div>
+                      <div className="app-onboarding-row-desc">
+                        {t("onboarding.preferences.restoreProjectDesc")}
+                      </div>
+                    </div>
+                    <div className="app-onboarding-row-control">
+                      <Switch
+                        checked={startupRestoreLastProject}
+                        aria-label={t(
+                          "onboarding.preferences.restoreProjectTitle",
+                        )}
+                        onChange={(checked) =>
+                          setStartupRestoreLastProject(checked)
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="app-onboarding-row">
+                    <div className="app-onboarding-row-meta">
+                      <div className="app-onboarding-row-title">
+                        {t("onboarding.preferences.shellTitle")}
+                      </div>
+                      <div className="app-onboarding-row-desc">
+                        {t("onboarding.preferences.shellDesc")}
+                      </div>
+                    </div>
+                    <div className="app-onboarding-row-control">
+                      <Segmented<TerminalShell>
+                        size="small"
+                        value={defaultTerminalShell}
+                        onChange={(value) => setDefaultTerminalShell(value)}
+                        options={[
+                          { label: "PowerShell", value: "powershell" },
+                          { label: "CMD", value: "cmd" },
+                        ]}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="app-onboarding-row">
-                  <div className="app-onboarding-row-meta">
-                    <div className="app-onboarding-row-title">
-                      {t("onboarding.preferences.notificationsTitle")}
-                    </div>
-                    <div className="app-onboarding-row-desc">
-                      {t("onboarding.preferences.notificationsDesc")}
-                    </div>
-                  </div>
-                  <div className="app-onboarding-row-control">
-                    <Switch
-                      checked={notificationEnabled}
-                      aria-label={t(
-                        "onboarding.preferences.notificationsTitle",
-                      )}
-                      onChange={(checked) => setNotificationEnabled(checked)}
-                    />
-                  </div>
-                </div>
-
-                <div className="app-onboarding-row">
-                  <div className="app-onboarding-row-meta">
-                    <div className="app-onboarding-row-title">
-                      {t("onboarding.preferences.restoreProjectTitle")}
-                    </div>
-                    <div className="app-onboarding-row-desc">
-                      {t("onboarding.preferences.restoreProjectDesc")}
-                    </div>
-                  </div>
-                  <div className="app-onboarding-row-control">
-                    <Switch
-                      checked={startupRestoreLastProject}
-                      aria-label={t(
-                        "onboarding.preferences.restoreProjectTitle",
-                      )}
-                      onChange={(checked) =>
-                        setStartupRestoreLastProject(checked)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="app-onboarding-row">
-                  <div className="app-onboarding-row-meta">
-                    <div className="app-onboarding-row-title">
-                      {t("onboarding.preferences.shellTitle")}
-                    </div>
-                    <div className="app-onboarding-row-desc">
-                      {t("onboarding.preferences.shellDesc")}
-                    </div>
-                  </div>
-                  <div className="app-onboarding-row-control">
-                    <Segmented<TerminalShell>
-                      size="small"
-                      value={defaultTerminalShell}
-                      onChange={(value) => setDefaultTerminalShell(value)}
-                      options={[
-                        { label: "PowerShell", value: "powershell" },
-                        { label: "CMD", value: "cmd" },
-                      ]}
-                    />
-                  </div>
+                <div className="app-onboarding-summary-bar">
+                  <span className="app-onboarding-summary-label">
+                    {t("onboarding.preferences.summaryLabel")}
+                  </span>
+                  <span>
+                    {activeThemeOption ? t(activeThemeOption.labelKey) : ""}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {defaultAgentDisplayName ??
+                      t("onboarding.preferences.plainTerminalFallback")}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {defaultTerminalShell === "cmd" ? "CMD" : "PowerShell"}
+                  </span>
                 </div>
               </div>
             )}
           </div>
 
           <footer className="app-onboarding-footer">
-            <Button type="default" onClick={skipOnboarding}>
+            <Button type="default" onClick={handleSkipOnboarding}>
               {t("onboarding.skip")}
             </Button>
             <div className="app-onboarding-footer-actions">

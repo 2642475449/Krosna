@@ -7,7 +7,7 @@ import type { FileTreeEntry } from "@/types";
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), open: vi.fn(), drag: vi.fn(), rename: vi.fn(),
   createFile: vi.fn(), createDirectory: vi.fn(), deleteEntry: vi.fn(),
-  readClipboard: vi.fn(), copy: vi.fn(),
+  readClipboard: vi.fn(), copy: vi.fn(), startExternalDrag: vi.fn(),
   workspace: { activePaneId: "main", panesById: undefined as unknown, tabsById: undefined as unknown },
 }));
 vi.mock("@/store", () => ({
@@ -23,7 +23,7 @@ vi.mock("@/lib/api", () => ({
   listProjectDirectory: mocks.list,
   renameProjectEntry: mocks.rename, copyExternalEntry: vi.fn(), copyProjectEntries: mocks.copy,
   createProjectDirectory: mocks.createDirectory, createProjectFile: mocks.createFile, deleteProjectEntry: mocks.deleteEntry,
-  moveProjectEntries: vi.fn(), readClipboardFilePaths: mocks.readClipboard,
+  moveProjectEntries: vi.fn(), readClipboardFilePaths: mocks.readClipboard, startExternalFileDrag: mocks.startExternalDrag,
 }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onDragDropEvent: async () => () => {} }) }));
 vi.mock("@/lib/explorer", () => ({ EXPLORER_REVEAL_PATH_EVENT: "reveal", EXPLORER_SELECT_ALL_EVENT: "select-all", takePendingExplorerRevealPath: () => null }));
@@ -37,8 +37,10 @@ import SidebarProjectPanel from "./SidebarProjectPanel";
 import {
   computeMarqueeRect,
   getRenameSelectionRange,
+  isPointOutsideViewport,
   mergeMarqueeSelection,
   rectsIntersect,
+  resolveInternalDropTarget,
 } from "./treeNavigation";
 
 let root: Root;
@@ -89,6 +91,7 @@ beforeEach(() => {
   mocks.deleteEntry.mockResolvedValue(undefined);
   mocks.readClipboard.mockResolvedValue([]);
   mocks.copy.mockResolvedValue([]);
+  mocks.startExternalDrag.mockResolvedValue(true);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -548,4 +551,113 @@ it("persists expandedPaths per project across project switches and prunes missin
     }));
   });
   expect(host.querySelectorAll('[role="treeitem"]')).toHaveLength(3);
+});
+
+it("detects viewport exit and resolves valid internal drop targets", () => {
+  expect(isPointOutsideViewport(-1, 100, 1280, 720)).toBe(true);
+  expect(isPointOutsideViewport(1279, 100, 1280, 720)).toBe(true);
+  expect(isPointOutsideViewport(120, 120, 1280, 720)).toBe(false);
+
+  expect(
+    resolveInternalDropTarget({
+      hoveredRowPath: folder.path,
+      hoveredRowKind: "directory",
+      dragPaths: [file.path],
+      projectRootPath: project.path,
+    })
+  ).toBe(folder.path);
+
+  // Cannot drop a directory into itself or its own descendant
+  expect(
+    resolveInternalDropTarget({
+      hoveredRowPath: folder.path,
+      hoveredRowKind: "directory",
+      dragPaths: [folder.path],
+      projectRootPath: project.path,
+    })
+  ).toBeNull();
+
+  // Cannot drop an entry into its own current parent directory
+  expect(
+    resolveInternalDropTarget({
+      hoveredRowPath: file.path,
+      hoveredRowKind: "file",
+      dragPaths: [file.path],
+      projectRootPath: project.path,
+    })
+  ).toBeNull();
+});
+
+it("triggers native external file drag when dragging a file outside the window", async () => {
+  await mount();
+  const fileRow = host.querySelector<HTMLElement>(`[data-path="${file.path}"]`)!;
+  expect(fileRow).toBeTruthy();
+
+  await act(async () => {
+    fileRow.dispatchEvent(new PointerEvent("pointerdown", {
+      button: 0,
+      clientX: 120,
+      clientY: 120,
+      pointerId: 1,
+      bubbles: true,
+    }));
+  });
+
+  // Move within window first to enter dragging state and show preview
+  await act(async () => {
+    window.dispatchEvent(new PointerEvent("pointermove", {
+      clientX: 150,
+      clientY: 130,
+      pointerId: 1,
+      bubbles: true,
+    }));
+  });
+  expect(document.body.querySelector(".app-file-drag-preview")).not.toBeNull();
+  expect(mocks.startExternalDrag).not.toHaveBeenCalled();
+
+  // Drag outside window bounds -> hands off to native OS drag
+  await act(async () => {
+    window.dispatchEvent(new PointerEvent("pointermove", {
+      clientX: -4,
+      clientY: 130,
+      pointerId: 1,
+      bubbles: true,
+    }));
+  });
+  expect(mocks.startExternalDrag).toHaveBeenCalledExactlyOnceWith([file.path]);
+  expect(document.body.querySelector(".app-file-drag-preview")).toBeNull();
+});
+
+it("marks adjacent excluded rows so they render as one continuous block", async () => {
+  const excludedDir = entry("node_modules", "directory");
+  const excludedChild = entry("react", "directory", excludedDir.path);
+  const excludedLeaf = entry("index.js", "file", excludedDir.path);
+  mocks.list.mockImplementation(async (_root, path) => {
+    if (path === excludedDir.path) {
+      return listing(excludedDir.path, [excludedChild, excludedLeaf]);
+    }
+    return listing(project.path, [excludedDir, file]);
+  });
+
+  await mount();
+  await press("ArrowRight");
+
+  const dirRow = host.querySelector<HTMLElement>(`[data-path="${excludedDir.path}"]`)!;
+  const childRow = host.querySelector<HTMLElement>(`[data-path="${excludedChild.path}"]`)!;
+  const leafRow = host.querySelector<HTMLElement>(`[data-path="${excludedLeaf.path}"]`)!;
+  const normalRow = host.querySelector<HTMLElement>(`[data-path="${file.path}"]`)!;
+
+  expect(dirRow.getAttribute("data-folder-tone")).toBe("excluded");
+  expect(dirRow.getAttribute("data-excluded-prev")).toBeNull();
+  expect(dirRow.getAttribute("data-excluded-next")).toBe("true");
+
+  expect(childRow.getAttribute("data-folder-tone")).toBe("excluded");
+  expect(childRow.getAttribute("data-excluded-prev")).toBe("true");
+  expect(childRow.getAttribute("data-excluded-next")).toBe("true");
+
+  expect(leafRow.getAttribute("data-folder-tone")).toBe("excluded");
+  expect(leafRow.getAttribute("data-excluded-prev")).toBe("true");
+  expect(leafRow.getAttribute("data-excluded-next")).toBeNull();
+
+  expect(normalRow.getAttribute("data-folder-tone")).toBeNull();
 });

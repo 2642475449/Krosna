@@ -863,6 +863,14 @@ pub async fn move_project_entries(
     .await
 }
 
+#[tauri::command]
+pub async fn start_external_file_drag(
+    window: tauri::WebviewWindow,
+    paths: Vec<String>,
+) -> Result<bool, String> {
+    crate::external_drag::start_external_file_drag(window, paths).await
+}
+
 pub fn move_project_entries_blocking(
     project_path: String,
     source_paths: Vec<String>,

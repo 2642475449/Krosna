@@ -22,6 +22,7 @@ import { open as openDirectoryDialog } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState, useId } from "react";
+import { createPortal } from "react-dom";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
@@ -38,6 +39,7 @@ import {
   moveProjectEntries,
   readClipboardFilePaths,
   renameProjectEntry,
+  startExternalFileDrag,
 } from "@/lib/api";
 import {
   EXPLORER_REVEAL_PATH_EVENT,
@@ -51,8 +53,10 @@ import {
   computeMarqueeRect,
   getRenameSelectionRange,
   getTreeNavigation,
+  isPointOutsideViewport,
   mergeMarqueeSelection,
   rectsIntersect,
+  resolveInternalDropTarget,
   type MarqueeRect,
 } from "./treeNavigation";
 import { TreeDisclosure } from "./TreeDisclosure";
@@ -75,13 +79,14 @@ const TREE_ROW_HEIGHT = 24;
 const EMPTY_GIT_FILE_STATUSES: GitFileStatus[] = [];
 
 type FlatTreeRow =
-  | { kind: "inline-create"; key: string; depth: number; inheritedTone?: FolderTone }
+  | { kind: "inline-create"; key: string; depth: number; inheritedTone?: FolderTone; rowTone?: FolderTone }
   | {
       kind: "node";
       key: string;
       node: ResourceTreeNode;
       depth: number;
       inheritedTone?: FolderTone;
+      rowTone?: FolderTone;
       inheritedIgnored?: boolean;
     };
 
@@ -361,7 +366,15 @@ function SidebarProjectPanel({
   const requestGenerationRef = useRef(0);
   const directoryGenerationRef = useRef<Map<string, number>>(new Map());
   const isDraggingResourceRef = useRef(false);
+  const isExternalDragOutActiveRef = useRef(false);
   const isMarqueeSelectingRef = useRef(false);
+  const [dragPreview, setDragPreview] = useState<{
+    entries: Array<{ path: string; kind: string; name: string }>;
+    x: number;
+    y: number;
+    hintKind: "move" | "terminal" | "none";
+    targetName?: string;
+  } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
   const lastManualScrollAtRef = useRef(0);
   const programmaticScrollAtRef = useRef(0);
@@ -857,6 +870,7 @@ function SidebarProjectPanel({
           node,
           depth,
           inheritedTone,
+          rowTone,
           inheritedIgnored: rowIgnored,
         });
         if (isDirectory && isExpanded) {
@@ -868,6 +882,7 @@ function SidebarProjectPanel({
               key: `__inline-create__:${entry.path}`,
               depth: depth + 1,
               inheritedTone: rowTone,
+              rowTone,
             });
           }
           if (children.length > 0) {
@@ -1123,6 +1138,9 @@ function SidebarProjectPanel({
 
     const currentWindow = getCurrentWindow();
     const dropPromise = currentWindow.onDragDropEvent((event) => {
+      if (isExternalDragOutActiveRef.current) {
+        return;
+      }
       if (event.payload.type === "leave") {
         setIsExternalDragOver(false);
         setDragOverPath(null);
@@ -1290,13 +1308,18 @@ function SidebarProjectPanel({
           : [entry];
       if (dragEntries.length === 0) return;
 
+      const dragPaths = dragEntries.map((item) => item.path);
+      const sourceElement = event.currentTarget;
+      const pointerId = event.pointerId;
       const startedAt = Date.now();
       const startX = event.clientX;
       const startY = event.clientY;
       let dragging = false;
+      let externalDragTriggered = false;
       let lastX = startX;
       let lastY = startY;
       let previousUserSelect = "";
+      let internalDropTargetDir: string | null = null;
 
       const nextState = (x: number, y: number, phase: "dragging" | "dropping") => ({
         type: "agent-resource" as const,
@@ -1312,11 +1335,25 @@ function SidebarProjectPanel({
         startedAt,
       });
 
+      const releaseCapture = () => {
+        try {
+          if (sourceElement.hasPointerCapture?.(pointerId)) {
+            sourceElement.releasePointerCapture(pointerId);
+          }
+        } catch {
+          // 忽略指针已释放或节点已卸载的异常
+        }
+      };
+
       const cleanup = () => {
         window.removeEventListener("pointermove", handleMove);
         window.removeEventListener("pointerup", handleUp);
         window.removeEventListener("pointercancel", handleCancel);
+        window.removeEventListener("blur", handleCancel);
+        releaseCapture();
         isDraggingResourceRef.current = false;
+        setDragPreview(null);
+        setDragOverPath(null);
         if (dragging) {
           document.body.style.userSelect = previousUserSelect;
         }
@@ -1329,9 +1366,30 @@ function SidebarProjectPanel({
         previousUserSelect = document.body.style.userSelect;
         document.body.style.userSelect = "none";
         suppressNextClickPathRef.current = entry.path;
+        try {
+          sourceElement.setPointerCapture?.(pointerId);
+        } catch {
+          // 忽略测试环境或不可捕获节点的异常
+        }
+      };
+
+      const triggerExternalDrag = () => {
+        if (externalDragTriggered) return;
+        externalDragTriggered = true;
+        cleanup();
+        setResourceDragState(null);
+        isExternalDragOutActiveRef.current = true;
+        void startExternalFileDrag(dragPaths)
+          .catch((err) => {
+            message.error(err instanceof Error ? err.message : t("sidebar.externalDragFailed"));
+          })
+          .finally(() => {
+            isExternalDragOutActiveRef.current = false;
+          });
       };
 
       const handleMove = (moveEvent: PointerEvent) => {
+        if (externalDragTriggered) return;
         lastX = moveEvent.clientX;
         lastY = moveEvent.clientY;
         const distance = Math.hypot(lastX - startX, lastY - startY);
@@ -1339,12 +1397,77 @@ function SidebarProjectPanel({
 
         beginDragging();
         moveEvent.preventDefault();
+
+        if (isPointOutsideViewport(lastX, lastY, window.innerWidth, window.innerHeight, 2)) {
+          triggerExternalDrag();
+          return;
+        }
+
+        const underPointer = document.elementFromPoint(lastX, lastY) as HTMLElement | null;
+        const treeContainer = treeContainerRef.current;
+        let nextHintKind: "move" | "terminal" | "none" = "none";
+        let nextTargetName: string | undefined;
+
+        if (underPointer && treeContainer?.contains(underPointer)) {
+          const row = underPointer.closest(".app-file-tree-row");
+          const rowPath = row?.getAttribute("data-path") ?? null;
+          const rowEntry = rowPath
+            ? knownEntries.find((item) => normalizePath(item.path) === normalizePath(rowPath))
+            : undefined;
+          const candidateDir = resolveInternalDropTarget({
+            hoveredRowPath: rowPath,
+            hoveredRowKind: rowEntry ? (rowEntry.kind === "directory" ? "directory" : "file") : null,
+            dragPaths,
+            projectRootPath: currentProject.path,
+          });
+          internalDropTargetDir = candidateDir;
+          setDragOverPath(candidateDir);
+          if (candidateDir) {
+            nextHintKind = "move";
+            nextTargetName =
+              normalizePath(candidateDir) === normalizePath(currentProject.path)
+                ? currentProject.name
+                : getBaseName(candidateDir);
+          }
+        } else {
+          internalDropTargetDir = null;
+          setDragOverPath(null);
+          if (underPointer?.closest(".xterm")) {
+            nextHintKind = "terminal";
+          }
+        }
+
+        setDragPreview({
+          entries: dragEntries.map((item) => ({
+            path: item.path,
+            kind: item.kind,
+            name: item.name,
+          })),
+          x: lastX,
+          y: lastY,
+          hintKind: nextHintKind,
+          targetName: nextTargetName,
+        });
         setResourceDragState(nextState(lastX, lastY, "dragging"));
       };
 
       const handleUp = (upEvent: PointerEvent) => {
+        const dropTargetDir = internalDropTargetDir;
         cleanup();
-        if (!dragging) return;
+        if (!dragging || externalDragTriggered) return;
+
+        if (dropTargetDir) {
+          setResourceDragState(null);
+          void moveProjectEntries(currentProject.path, dragPaths, dropTargetDir)
+            .then((moved) => {
+              showWorkbenchFeedback(t("sidebar.resourceMoveSuccess", { count: moved.length }));
+              return refreshProjectView();
+            })
+            .catch((err) => {
+              message.error(err instanceof Error ? err.message : t("sidebar.resourceMoveFailed"));
+            });
+          return;
+        }
 
         lastX = upEvent.clientX;
         lastY = upEvent.clientY;
@@ -1359,7 +1482,7 @@ function SidebarProjectPanel({
 
       const handleCancel = () => {
         cleanup();
-        if (dragging) {
+        if (dragging && !externalDragTriggered) {
           setResourceDragState(null);
         }
       };
@@ -1367,8 +1490,9 @@ function SidebarProjectPanel({
       window.addEventListener("pointermove", handleMove, { passive: false });
       window.addEventListener("pointerup", handleUp);
       window.addEventListener("pointercancel", handleCancel);
+      window.addEventListener("blur", handleCancel);
     },
-    [currentProject, renamingEntry, selectedEntries, setResourceDragState]
+    [currentProject, knownEntries, refreshProjectView, renamingEntry, selectedEntries, setResourceDragState, t]
   );
 
   const handleTreeMarqueePointerDown = useCallback(
@@ -2166,7 +2290,13 @@ function SidebarProjectPanel({
 
   const renderFlatRows = useCallback(
     () =>
-      visibleFlatRows.map((item) => {
+      visibleFlatRows.map((item, visibleIndex) => {
+        const flatIndex = virtualWindow.startIndex + visibleIndex;
+        const prevRowTone = flatRows[flatIndex - 1]?.rowTone;
+        const nextRowTone = flatRows[flatIndex + 1]?.rowTone;
+        const excludedPrev = item.rowTone === "excluded" && prevRowTone === "excluded";
+        const excludedNext = item.rowTone === "excluded" && nextRowTone === "excluded";
+
         if (item.kind === "inline-create") {
           return renderInlineCreateRow(item.depth, item.inheritedTone);
         }
@@ -2202,6 +2332,8 @@ function SidebarProjectPanel({
                 data-active={isActive ? "true" : "false"}
                 data-selected={isSelected ? "true" : "false"}
                 data-folder-tone={rowTone}
+                data-excluded-prev={excludedPrev ? "true" : undefined}
+                data-excluded-next={excludedNext ? "true" : undefined}
                 data-git-ignored={isGitIgnored ? "true" : undefined}
                 data-git-tone={gitBadge?.tone}
                 data-path={entry.path}
@@ -2247,6 +2379,8 @@ function SidebarProjectPanel({
                 data-active={isActive ? "true" : "false"}
                 data-selected={isSelected ? "true" : "false"}
                 data-folder-tone={rowTone}
+                data-excluded-prev={excludedPrev ? "true" : undefined}
+                data-excluded-next={excludedNext ? "true" : undefined}
                 data-git-ignored={isGitIgnored ? "true" : undefined}
                 data-git-tone={gitBadge?.tone}
                 data-cut={
@@ -2315,6 +2449,7 @@ function SidebarProjectPanel({
       clipboardOperation,
       clipboardPaths,
       dragOverPath,
+      flatRows,
       gitStatusIndex,
       handleCancelRename,
       handleConfirmRename,
@@ -2331,6 +2466,7 @@ function SidebarProjectPanel({
       selectOnlyPath,
       setContextMenuPath,
       treeId,
+      virtualWindow.startIndex,
       visibleFlatRows,
     ]
   );
@@ -2818,6 +2954,55 @@ function SidebarProjectPanel({
             ? t("sidebar.resourceDeleteConfirm", { name: deletingEntries[0].name })
             : null}
       </Modal>
+
+      {dragPreview && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="app-file-drag-preview"
+              style={{
+                left: Math.max(8, Math.min(dragPreview.x + 14, window.innerWidth - 292)),
+                top: Math.max(8, Math.min(dragPreview.y + 16, window.innerHeight - 44)),
+              }}
+            >
+              <span
+                className="app-file-tree-icon"
+                style={{
+                  color: getFileIcon(
+                    dragPreview.entries[0]?.name ?? "",
+                    dragPreview.entries[0]?.kind === "directory",
+                    false
+                  ).color,
+                }}
+              >
+                {
+                  getFileIcon(
+                    dragPreview.entries[0]?.name ?? "",
+                    dragPreview.entries[0]?.kind === "directory",
+                    false
+                  ).icon
+                }
+              </span>
+              <span className="app-file-drag-preview-name">
+                {dragPreview.entries[0]?.name ?? ""}
+              </span>
+              {dragPreview.entries.length > 1 ? (
+                <span className="app-file-drag-preview-count">
+                  {t("sidebar.dragItemsCount", { count: dragPreview.entries.length })}
+                </span>
+              ) : null}
+              {dragPreview.hintKind === "move" && dragPreview.targetName ? (
+                <span className="app-file-drag-preview-hint">
+                  {t("sidebar.dragHintMove", { name: dragPreview.targetName })}
+                </span>
+              ) : dragPreview.hintKind === "terminal" ? (
+                <span className="app-file-drag-preview-hint">
+                  {t("sidebar.dragHintTerminal")}
+                </span>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

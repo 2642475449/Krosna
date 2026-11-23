@@ -14,8 +14,8 @@
 .app-onboarding-shell {
   display: grid;
   grid-template-columns: 204px minmax(0, 1fr);
-  min-height: 512px;
-  max-height: min(620px, 84vh);
+  height: min(560px, 84vh);
+  min-height: 460px;
   background: var(--cs-bg-card-solid);
   color: var(--cs-text-primary);
 }
@@ -121,6 +121,14 @@
   color: var(--cs-text-on-primary);
 }
 
+.app-onboarding-rail-note {
+  margin-top: auto;
+  padding: 12px 10px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cs-text-tertiary);
+}
+
 /* 右侧内容舞台 */
 .app-onboarding-main {
   display: flex;
@@ -145,6 +153,7 @@
   line-height: 1.3;
   letter-spacing: -0.02em;
   color: var(--cs-text-primary);
+  outline: none;
 }
 
 .app-onboarding-subtitle {
@@ -152,31 +161,6 @@
   font-size: 13px;
   line-height: 1.5;
   color: var(--cs-text-secondary);
-}
-
-.app-onboarding-close {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--cs-radius-control, 6px);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--cs-text-tertiary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-.app-onboarding-close:hover {
-  background: var(--cs-bg-hover);
-  color: var(--cs-text-primary);
-}
-
-.app-onboarding-close:focus-visible {
-  outline: 2px solid var(--cs-focus-ring);
-  outline-offset: -2px;
 }
 
 .app-onboarding-body {
@@ -275,6 +259,28 @@
 .app-onboarding-theme-card--selected {
   border-color: var(--cs-primary);
   background: var(--cs-primary-light);
+}
+
+.app-onboarding-theme-card--paired {
+  border-color: var(--cs-border);
+}
+
+.app-onboarding-theme-name-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-onboarding-theme-check {
+  color: var(--cs-primary);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.app-onboarding-theme-tag--paired {
+  color: var(--cs-primary);
+  font-weight: 500;
 }
 
 .app-onboarding-theme-preview {
@@ -379,10 +385,68 @@
   margin-top: 4px;
   font-family: var(--font-mono);
   font-size: 11.5px;
+  line-height: 1.45;
   color: var(--cs-text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.app-onboarding-agents-notice {
+  border: 1px solid var(--cs-border-card);
+  border-radius: 10px;
+  background: var(--cs-bg-card);
+  padding: 11px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--cs-text-secondary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-onboarding-agents-notice--error {
+  border-color: var(--cs-error);
+  color: var(--cs-error);
+  background: color-mix(in srgb, var(--cs-error) 8%, transparent);
+}
+
+.app-onboarding-agents-disclosure {
+  margin-top: 12px;
+}
+
+.app-onboarding-agents-disclosure-summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cs-text-secondary);
+  padding: 4px 2px 8px;
+  user-select: none;
+}
+
+.app-onboarding-agents-disclosure-summary:hover {
+  color: var(--cs-text-primary);
+}
+
+.app-onboarding-summary-bar {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--cs-border-card);
+  border-radius: 10px;
+  background: var(--cs-bg-app);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cs-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.app-onboarding-summary-label {
+  font-weight: 600;
+  color: var(--cs-text-primary);
 }
 
 /* 步骤 3：首个项目 */
@@ -432,6 +496,11 @@
 @media (max-width: 680px) {
   .app-onboarding-shell {
     grid-template-columns: 1fr;
+    height: min(620px, 90vh);
+  }
+
+  .app-onboarding-rail-note {
+    display: none;
   }
 
   .app-onboarding-rail {

@@ -7,6 +7,7 @@ mod codex_rate_limits;
 mod commands;
 mod database;
 mod events;
+mod external_drag;
 mod hook_ingest;
 mod network_proxy;
 mod opencode_control;
@@ -335,6 +336,7 @@ pub fn run() {
             commands::file_tree::read_clipboard_file_paths,
             commands::file_tree::copy_project_entries,
             commands::file_tree::move_project_entries,
+            commands::file_tree::start_external_file_drag,
             commands::skills::list_skills,
             commands::skills::get_skill_detail,
             commands::skill_editor::validate_skill_content,

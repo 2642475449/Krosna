@@ -946,6 +946,11 @@
     "resourcePasteFailed": "Failed to paste",
     "resourceMoveSuccess": "Moved {{count}} items",
     "resourceMoveFailed": "Failed to move",
+    "dragItemsCount": "{{count}} items",
+    "dragHintMove": "Move to {{name}}",
+    "dragHintTerminal": "Insert path into terminal",
+    "dragHintExternal": "Drag to external app",
+    "externalDragFailed": "Failed to drag files out",
     "copyExternalSuccess": "Copied {{count}} item(s)",
     "copyExternalFailed": "Failed to copy files",
     "clipboardFilesEmpty": "The clipboard does not contain files or folders to paste",
@@ -2857,7 +2862,6 @@
       "framework": "Framework",
       "terminal": "Terminal",
       "stateManagement": "State Management",
-      "appId": "App Identifier",
       "onboardingGuide": "Setup Guide",
       "onboardingGuideDesc": "Reopen the first-run wizard to configure appearance, agents, and preferences",
       "openOnboardingGuide": "Reopen",
@@ -3575,8 +3579,10 @@
   },
   "onboarding": {
     "railAriaLabel": "Setup steps",
+    "localFirstNote": "Local-first · Configs & sessions stay on your device",
     "close": "Close setup guide",
     "skip": "Skip setup",
+    "skipToast": "Setup skipped. You can reopen it anytime in Settings.",
     "back": "Back",
     "continue": "Continue",
     "finish": "Get Started",
@@ -3596,6 +3602,8 @@
       "lightMode": "Light",
       "darkMode": "Dark",
       "systemMode": "System",
+      "systemLightPaired": "Light pair",
+      "systemDarkPaired": "Dark pair",
       "themeStyleLabel": "Theme palette",
       "themes": {
         "lightGlass": "Clear Blue",
@@ -3609,6 +3617,9 @@
       "subtitle": "Scan your machine for installed coding agents and choose a default",
       "scanning": "Scanning installed CLI agents…",
       "detectedSummary": "Detected {{installed}} of {{total}} supported agents",
+      "scanFailed": "Failed to inspect local CLI agents. Check your PATH and try again.",
+      "noneInstalledHint": "No CLI agents detected yet. You can skip this step and use built-in PowerShell / CMD terminals right away, or rescan after installing.",
+      "availableOthers": "Other supported agents ({{count}})",
       "rescan": "Rescan",
       "installed": "Installed",
       "notInstalled": "Not found",
@@ -3640,7 +3651,9 @@
       "restoreProjectTitle": "Restore last project on startup",
       "restoreProjectDesc": "Reopen your previous workspace and terminal tabs automatically",
       "shellTitle": "Default terminal shell",
-      "shellDesc": "Shell used when opening a new plain terminal tab"
+      "shellDesc": "Shell used when opening a new plain terminal tab",
+      "summaryLabel": "Ready:",
+      "plainTerminalFallback": "Built-in terminal"
     }
   }
 }

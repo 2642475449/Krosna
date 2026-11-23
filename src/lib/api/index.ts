@@ -1022,6 +1022,10 @@ export async function moveProjectEntries(
   });
 }
 
+export async function startExternalFileDrag(paths: string[]): Promise<boolean> {
+  return await invoke("start_external_file_drag", { paths });
+}
+
 // Skills API
 export async function searchSkillMarketplace(query: string, page = 0): Promise<SkillMarketSearch> {
   return await invoke("search_skill_marketplace", { query, page });

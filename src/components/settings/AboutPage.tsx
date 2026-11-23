@@ -313,11 +313,6 @@ export const AboutPage: FC = () => {
             v{packageJson.version}
           </span>
         </SettingRow>
-        <SettingRow label={t("settings.about.appId")}>
-          <span className="break-all font-mono text-sm text-[var(--cs-text-secondary)]">
-            com.krosna.desktop
-          </span>
-        </SettingRow>
         <SettingRow
           label={t("settings.about.onboardingGuide")}
           description={t("settings.about.onboardingGuideDesc")}

@@ -943,6 +943,11 @@
     "selectionCut": "{{count}} 件を切り取りました",
     "resourceMoveSuccess": "{{count}} 件を移動しました",
     "resourceMoveFailed": "移動に失敗しました",
+    "dragItemsCount": "{{count}} 件",
+    "dragHintMove": "{{name}} に移動",
+    "dragHintTerminal": "ターミナルにパスを挿入",
+    "dragHintExternal": "外部アプリにドラッグ",
+    "externalDragFailed": "ファイルのドラッグアウトに失敗しました",
     "selectionCount": "{{count}} 件選択中",
     "resourcePasteSuccess": "{{count}} 件を貼り付けました",
     "resourcePasteFailed": "貼り付けに失敗しました",
@@ -2857,7 +2862,6 @@
       "framework": "フレームワーク",
       "terminal": "ターミナル",
       "stateManagement": "状態管理",
-      "appId": "アプリ識別子",
       "onboardingGuide": "初期セットアップガイド",
       "onboardingGuideDesc": "初回セットアップウィザードを再度開き、外観・エージェント・設定を調整します",
       "openOnboardingGuide": "再度開く",
@@ -3575,8 +3579,10 @@
   },
   "onboarding": {
     "railAriaLabel": "セットアップ手順",
+    "localFirstNote": "ローカル優先 · 設定とセッションは端末内に保存",
     "close": "ガイドを閉じる",
     "skip": "スキップ",
+    "skipToast": "セットアップをスキップしました。設定画面からいつでも再開できます。",
     "back": "戻る",
     "continue": "次へ",
     "finish": "始める",
@@ -3596,6 +3602,8 @@
       "lightMode": "ライト",
       "darkMode": "ダーク",
       "systemMode": "システム",
+      "systemLightPaired": "ライト設定",
+      "systemDarkPaired": "ダーク設定",
       "themeStyleLabel": "カラーテーマ",
       "themes": {
         "lightGlass": "クリアブルー",
@@ -3609,6 +3617,9 @@
       "subtitle": "インストール済みのエージェント CLI を確認し、既定のツールを選択します",
       "scanning": "インストール済みの CLI を検出しています…",
       "detectedSummary": "{{total}} 件中 {{installed}} 件のエージェントを検出",
+      "scanFailed": "CLI エージェントの検出に失敗しました。PATH を確認して再試行してください。",
+      "noneInstalledHint": "CLI エージェントはまだ検出されていません。この手順をスキップして内蔵の PowerShell / CMD ターミナルをすぐに利用でき、インストール後にいつでも再検出できます。",
+      "availableOthers": "その他の対応エージェント（{{count}}）",
       "rescan": "再検出",
       "installed": "導入済み",
       "notInstalled": "未検出",
@@ -3640,7 +3651,9 @@
       "restoreProjectTitle": "起動時に前回のプロジェクトを復元",
       "restoreProjectDesc": "前回のワークスペースと端末タブを自動的に復元します",
       "shellTitle": "既定のターミナルシェル",
-      "shellDesc": "通常のターミナルタブを開く際に使用するシェル環境"
+      "shellDesc": "通常のターミナルタブを開く際に使用するシェル環境",
+      "summaryLabel": "現在の設定：",
+      "plainTerminalFallback": "内蔵ターミナル"
     }
   }
 }

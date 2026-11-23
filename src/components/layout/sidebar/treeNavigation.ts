@@ -112,3 +112,83 @@ export function mergeMarqueeSelection(
   }
   return merged;
 }
+
+function normalizeTreePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "");
+}
+
+function isSameOrDescendantPath(parentPath: string, candidatePath: string): boolean {
+  const parent = normalizeTreePath(parentPath);
+  const candidate = normalizeTreePath(candidatePath);
+  return candidate === parent || candidate.startsWith(`${parent}/`);
+}
+
+function getImmediateParentPath(rootPath: string, targetPath: string): string {
+  const normalizedRoot = normalizeTreePath(rootPath);
+  const normalizedTarget = normalizeTreePath(targetPath);
+  if (normalizedTarget === normalizedRoot) {
+    return rootPath;
+  }
+  const trimmed = targetPath.replace(/[\\/]+$/, "");
+  const lastSeparatorIndex = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+  if (lastSeparatorIndex <= 0) {
+    return rootPath;
+  }
+  const parent = trimmed.slice(0, lastSeparatorIndex);
+  return normalizeTreePath(parent).startsWith(normalizedRoot) ? parent : rootPath;
+}
+
+export function isPointOutsideViewport(
+  clientX: number,
+  clientY: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  edgeMargin = 2,
+): boolean {
+  if (viewportWidth <= 0 || viewportHeight <= 0) return false;
+  return (
+    clientX <= edgeMargin ||
+    clientY <= edgeMargin ||
+    clientX >= viewportWidth - edgeMargin ||
+    clientY >= viewportHeight - edgeMargin
+  );
+}
+
+export function resolveInternalDropTarget(options: {
+  hoveredRowPath: string | null;
+  hoveredRowKind: "file" | "directory" | null;
+  dragPaths: string[];
+  projectRootPath: string;
+}): string | null {
+  const { hoveredRowPath, hoveredRowKind, dragPaths, projectRootPath } = options;
+  if (!projectRootPath || dragPaths.length === 0) return null;
+
+  let candidateDir: string;
+  if (hoveredRowPath && hoveredRowKind === "directory") {
+    candidateDir = hoveredRowPath;
+  } else if (hoveredRowPath) {
+    candidateDir = getImmediateParentPath(projectRootPath, hoveredRowPath);
+  } else {
+    candidateDir = projectRootPath;
+  }
+
+  const normalizedCandidate = normalizeTreePath(candidateDir);
+  if (!isSameOrDescendantPath(projectRootPath, candidateDir)) {
+    return null;
+  }
+
+  for (const dragPath of dragPaths) {
+    if (isSameOrDescendantPath(dragPath, candidateDir)) {
+      return null;
+    }
+  }
+
+  const allAlreadyInCandidate = dragPaths.every(
+    (dragPath) => normalizeTreePath(getImmediateParentPath(projectRootPath, dragPath)) === normalizedCandidate,
+  );
+  if (allAlreadyInCandidate) {
+    return null;
+  }
+
+  return candidateDir;
+}

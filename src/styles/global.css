@@ -1234,6 +1234,16 @@ html, body, #root {
   color: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 42%, var(--cs-text-secondary));
 }
 
+.app-file-tree-row[data-folder-tone="excluded"][data-excluded-prev="true"] {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.app-file-tree-row[data-folder-tone="excluded"][data-excluded-next="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .app-file-tree-row[data-folder-tone="excluded"]:hover {
   background: color-mix(in srgb, var(--cs-accent-yellow, #d97706) 15%, transparent);
 }
@@ -1318,6 +1328,53 @@ html, body, #root {
   outline: 1px dashed color-mix(in srgb, var(--cs-accent) 40%, transparent);
   outline-offset: -2px;
   border-radius: 4px;
+}
+
+.app-file-drag-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 5px 10px;
+  border: 1px solid var(--cs-border-strong);
+  border-radius: 8px;
+  background: var(--cs-bg-elevated);
+  color: var(--cs-text-primary);
+  box-shadow: var(--cs-shadow-floating);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-file-drag-preview-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.app-file-drag-preview-count {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cs-primary) 16%, transparent);
+  color: var(--cs-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-file-drag-preview-hint {
+  flex-shrink: 0;
+  padding-left: 6px;
+  border-left: 1px solid var(--cs-border-subtle);
+  color: var(--cs-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .app-file-tree-arrow {

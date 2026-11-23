@@ -864,6 +864,11 @@
     "resourcePasteFailed": "粘贴失败",
     "resourceMoveSuccess": "已移动 {{count}} 个项目",
     "resourceMoveFailed": "移动失败",
+    "dragItemsCount": "{{count}} 项",
+    "dragHintMove": "移动到 {{name}}",
+    "dragHintTerminal": "插入路径到终端",
+    "dragHintExternal": "拖出到外部应用",
+    "externalDragFailed": "拖出文件失败",
     "copyExternalSuccess": "已复制 {{count}} 个项目",
     "copyExternalFailed": "复制文件失败",
     "clipboardFilesEmpty": "剪贴板中没有可粘贴的文件或文件夹",
@@ -2857,7 +2862,6 @@
       "framework": "框架",
       "terminal": "终端",
       "stateManagement": "状态管理",
-      "appId": "应用标识",
       "onboardingGuide": "新手指引",
       "onboardingGuideDesc": "重新打开首次安装配置向导，快速调整外观、智能体与偏好",
       "openOnboardingGuide": "重新打开",
@@ -3575,8 +3579,10 @@
   },
   "onboarding": {
     "railAriaLabel": "初始化步骤导航",
+    "localFirstNote": "本地优先 · 配置与会话仅留存本机",
     "close": "关闭引导",
     "skip": "跳过设置",
+    "skipToast": "已跳过初始化引导，随时可在「设置」中重新打开",
     "back": "返回",
     "continue": "继续",
     "finish": "开始使用",
@@ -3596,6 +3602,8 @@
       "lightMode": "浅色",
       "darkMode": "深色",
       "systemMode": "跟随系统",
+      "systemLightPaired": "浅色配对",
+      "systemDarkPaired": "深色配对",
       "themeStyleLabel": "配色方案",
       "themes": {
         "lightGlass": "清朗蓝白",
@@ -3609,6 +3617,9 @@
       "subtitle": "自动识别已安装的终端智能体，并设置新建会话时的默认工具",
       "scanning": "正在检测本机已安装的智能体 CLI…",
       "detectedSummary": "已检测到 {{installed}} / {{total}} 个可用智能体",
+      "scanFailed": "检测本机智能体 CLI 失败，请检查环境变量后重试。",
+      "noneInstalledHint": "暂未检测到智能体 CLI。你仍可直接跳过此步，先使用内置 PowerShell / CMD 终端，安装完成后随时点击「重新检测」。",
+      "availableOthers": "其他受支持的智能体（{{count}}）",
       "rescan": "重新检测",
       "installed": "已安装",
       "notInstalled": "未检测到",
@@ -3640,7 +3651,9 @@
       "restoreProjectTitle": "启动时自动恢复上次项目",
       "restoreProjectDesc": "重新打开 Krosna 时恢复上次的工作区与终端标签",
       "shellTitle": "默认终端 Shell",
-      "shellDesc": "新建普通终端标签页时使用的命令行环境"
+      "shellDesc": "新建普通终端标签页时使用的命令行环境",
+      "summaryLabel": "当前配置：",
+      "plainTerminalFallback": "内置终端"
     }
   }
 }
