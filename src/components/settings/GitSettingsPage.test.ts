@@ -10,14 +10,40 @@ const mocks = vi.hoisted(() => ({
   msgError: vi.fn(),
   setGitAutoFetch: vi.fn(),
   setGitCommitMessageProfiles: vi.fn<(profiles: GitCommitMessageProfile[], defaultId: string) => void>(),
+  inspectAgentClis: vi.fn().mockResolvedValue([
+    { id: "antigravity", name: "Antigravity CLI", command: "agy", installed: true, version: "1.0.0", executablePath: "agy.exe", checkedAt: 0, error: null },
+    { id: "claude", name: "Claude Code", command: "claude", installed: true, version: "1.0.0", executablePath: "claude.exe", checkedAt: 0, error: null },
+  ]),
+  gitInspectCommitGeneratorOptions: vi.fn().mockResolvedValue({
+    agentId: "antigravity",
+    supportsModel: true,
+    supportsReasoningEffort: true,
+    currentModel: "gemini-4-neon",
+    currentReasoningEffort: "high",
+    models: [
+      { value: "gemini-4-neon", name: "Gemini 4 Neon" },
+      { value: "gemini-3.8-flash", name: "Gemini 3.8 Flash" },
+    ],
+    reasoningEfforts: [
+      { value: "low", name: "Low" },
+      { value: "high", name: "High" },
+    ],
+  }),
   storeState: {
     gitAutoFetch: true,
     gitAutoFetchIntervalMinutes: 5,
     setGitAutoFetch: vi.fn(),
+    defaultAgentId: "antigravity" as string | null,
+    currentProject: { name: "Termflow", path: "E:/repo" } as { name: string; path: string } | null,
     gitCommitMessageProfiles: [] as GitCommitMessageProfile[],
     defaultGitCommitMessageProfileId: "balanced",
     setGitCommitMessageProfiles: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/api", () => ({
+  inspectAgentClis: mocks.inspectAgentClis,
+  gitInspectCommitGeneratorOptions: mocks.gitInspectCommitGeneratorOptions,
 }));
 
 vi.mock("react-i18next", async () => {
@@ -369,4 +395,37 @@ it("clones an 80-char profile with unique bounded name and focuses the cloned po
   expect(cloned.name.length).toBeLessThanOrEqual(80);
   expect(cloned.name).toContain("副本");
   expect(document.body.querySelector(`#app-git-popover-${cloned.id}[role='dialog']`)).not.toBeNull();
+});
+
+it("shows ACP model and reasoning selectors for Antigravity and hides them for non-ACP agents", async () => {
+  const { useGitCommitGenerationStore } = await import("@/store/slices/gitCommitGenerationSlice");
+  useGitCommitGenerationStore.setState({
+    config: { agentId: null, model: null, reasoningEffort: null },
+    pendingConfig: false,
+  });
+
+  await act(async () => {
+    root.render(createElement(GitSettingsPage));
+  });
+
+  // 默认继承 antigravity，应展示模型和推理强度下拉
+  const modelSelect = host.querySelector<HTMLSelectElement>('select[aria-label="模型"]');
+  const effortSelect = host.querySelector<HTMLSelectElement>('select[aria-label="推理强度"]');
+  expect(modelSelect).not.toBeNull();
+  expect(effortSelect).not.toBeNull();
+  expect(mocks.gitInspectCommitGeneratorOptions).toHaveBeenCalledWith("antigravity", "E:/repo");
+
+  // 切换到 claude 后隐藏 ACP 专属模型和推理强度下拉
+  const agentSelect = host.querySelector<HTMLSelectElement>('select[aria-label="生成智能体"]');
+  expect(agentSelect).not.toBeNull();
+  await act(async () => {
+    if (agentSelect) {
+      agentSelect.value = "claude";
+      agentSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+
+  expect(useGitCommitGenerationStore.getState().config.agentId).toBe("claude");
+  expect(host.querySelector('select[aria-label="模型"]')).toBeNull();
+  expect(host.querySelector('select[aria-label="推理强度"]')).toBeNull();
 });

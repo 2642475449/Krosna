@@ -85,6 +85,15 @@ export const ANTD_COMPONENT_OVERRIDES = {
     activeBorderColor: "var(--cs-primary)",
     activeShadow: "0 0 0 2px var(--cs-primary-light)",
   },
+  Checkbox: {
+    colorBgContainer: "var(--cs-bg-card-solid)",
+    colorBorder: "var(--cs-text-tertiary)",
+    // AntD 用 colorWhite 绘制勾号，深色主题的亮主色需要深色勾号。
+    colorWhite: ANTD_TEXT_LIGHT_SOLID,
+    colorPrimary: "var(--cs-primary)",
+    colorPrimaryHover: "var(--cs-checkbox-checked-hover)",
+    colorPrimaryBorder: "var(--cs-primary)",
+  },
   Segmented: {
     trackBg: "var(--cs-bg-app)",
     trackPadding: 3,

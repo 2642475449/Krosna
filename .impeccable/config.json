@@ -4,22 +4,19 @@
     "ignoreFiles": [],
     "ignoreValues": [
       {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "createdAt": "2026-11-23T03:57:35.461Z",
+        "reason": "DESIGN.md Typography: Geist Mono is the selected system monospace for telemetry and paths."
+      },
+      {
         "rule": "side-tab",
         "value": "*",
         "files": [
           "src/styles/settings.css"
         ],
-        "createdAt": "2026-11-22T08:30:30.941Z",
-        "reason": "Project design system (DESIGN.md, Style & Indicator) specifies a 2px primary marker for the current navigation item. Settings uses it only on aria-current=page."
-      },
-      {
-        "rule": "overused-font",
-        "value": "geist mono",
-        "files": [
-          "src/styles/global.css"
-        ],
-        "createdAt": "2026-11-22T09:53:40.171Z",
-        "reason": "Krosna DESIGN.md specifies Geist Mono as the Label/Mono font for paths, command arguments, shortcuts and counters. global.css declares this shared font."
+        "createdAt": "2026-11-23T03:57:35.561Z",
+        "reason": "DESIGN.md Components / Navigation: the remaining match is the specified 2px current-page marker for the settings rail."
       },
       {
         "rule": "side-tab",

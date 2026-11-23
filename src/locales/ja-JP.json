@@ -1002,10 +1002,13 @@
     "gitCommitSuccess": "コミットしました",
     "gitCommitFailed": "コミットに失敗しました",
     "gitCommitEmptyMessage": "コミットメッセージを入力してください",
-    "gitGenerateCommitMessage": "AI で完全なコミットメッセージを生成",
+    "gitGenerateCommitMessage": "コミットメッセージを生成",
     "gitGenerateCommitMessageSuccess": "完全なコミットメッセージを生成しました",
     "gitGenerateCommitMessageSuccessWithProfile": "「{{profile}}」でコミットメッセージを生成しました",
     "gitGenerateCommitMessageFailed": "完全なコミットメッセージの生成に失敗しました",
+    "gitGenerateCommitMessageDraftPreserved": "生成中に下書きが編集されたため、現在の入力を保持しました",
+    "gitGenerateCommitMessageRetryHint": "再試行するか、「設定 → Git」で生成設定を調整してください。",
+    "gitGenerateCommitMessageAgentRequired": "先に「設定 → Git」または「設定 → エージェント」でコミットメッセージ生成用のエージェントを選択してください。",
     "gitGenerationExitCode": "終了コード：{{code}}。",
     "gitGenerationErrors": {
       "capacity": "現在の CLI モデルが混雑しています（{{attempts}} 回試行）。しばらくしてから再生成してください。",
@@ -1701,6 +1704,22 @@
       "defaultChanged": "{{name}} をデフォルトエージェントに設定しました",
       "defaultUnavailable": "デフォルトエージェントは未インストールまたは現在利用できません。別のエージェントを選択してください。",
       "defaultRequired": "先に「設定」→「エージェント」でデフォルトエージェントを選択してください。",
+      "gitGenerator": {
+        "title": "コミットメッセージ生成設定",
+        "agent": "生成エージェント",
+        "inheritDefault": "デフォルトエージェントに従う（{{agent}}）",
+        "inheritDefaultUnset": "デフォルトエージェントに従う（未設定）",
+        "notInstalled": "未インストール",
+        "model": "モデル",
+        "modelAutoFlash": "自動（Flash 高速モデル優先）",
+        "reasoningEffort": "推論強度",
+        "reasoningAutoLow": "自動（Low）",
+        "refreshOptions": "利用可能なオプションを更新",
+        "loadingOptions": "利用可能なモデルを読み込み中…",
+        "cliManagedHint": "モデルと推論強度はこの CLI の現在の設定を使用します。",
+        "acpFallbackHint": "Antigravity は独立した ACP セッションで生成し、選択した高速モデルが利用できない場合は同じエージェントの現在のモデルにフォールバックします。",
+        "inspectFailed": "ACP モデルオプションを読み込めませんでした。生成時はデフォルト設定が使用されます。"
+      },
       "gitProfiles": {
         "layout": {
           "title": "AI コミットメッセージのスタイル",
@@ -2839,6 +2858,9 @@
       "terminal": "ターミナル",
       "stateManagement": "状態管理",
       "appId": "アプリ識別子",
+      "onboardingGuide": "初期セットアップガイド",
+      "onboardingGuideDesc": "初回セットアップウィザードを再度開き、外観・エージェント・設定を調整します",
+      "openOnboardingGuide": "再度開く",
       "description": "Krosna はローカル AI コーディングエージェントのための共有デスクトップワークスペースです。Claude Code、Codex、Antigravity CLI、OpenCode、Qoder CLI を、プロジェクト、セッション、組み込みターミナル、Skills、Hooks、MCP まで含む一つの流れにまとめ、コンテキストを保ちながら協業相手を切り替え、複雑な作業を進め続けられます。"
     },
     "quickMenu": {
@@ -3191,6 +3213,27 @@
       "clearFailed": "使用量履歴を消去できませんでした"
     },
     "archived": {
+      "searchLabel": "検索",
+      "projectLabel": "プロジェクト",
+      "sortWithinProject": "プロジェクト内の並び順",
+      "manage": "アーカイブ管理",
+      "selectVisible": "このページに表示されているセッションを選択",
+      "selectSession": "セッション「{{session}}」を選択",
+      "clearSelection": "選択を解除",
+      "clearFilters": "絞り込みを解除",
+      "restoreNamed": "セッション「{{session}}」を復元",
+      "sessionActions": "セッション「{{session}}」の操作",
+      "deleteAcrossProjects": "全プロジェクトのアーカイブを削除",
+      "confirmDeleteNamed": "セッション「{{session}}」を完全に削除しますか？",
+      "confirmDeleteProject": "プロジェクト：{{project}}。この操作は元に戻せません。",
+      "confirmDeleteAllProjects": "全プロジェクトのアーカイブ済みセッション {{count}} 件を完全に削除しますか？",
+      "confirmDeleteAllScope": "絞り込みの対象外のセッションも含まれます。この操作は元に戻せません。",
+      "deletePermanently": "完全に削除",
+      "sessionsDeleted": "{{count}} 件のセッションを削除しました",
+      "sessionsChanged": "これらのセッションはすでにアーカイブにありません。",
+      "restoreFailed": "セッションを復元できませんでした。もう一度お試しください。",
+      "deleteFailed": "アーカイブ済みセッションを削除できませんでした。もう一度お試しください。",
+      "unknownTime": "日時不明",
       "title": "アーカイブ済みセッション",
       "headerDesc": "アーカイブ済みセッションを表示、復元、または完全に削除します。",
       "empty": "アーカイブ済みセッションはありません",
@@ -3528,6 +3571,76 @@
       "teal": "青緑",
       "indigo": "藍色",
       "copper": "銅色"
+    }
+  },
+  "onboarding": {
+    "railAriaLabel": "セットアップ手順",
+    "close": "ガイドを閉じる",
+    "skip": "スキップ",
+    "back": "戻る",
+    "continue": "次へ",
+    "finish": "始める",
+    "steps": {
+      "appearance": "外観",
+      "agents": "エージェント",
+      "project": "プロジェクト",
+      "preferences": "設定"
+    },
+    "appearance": {
+      "title": "言語と外観を選択",
+      "subtitle": "変更はすぐに反映され、後から設定画面でいつでも変更できます",
+      "languageLabel": "表示言語",
+      "languageDesc": "メニューやダイアログの表示言語を選択します",
+      "modeLabel": "外観モード",
+      "modeDesc": "ライト・ダーク、またはシステム設定に追従します",
+      "lightMode": "ライト",
+      "darkMode": "ダーク",
+      "systemMode": "システム",
+      "themeStyleLabel": "カラーテーマ",
+      "themes": {
+        "lightGlass": "クリアブルー",
+        "lightWarm": "ウォーム書斎",
+        "darkStarry": "スターリーナイト",
+        "darkMocha": "ウォームモカ"
+      }
+    },
+    "agents": {
+      "title": "CLI エージェントを検出",
+      "subtitle": "インストール済みのエージェント CLI を確認し、既定のツールを選択します",
+      "scanning": "インストール済みの CLI を検出しています…",
+      "detectedSummary": "{{total}} 件中 {{installed}} 件のエージェントを検出",
+      "rescan": "再検出",
+      "installed": "導入済み",
+      "notInstalled": "未検出",
+      "setDefault": "既定に設定",
+      "defaultBadge": "既定",
+      "copyInstall": "導入コマンドをコピー",
+      "copyFailed": "コマンドのコピーに失敗しました"
+    },
+    "project": {
+      "title": "最初のプロジェクトを開く",
+      "subtitle": "ローカルフォルダを選択して、端末・エージェント・Git をまとめて管理します",
+      "emptyTitle": "ローカルフォルダを選択",
+      "emptyDesc": "任意のディレクトリまたは Git リポジトリに対応します",
+      "selectedTitle": "開いたプロジェクト",
+      "chooseFolder": "フォルダを選択",
+      "changeFolder": "フォルダを変更",
+      "recentTitle": "最近開いたプロジェクト",
+      "openRecent": "開く",
+      "skipHint": "この手順をスキップして、後からサイドバーでフォルダを開くこともできます。"
+    },
+    "preferences": {
+      "title": "ワークベンチ設定",
+      "subtitle": "右クリックメニューや通知、既定のシェルを設定します",
+      "contextMenuTitle": "エクスプローラー右クリックメニュー",
+      "contextMenuDesc": "Windows のフォルダ右クリックメニューに「Krosna で開く」を追加します",
+      "contextMenuFailed": "右クリックメニューの設定更新に失敗しました",
+      "notificationsTitle": "完了時のデスクトップ通知",
+      "notificationsDesc": "エージェントの応答完了や承認待ち時に通知します",
+      "restoreProjectTitle": "起動時に前回のプロジェクトを復元",
+      "restoreProjectDesc": "前回のワークスペースと端末タブを自動的に復元します",
+      "shellTitle": "既定のターミナルシェル",
+      "shellDesc": "通常のターミナルタブを開く際に使用するシェル環境"
     }
   }
 }

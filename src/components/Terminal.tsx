@@ -480,14 +480,14 @@ function Terminal({ sessionId, onExit, onClose, allowIndependentFocus = false, r
       key: "copy",
       label: t("terminal.copy"),
       icon: <CopyOutlined />,
-      extra: runnerOptions ? "Ctrl+C / Ctrl+Shift+C" : undefined,
+      extra: runnerOptions ? "Ctrl+C" : undefined,
       disabled: !contextMenuSelection,
     },
     {
       key: "paste",
       label: t("terminal.paste"),
       icon: <SnippetsOutlined />,
-      extra: runnerOptions ? "Ctrl+V / Ctrl+Shift+V" : undefined,
+      extra: runnerOptions ? "Ctrl+V" : undefined,
     },
     {
       key: "select-all",

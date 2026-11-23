@@ -114,6 +114,7 @@
 [data-theme] .ant-drawer .ant-drawer-footer { padding: 12px 20px; background: var(--cs-overlay-footer-bg); }
 
 /* 自定义全宽正文沿用自己的布局，不额外叠加标准弹窗内边距。 */
-[data-theme] :is(.app-session-launcher-modal, .app-global-search-modal) .ant-modal-container {
+[data-theme] :is(.app-session-launcher-modal, .app-global-search-modal, .app-onboarding-modal) .ant-modal-container {
   padding: 0;
+  overflow: hidden;
 }

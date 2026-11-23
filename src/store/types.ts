@@ -324,12 +324,23 @@ export interface ProjectWorkspace {
   focusedTabId: string | null;
 }
 
+export interface ArchivedSessionTarget {
+  projectPath: string;
+  sessionId: string;
+}
+
+export interface ArchiveSessionActions {
+  restoreArchivedSessions: (targets: readonly ArchivedSessionTarget[]) => Promise<number>;
+  removeArchivedSessions: (targets: readonly ArchivedSessionTarget[]) => Promise<number>;
+}
+
 export interface AppState
   extends NetworkProxySlice,
     TerminalCompletionNotificationSlice,
     TerminalCompletionRuntimeSlice,
     VoicePolishSlice,
-    AsrLanguageSlice {
+    AsrLanguageSlice,
+    ArchiveSessionActions {
   windowContextReady: boolean;
   windowMode: WindowMode;
   windowLabel: string;
@@ -460,9 +471,6 @@ export interface AppState
   removeAllSessions: () => void;
   togglePinSession: (sessionId: string) => void;
   archiveSession: (sessionId: string) => void;
-  unarchiveSession: (projectPath: string, sessionId: string) => void;
-  deleteArchivedSession: (projectPath: string, sessionId: string) => void;
-  deleteAllArchivedSessions: (projectPath: string) => void;
   archiveAllSessionsInSection: (section: "pinned" | "normal") => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarWidth: (width: number) => void;

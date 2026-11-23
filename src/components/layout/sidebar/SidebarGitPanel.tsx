@@ -30,6 +30,11 @@ import { useGitCommit } from "@/hooks/useGitCommit";
 import type { GitFileStatus } from "@/types";
 import { getGitOperationLabelKey, isGitOperationInProgress } from "@/lib/gitOperationState";
 import { parseGitCommitGenerationError } from "@/lib/gitCommitGenerationError";
+import { getAgentDisplayName } from "@/lib/agents";
+import {
+  resolveEffectiveCommitAgentId,
+  useGitCommitGenerationStore,
+} from "@/store/slices/gitCommitGenerationSlice";
 import { useTranslation } from "react-i18next";
 import { GitCommitComposer } from "./GitCommitComposer";
 import { GitFileList } from "./GitFileList";
@@ -215,7 +220,25 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     ? t("sidebar.gitRefreshFailed", { detail: statusError })
     : remoteBusy ? t("sidebar.gitBusy") : gitOperationBlockedReason;
 
-  const [generatingCommitMessage, setGeneratingCommitMessage] = useState(false);
+  const gitCommitGenerationConfig = useGitCommitGenerationStore((s) => s.config);
+  const currentProjectPath = currentProject?.path ?? "";
+  const commitMessageDraft = useGitCommitGenerationStore(
+    (s) => (currentProjectPath ? s.draftsByProject[currentProjectPath] ?? "" : ""),
+  );
+  const generatingCommitMessage = useGitCommitGenerationStore(
+    (s) => Boolean(currentProjectPath && s.activeGenerationTokenByProject[currentProjectPath]),
+  );
+  const setCommitMessageDraft = useGitCommitGenerationStore((s) => s.setDraft);
+  const clearCommitMessageDraft = useGitCommitGenerationStore((s) => s.clearDraft);
+  const startCommitGeneration = useGitCommitGenerationStore((s) => s.startGeneration);
+  const finishCommitGeneration = useGitCommitGenerationStore((s) => s.finishGeneration);
+  const failCommitGeneration = useGitCommitGenerationStore((s) => s.failGeneration);
+  const currentProjectPathRef = useRef(currentProjectPath);
+  currentProjectPathRef.current = currentProjectPath;
+  const effectiveCommitAgentId = resolveEffectiveCommitAgentId(
+    gitCommitGenerationConfig,
+    defaultAgentId,
+  );
   const [openingDiffPath, setOpeningDiffPath] = useState<string | null>(null);
   const [showGitChangesPanel, setShowGitChangesPanel] = useState(true);
   const [showGitGraphPanel, setShowGitGraphPanel] = useState(true);
@@ -230,7 +253,7 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
 
   const canGenerateCommitMessage =
     !generatingCommitMessage &&
-    !!defaultAgentId &&
+    !!effectiveCommitAgentId &&
     !!currentProject &&
     fileStatuses.length > 0;
 
@@ -610,31 +633,57 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   );
 
   const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
-    if (!currentProject || generatingCommitMessage || fileStatuses.length === 0) return null;
-    if (!defaultAgentId) {
-      message.warning(t("settings.agents.defaultRequired"));
-      return null;
+    if (!currentProject || fileStatuses.length === 0) return;
+    const projectPath = currentProject.path;
+    const projectName = currentProject.name;
+    const agentId = effectiveCommitAgentId;
+    if (!agentId) {
+      message.warning(t("sidebar.gitGenerateCommitMessageAgentRequired"));
+      return;
     }
     const selectedProfile = gitCommitMessageProfiles.find(
       (profile) => profile.id === (profileId ?? defaultGitCommitMessageProfileId),
     ) ?? gitCommitMessageProfiles[0];
     if (!selectedProfile) {
       message.warning(t("sidebar.gitCommitMessageProfileRequired"));
-      return null;
+      return;
     }
 
-    setGeneratingCommitMessage(true);
+    const ticket = startCommitGeneration(projectPath);
+    if (!ticket) return;
+
+    const requestedModel =
+      agentId === "antigravity" ? gitCommitGenerationConfig.model : null;
+    const requestedReasoningEffort =
+      agentId === "antigravity" ? gitCommitGenerationConfig.reasoningEffort : null;
+
     try {
       const generatedMessage = await gitGenerateCommitMessage(
-        currentProject.path,
-        defaultAgentId,
+        projectPath,
+        agentId,
         selectedProfile.instructions,
+        {
+          model: requestedModel,
+          reasoningEffort: requestedReasoningEffort,
+        },
       );
-      message.success(t("sidebar.gitGenerateCommitMessageSuccessWithProfile", {
-        profile: selectedProfile.name,
-      }));
-      return generatedMessage;
+      const outcome = finishCommitGeneration(ticket, generatedMessage);
+      const isSameProject = currentProjectPathRef.current === projectPath;
+      if (outcome === "preserved-user-edit") {
+        message.info({
+          title: isSameProject ? undefined : projectName,
+          content: t("sidebar.gitGenerateCommitMessageDraftPreserved"),
+        });
+      } else if (outcome === "applied") {
+        message.success({
+          title: isSameProject ? undefined : projectName,
+          content: t("sidebar.gitGenerateCommitMessageSuccessWithProfile", {
+            profile: selectedProfile.name,
+          }),
+        });
+      }
     } catch (error) {
+      failCommitGeneration(ticket);
       const failure = parseGitCommitGenerationError(error);
       const reason = t(`sidebar.gitGenerationErrors.${failure.code}`, { attempts: failure.attempts });
       const diagnostic = ["processFailed", "invalidInput", "unavailable"].includes(failure.code) ? failure.detail : "";
@@ -644,19 +693,25 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         `${t("sidebar.gitGenerateCommitMessageFailed")}: ${reason}`,
         exitCode,
         diagnostic,
+        t("sidebar.gitGenerateCommitMessageRetryHint"),
       ].filter(Boolean).join(" ");
-      message.error(detail);
-      throw new Error(detail);
-    } finally {
-      setGeneratingCommitMessage(false);
+      const isSameProject = currentProjectPathRef.current === projectPath;
+      message.error({
+        title: isSameProject ? undefined : projectName,
+        content: detail,
+      });
     }
   }, [
     currentProject,
-    defaultAgentId,
     defaultGitCommitMessageProfileId,
+    effectiveCommitAgentId,
+    failCommitGeneration,
     fileStatuses.length,
-    generatingCommitMessage,
+    finishCommitGeneration,
+    gitCommitGenerationConfig.model,
+    gitCommitGenerationConfig.reasoningEffort,
     gitCommitMessageProfiles,
+    startCommitGeneration,
     t,
   ]);
 
@@ -819,6 +874,13 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
             <GitCommitComposer
               remoteReady={remoteReady}
               branchName={branchName}
+              commitMessage={commitMessageDraft}
+              onCommitMessageChange={(value) => {
+                if (currentProject) setCommitMessageDraft(currentProject.path, value);
+              }}
+              onClearCommitMessage={() => {
+                if (currentProject) clearCommitMessageDraft(currentProject.path);
+              }}
               hasLocalChanges={hasLocalChanges}
               stagedChangeCount={stagedFiles.length}
               unstagedChangeCount={unstagedFiles.length}
@@ -830,9 +892,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
               committing={committing || remoteBusy || !!statusError}
               canGenerateCommitMessage={canGenerateCommitMessage}
               generateCommitMessageHint={
-                defaultAgentId
-                  ? t("sidebar.gitGenerateCommitMessage")
-                  : t("settings.agents.defaultRequired")
+                effectiveCommitAgentId
+                  ? `${t("sidebar.gitGenerateCommitMessage")} · ${getAgentDisplayName(effectiveCommitAgentId)}`
+                  : t("sidebar.gitGenerateCommitMessageAgentRequired")
               }
               generatingCommitMessage={generatingCommitMessage}
               commitMessageProfiles={gitCommitMessageProfiles}

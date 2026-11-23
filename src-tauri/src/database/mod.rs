@@ -143,6 +143,17 @@ fn default_git_auto_fetch_interval_minutes() -> u32 {
     5
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitGenerationConfigRecord {
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+}
+
 fn default_git_commit_message_profiles() -> serde_json::Value {
     serde_json::json!([
         {
@@ -231,6 +242,8 @@ pub struct PersistentSettingsRecord {
     #[serde(default = "default_no_proxy")]
     pub network_no_proxy: String,
     pub startup_restore_last_project: bool,
+    #[serde(default)]
+    pub onboarding_completed: bool,
     #[serde(default = "default_explorer_context_menu_enabled")]
     pub explorer_context_menu_enabled: bool,
     #[serde(default = "default_project_open_behavior")]
@@ -307,6 +320,8 @@ pub struct PersistentSettingsRecord {
     pub git_auto_fetch_interval_minutes: u32,
     #[serde(default = "default_git_commit_message_profile_id")]
     pub default_git_commit_message_profile_id: String,
+    #[serde(default)]
+    pub git_commit_generation_config: GitCommitGenerationConfigRecord,
 }
 
 impl Default for PersistentSettingsRecord {
@@ -323,6 +338,7 @@ impl Default for PersistentSettingsRecord {
             network_custom_proxy_url: String::new(),
             network_no_proxy: default_no_proxy(),
             startup_restore_last_project: true,
+            onboarding_completed: false,
             explorer_context_menu_enabled: default_explorer_context_menu_enabled(),
             project_open_behavior: default_project_open_behavior(),
             last_project_path: None,
@@ -369,6 +385,7 @@ impl Default for PersistentSettingsRecord {
             git_auto_fetch_interval_minutes: default_git_auto_fetch_interval_minutes(),
             git_commit_message_profiles: default_git_commit_message_profiles(),
             default_git_commit_message_profile_id: default_git_commit_message_profile_id(),
+            git_commit_generation_config: GitCommitGenerationConfigRecord::default(),
         }
     }
 }
@@ -968,6 +985,21 @@ impl Database {
         settings.startup_restore_last_project =
             read_setting(&conn, "general.startupRestoreLastProject")?
                 .unwrap_or(settings.startup_restore_last_project);
+        settings.onboarding_completed =
+            match read_setting::<bool>(&conn, "general.onboardingCompleted")? {
+                Some(value) => value,
+                None => {
+                    // 已有设置记录但缺少引导标记说明是旧版本升级，默认视为已完成；仅全新安装自动弹出引导。
+                    let has_existing = conn
+                        .query_row(
+                            "SELECT EXISTS(SELECT 1 FROM app_settings LIMIT 1)",
+                            [],
+                            |row| row.get::<_, i64>(0),
+                        )
+                        .map_err(|error| format!("检查引导状态失败: {error}"))?;
+                    has_existing != 0
+                }
+            };
         settings.explorer_context_menu_enabled =
             read_setting(&conn, "general.explorerContextMenuEnabled")?
                 .unwrap_or(settings.explorer_context_menu_enabled);
@@ -1066,6 +1098,9 @@ impl Database {
         settings.default_git_commit_message_profile_id =
             read_setting(&conn, "git.defaultCommitMessageProfileId")?
                 .unwrap_or(settings.default_git_commit_message_profile_id);
+        settings.git_commit_generation_config =
+            read_setting(&conn, "git.commitGenerationConfig")?
+                .unwrap_or(settings.git_commit_generation_config);
 
         Ok(settings)
     }
@@ -1241,6 +1276,11 @@ impl Database {
             "general.startupRestoreLastProject",
             &settings.startup_restore_last_project,
         )?;
+        write_setting(
+            &conn,
+            "general.onboardingCompleted",
+            &settings.onboarding_completed,
+        )?;
         if include_explorer_context_menu {
             write_setting(
                 &conn,
@@ -1406,6 +1446,11 @@ impl Database {
             &conn,
             "git.defaultCommitMessageProfileId",
             &settings.default_git_commit_message_profile_id,
+        )?;
+        write_setting(
+            &conn,
+            "git.commitGenerationConfig",
+            &settings.git_commit_generation_config,
         )?;
 
         Ok(())
@@ -2296,6 +2341,35 @@ mod tests {
     }
 
     #[test]
+    fn git_commit_generation_config_is_backward_compatible_and_round_trips() {
+        let mut legacy_value = serde_json::to_value(PersistentSettingsRecord::default()).unwrap();
+        legacy_value
+            .as_object_mut()
+            .unwrap()
+            .remove("gitCommitGenerationConfig");
+        let restored_legacy: PersistentSettingsRecord =
+            serde_json::from_value(legacy_value).unwrap();
+        assert_eq!(
+            restored_legacy.git_commit_generation_config,
+            super::GitCommitGenerationConfigRecord::default()
+        );
+
+        let db = Database::open_in_memory();
+        let mut settings = PersistentSettingsRecord::default();
+        settings.git_commit_generation_config = super::GitCommitGenerationConfigRecord {
+            agent_id: Some("antigravity".to_string()),
+            model: Some("gemini-3.8-flash".to_string()),
+            reasoning_effort: Some("low".to_string()),
+        };
+        db.save_general_persistent_settings(&settings).unwrap();
+        let loaded = db.load_persistent_settings().unwrap();
+        assert_eq!(
+            loaded.git_commit_generation_config,
+            settings.git_commit_generation_config
+        );
+    }
+
+    #[test]
     fn terminal_scrollback_preference_round_trips_through_the_database() {
         let database = Database::open_in_memory();
         let mut settings = PersistentSettingsRecord::default();
@@ -2601,5 +2675,39 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].id, claimed.id);
         assert_eq!(history[0].status, ScheduledTaskRunStatus::Succeeded);
+    }
+
+    #[test]
+    fn onboarding_completed_distinguishes_fresh_install_from_existing_database() {
+        let database = Database::open_in_memory();
+        let initial = PersistentSettingsRecord::default();
+        assert!(!initial.onboarding_completed);
+        database.save_persistent_settings(&initial).unwrap();
+        let loaded = database.load_persistent_settings().unwrap();
+        assert!(!loaded.onboarding_completed);
+
+        let mut completed = loaded.clone();
+        completed.onboarding_completed = true;
+        database
+            .save_general_persistent_settings(&completed)
+            .unwrap();
+        assert!(
+            database
+                .load_persistent_settings()
+                .unwrap()
+                .onboarding_completed
+        );
+
+        let legacy_db = Database::open_in_memory();
+        {
+            let conn = legacy_db.conn.lock();
+            super::write_setting(&conn, "general.language", &"zh_CN").unwrap();
+        }
+        assert!(
+            legacy_db
+                .load_persistent_settings()
+                .unwrap()
+                .onboarding_completed
+        );
     }
 }

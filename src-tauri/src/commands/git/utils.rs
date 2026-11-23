@@ -3,8 +3,9 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use git2::{Repository, RepositoryState};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
+use std::io::{Seek, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command as StdCommand;
+use std::process::{Command as StdCommand, Output};
 use std::sync::{Arc, OnceLock};
 
 use super::types::GitGraphRef;
@@ -262,21 +263,48 @@ pub fn collect_numstat(
     )))
 }
 
+/// 用 NUL 分隔的输入传递路径，避免命令行长度限制和文件名通配符匹配。
+pub(super) fn run_git_with_literal_paths(
+    project_path: &str,
+    args: &[&str],
+    files: &[String],
+) -> Result<Output, String> {
+    if files.is_empty() {
+        return Err("Git 路径列表不能为空".to_string());
+    }
+
+    let mut pathspec_input =
+        tempfile::tempfile().map_err(|e| format!("创建 Git 路径列表失败: {}", e))?;
+    for file in files {
+        if file.as_bytes().contains(&0) {
+            return Err("Git 文件路径不能包含 NUL 字符".to_string());
+        }
+        pathspec_input
+            .write_all(file.as_bytes())
+            .and_then(|_| pathspec_input.write_all(&[0]))
+            .map_err(|e| format!("写入 Git 路径列表失败: {}", e))?;
+    }
+    pathspec_input
+        .rewind()
+        .map_err(|e| format!("读取 Git 路径列表失败: {}", e))?;
+
+    git_command()
+        .arg("--literal-pathspecs")
+        .args(args)
+        .args(["--pathspec-from-file=-", "--pathspec-file-nul"])
+        .stdin(pathspec_input)
+        .current_dir(normalize_input_path(project_path))
+        .output()
+        .map_err(|e| format!("执行 Git 命令失败: {}", e))
+}
+
 /// Stage files using git add.
 pub fn stage_paths(project_path: &str, files: &[String]) -> Result<(), String> {
     if files.is_empty() {
         return Ok(());
     }
 
-    let output = git_command()
-        .arg("add")
-        .arg("--all")
-        .arg("--")
-        .args(files)
-        .current_dir(normalize_input_path(project_path))
-        .output()
-        .map_err(|e| format!("执行 git add 失败: {}", e))?;
-
+    let output = run_git_with_literal_paths(project_path, &["add", "--all"], files)?;
     if output.status.success() {
         return Ok(());
     }
@@ -370,20 +398,36 @@ pub fn ensure_repository_allows_normal_commit(repo: &Repository) -> Result<(), S
 
 /// Move an untracked worktree path to the operating system's recycle bin.
 pub fn trash_worktree_path(project_path: &str, file_path: &str) -> Result<(), String> {
+    let relative_path = Path::new(file_path);
+    if relative_path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(format!("拒绝丢弃项目目录之外的路径: {}", file_path));
+    }
+    let (Some(parent), Some(name)) = (relative_path.parent(), relative_path.file_name()) else {
+        return Err(format!("无效的未跟踪文件路径: {}", file_path));
+    };
     let root_path = normalize_input_path(project_path)
         .canonicalize()
         .map_err(|e| format!("解析项目目录失败: {}", e))?;
-    let absolute_path = root_path.join(file_path);
-    if !absolute_path.exists() {
-        return Ok(());
+    let parent = root_path.join(parent);
+    let resolved_parent = match parent.canonicalize() {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("解析未跟踪路径 {} 失败: {}", file_path, error)),
+    };
+    // 父目录不能通过链接指向另一个目录。保留末级路径，让回收站处理链接本身。
+    if resolved_parent != parent {
+        return Err(format!("拒绝通过链接目录丢弃文件: {}", file_path));
     }
-    let canonical_path = absolute_path
-        .canonicalize()
-        .map_err(|e| format!("解析未跟踪路径 {} 失败: {}", file_path, e))?;
-    if canonical_path == root_path || !canonical_path.starts_with(&root_path) {
-        return Err(format!("拒绝丢弃项目目录之外的路径: {}", file_path));
+    let selected_path = resolved_parent.join(name);
+    match selected_path.symlink_metadata() {
+        Ok(_) => trash::delete(&selected_path)
+            .map_err(|error| format!("移动 {} 到回收站失败: {}", file_path, error)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("读取未跟踪路径 {} 失败: {}", file_path, error)),
     }
-    trash::delete(&canonical_path).map_err(|e| format!("移动 {} 到回收站失败: {}", file_path, e))
 }
 
 /// Open a git repository.
@@ -527,17 +571,78 @@ mod tests {
 
     use super::{
         ensure_repository_allows_normal_commit, git_repository_lock_key, is_symbolic_remote_head,
-        repository_operation_state, resolve_worktree_file_path, trash_worktree_path,
+        repository_operation_state, resolve_worktree_file_path, stage_paths, trash_worktree_path,
         GitOperationCoordinator, GitRepositoryAccess,
     };
     use git2::{Repository, RepositoryState};
     use std::fs;
+    use std::path::Path;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Barrier,
     };
     use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn stage_paths_handles_a_list_exceeding_windows_command_line_limit() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        let files: Vec<String> = (0..1500)
+            .map(|i| format!("file-{i:04}-with-a-long-enough-name.txt"))
+            .collect();
+        assert!(files.iter().map(|file| file.len() + 1).sum::<usize>() > 32767);
+        for file in &files {
+            fs::write(temp_dir.path().join(file), "content\n").unwrap();
+        }
+        fs::write(temp_dir.path().join("unselected.txt"), "keep unstaged\n").unwrap();
+
+        stage_paths(temp_dir.path().to_str().unwrap(), &files).unwrap();
+
+        let index = repo.index().unwrap();
+        assert_eq!(index.len(), files.len());
+        for file in &files {
+            assert!(index.get_path(Path::new(file), 0).is_some());
+        }
+        assert!(index.get_path(Path::new("unselected.txt"), 0).is_none());
+    }
+
+    #[test]
+    fn stage_paths_preserves_literal_names_and_stages_deletions() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        let files = ["中文 空格.txt", "-option.txt", "[ab].txt"].map(str::to_string);
+        for file in &files {
+            fs::write(temp_dir.path().join(file), "original\n").unwrap();
+        }
+        fs::write(temp_dir.path().join("a.txt"), "unselected\n").unwrap();
+        stage_paths(temp_dir.path().to_str().unwrap(), &files).unwrap();
+        assert_eq!(repo.index().unwrap().len(), 3);
+
+        fs::remove_file(temp_dir.path().join(&files[0])).unwrap();
+        fs::write(temp_dir.path().join(&files[1]), "updated\n").unwrap();
+        stage_paths(temp_dir.path().to_str().unwrap(), &files).unwrap();
+
+        let mut index = repo.index().unwrap();
+        // Git CLI 在进程外更新索引，需要刷新 libgit2 的缓存后再验证。
+        index.read(true).unwrap();
+        assert_eq!(index.len(), 2);
+        assert!(index.get_path(Path::new(&files[0]), 0).is_none());
+        let entry = index.get_path(Path::new(&files[1]), 0).unwrap();
+        assert_eq!(repo.find_blob(entry.id).unwrap().content(), b"updated\n");
+        assert!(index.get_path(Path::new("a.txt"), 0).is_none());
+    }
+
+    #[test]
+    fn stage_paths_empty_selection_does_not_stage_anything() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        fs::write(temp_dir.path().join("unselected.txt"), "content\n").unwrap();
+
+        stage_paths(temp_dir.path().to_str().unwrap(), &[]).unwrap();
+
+        assert!(repo.index().unwrap().is_empty());
+    }
 
     #[test]
     fn symbolic_remote_head_is_not_a_graph_badge() {
@@ -564,6 +669,36 @@ mod tests {
         assert!(outside.exists());
 
         fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    #[cfg(any(windows, unix))]
+    fn trash_worktree_path_rejects_a_link_to_another_directory_in_the_project() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let target = temp_dir.path().join("tracked");
+        let link = temp_dir.path().join("alias");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("keep.txt"), "keep me").unwrap();
+        #[cfg(windows)]
+        assert!(std::process::Command::new("cmd.exe")
+            .args(["/D", "/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&target)
+            .output()
+            .unwrap()
+            .status
+            .success());
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let result = trash_worktree_path(temp_dir.path().to_str().unwrap(), "alias/keep.txt");
+        #[cfg(windows)]
+        fs::remove_dir(&link).unwrap();
+        #[cfg(unix)]
+        fs::remove_file(&link).unwrap();
+
+        assert!(result.is_err());
+        assert_eq!(fs::read(target.join("keep.txt")).unwrap(), b"keep me");
     }
 
     #[test]

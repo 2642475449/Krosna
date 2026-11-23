@@ -84,3 +84,13 @@ export function filterAndSortArchivedRows(rows: ArchivedRow[], options: ArchiveF
       return options.sort === "oldest" ? leftTime - rightTime : rightTime - leftTime;
     });
 }
+
+export function groupArchivedRowsByProject(rows: readonly ArchivedRow[]) {
+  const groups = new Map<string, ArchivedRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.projectPath);
+    if (group) group.push(row);
+    else groups.set(row.projectPath, [row]);
+  }
+  return groups;
+}

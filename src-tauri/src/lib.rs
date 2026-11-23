@@ -450,6 +450,7 @@ pub fn run() {
             commands::git::git_unstage_files,
             commands::git::git_commit_amend,
             commands::git::git_generate_commit_message,
+            commands::git::git_inspect_commit_generator_options,
             commands::git::git_fetch,
             commands::git::git_push,
             commands::git::git_add_remote_and_push,

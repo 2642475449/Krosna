@@ -16,6 +16,9 @@ import { getGitPrimaryAction } from "@/lib/gitPrimaryAction";
 interface GitCommitComposerProps {
   remoteReady?: boolean;
   branchName: string;
+  commitMessage: string;
+  onCommitMessageChange: (value: string) => void;
+  onClearCommitMessage: () => void;
   hasLocalChanges: boolean;
   stagedChangeCount: number;
   unstagedChangeCount: number;
@@ -38,7 +41,7 @@ interface GitCommitComposerProps {
   onPull: () => Promise<void>;
   onPullWithStash: () => Promise<void>;
   onSyncChanges: () => Promise<void>;
-  onGenerateCommitMessage: (profileId?: string) => Promise<string | null>;
+  onGenerateCommitMessage: (profileId?: string) => Promise<void>;
 }
 
 interface PendingCommitAction {
@@ -49,6 +52,9 @@ interface PendingCommitAction {
 export function GitCommitComposer({
   remoteReady = true,
   branchName,
+  commitMessage,
+  onCommitMessageChange,
+  onClearCommitMessage,
   hasLocalChanges,
   stagedChangeCount,
   unstagedChangeCount,
@@ -73,7 +79,6 @@ export function GitCommitComposer({
   onGenerateCommitMessage,
 }: GitCommitComposerProps) {
   const { t } = useTranslation();
-  const [commitMessage, setCommitMessage] = useState("");
   const [pendingStageAllAction, setPendingStageAllAction] =
     useState<PendingCommitAction | null>(null);
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
@@ -142,12 +147,12 @@ export function GitCommitComposer({
     ) => {
       try {
         await action(messageText);
-        setCommitMessage("");
+        onClearCommitMessage();
       } catch {
         // The Git operation owns its global Toast feedback.
       }
     },
-    []
+    [onClearCommitMessage]
   );
 
   const [composerShake, setComposerShake] = useState(false);
@@ -319,10 +324,7 @@ export function GitCommitComposer({
   const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
     if (!canGenerateCommitMessage || generatingCommitMessage) return;
     try {
-      const generatedMessage = await onGenerateCommitMessage(profileId);
-      if (generatedMessage?.trim()) {
-        setCommitMessage(generatedMessage.trim());
-      }
+      await onGenerateCommitMessage(profileId);
     } catch {
       // The generator owns its global Toast feedback.
     }
@@ -355,7 +357,7 @@ export function GitCommitComposer({
             className="git-commit-composer-input"
             aria-label={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
             value={commitMessage}
-            onChange={(e) => setCommitMessage(e.target.value)}
+            onChange={(e) => onCommitMessageChange(e.target.value)}
             placeholder={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
             autoSize={{ minRows: 3, maxRows: 10 }}
             variant="borderless"

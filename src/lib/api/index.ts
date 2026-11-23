@@ -1528,11 +1528,27 @@ export async function gitGenerateCommitMessage(
   projectPath: string,
   agentId: AiAgentId,
   profileInstructions: string,
+  options?: {
+    model?: string | null;
+    reasoningEffort?: string | null;
+  },
 ): Promise<string> {
   return await invoke("git_generate_commit_message", {
     projectPath,
     agentId,
     profileInstructions,
+    model: options?.model ?? null,
+    reasoningEffort: options?.reasoningEffort ?? null,
+  });
+}
+
+export async function gitInspectCommitGeneratorOptions(
+  agentId: AiAgentId,
+  projectPath?: string | null,
+): Promise<import("@/types").GitCommitGeneratorCapabilities> {
+  return await invoke("git_inspect_commit_generator_options", {
+    agentId,
+    projectPath: projectPath ?? null,
   });
 }
 

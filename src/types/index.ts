@@ -84,6 +84,7 @@ export interface PersistentSettings {
   networkCustomProxyUrl: string;
   networkNoProxy: string;
   startupRestoreLastProject: boolean;
+  onboardingCompleted?: boolean;
   projectOpenBehavior: ProjectOpenBehavior;
   explorerContextMenuEnabled: boolean;
   lastProjectPath: string | null;
@@ -132,6 +133,31 @@ export interface PersistentSettings {
   gitAutoFetchIntervalMinutes: number;
   gitCommitMessageProfiles: GitCommitMessageProfile[];
   defaultGitCommitMessageProfileId: string;
+  gitCommitGenerationConfig?: GitCommitGenerationConfig;
+}
+
+export interface GitCommitGenerationConfig {
+  /** 专用于提交信息生成的智能体；为 null 时继承全局默认智能体 */
+  agentId: AiAgentId | null;
+  /** 可选模型覆盖；为 null 时按智能体默认策略（Antigravity 优先快模型） */
+  model: string | null;
+  /** 可选推理强度覆盖；为 null 时按智能体默认策略（Antigravity 优先低推理） */
+  reasoningEffort: string | null;
+}
+
+export interface GitCommitGeneratorSelectOption {
+  value: string;
+  name: string;
+}
+
+export interface GitCommitGeneratorCapabilities {
+  agentId: string;
+  supportsModel: boolean;
+  supportsReasoningEffort: boolean;
+  currentModel: string | null;
+  currentReasoningEffort: string | null;
+  models: GitCommitGeneratorSelectOption[];
+  reasoningEfforts: GitCommitGeneratorSelectOption[];
 }
 
 // ── 快速命令类型 ──────────────────────────────────────────────

@@ -16,6 +16,8 @@ import { persistentSettingsRevision } from "./lib/persistentSettingsSync";
 import { applyRuntimePersistentSettings, persistentSettingsSync, getRuntimePersistentSettingsSnapshot as getPersistentSettingsSnapshot } from "./store/slices/persistentSettingsRuntime";
 import { useShortcutStore } from "./store/slices/shortcutSlice";
 import { useAuxiliaryDockStore } from "./store/auxiliaryDock";
+import { useGitCommitGenerationStore } from "./store/slices/gitCommitGenerationSlice";
+import { useOnboardingStore } from "./store/slices/onboardingSlice";
 import { startPersistentSettingsUpdates } from "./store/slices/persistentSettingsUpdates";
 import { normalizeShortcutOverrides } from "./lib/appShortcuts";
 import { TERMINAL_LINE_HEIGHT } from "./lib/terminalSettings";
@@ -87,6 +89,7 @@ function App() {
   const lastProject = useAppStore((s) => s.lastProject);
   const language = useAppStore((s) => s.language);
   const startupRestoreLastProject = useAppStore((s) => s.startupRestoreLastProject);
+  const onboardingCompleted = useOnboardingStore((s) => s.onboardingCompleted);
   const projectOpenBehavior = useAppStore((s) => s.projectOpenBehavior);
   const explorerContextMenuEnabled = useAppStore((s) => s.explorerContextMenuEnabled);
   const networkProxyMode = useAppStore((s) => s.networkProxyMode);
@@ -107,6 +110,7 @@ function App() {
   const defaultGitCommitMessageProfileId = useAppStore(
     (s) => s.defaultGitCommitMessageProfileId,
   );
+  const gitCommitGenerationConfig = useGitCommitGenerationStore((s) => s.config);
   const agentPermissionDefaults = useAppStore((s) => s.agentPermissionDefaults);
   const notificationEnabled = useAppStore((s) => s.notificationEnabled);
   const notificationSoundEnabled = useAppStore((s) => s.notificationSoundEnabled);
@@ -170,6 +174,7 @@ function App() {
       themeCategory,
       language,
       startupRestoreLastProject,
+      onboardingCompleted,
       projectOpenBehavior,
       explorerContextMenuEnabled,
       networkProxyMode,
@@ -189,6 +194,7 @@ function App() {
       gitAutoFetchIntervalMinutes,
       gitCommitMessageProfiles,
       defaultGitCommitMessageProfileId,
+      gitCommitGenerationConfig,
       agentPermissionDefaults,
       notificationEnabled,
       notificationSoundEnabled,
@@ -250,6 +256,7 @@ function App() {
       remoteNotificationChannels,
       agentPermissionDefaults,
       startupRestoreLastProject,
+      onboardingCompleted,
       projectOpenBehavior,
       explorerContextMenuEnabled,
       networkProxyMode,
@@ -266,6 +273,7 @@ function App() {
       gitAutoFetchIntervalMinutes,
       gitCommitMessageProfiles,
       defaultGitCommitMessageProfileId,
+      gitCommitGenerationConfig,
       themeCategory,
       voiceInputTarget,
       voiceShortcut,

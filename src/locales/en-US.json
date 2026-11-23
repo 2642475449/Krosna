@@ -1002,10 +1002,13 @@
     "gitCommitSuccess": "Committed successfully",
     "gitCommitFailed": "Commit failed",
     "gitCommitEmptyMessage": "Enter a commit message",
-    "gitGenerateCommitMessage": "Generate full commit message with AI",
+    "gitGenerateCommitMessage": "Generate commit message",
     "gitGenerateCommitMessageSuccess": "Full commit message generated",
     "gitGenerateCommitMessageSuccessWithProfile": "Commit message generated with “{{profile}}”",
     "gitGenerateCommitMessageFailed": "Failed to generate full commit message",
+    "gitGenerateCommitMessageDraftPreserved": "Draft was edited during generation; your current input was kept",
+    "gitGenerateCommitMessageRetryHint": "Try again or adjust the generator settings in Settings → Git.",
+    "gitGenerateCommitMessageAgentRequired": "Choose an agent for commit message generation in Settings → Git or Settings → Agents first.",
     "gitGenerationExitCode": "Exit code: {{code}}.",
     "gitGenerationErrors": {
       "capacity": "The current CLI model is temporarily busy after {{attempts}} attempts. Try generating again later.",
@@ -1701,6 +1704,22 @@
       "defaultChanged": "{{name}} is now the default agent",
       "defaultUnavailable": "The default agent is not installed or currently unavailable. Choose another agent.",
       "defaultRequired": "Choose a default agent in Settings → Agents first.",
+      "gitGenerator": {
+        "title": "Commit message generator",
+        "agent": "Agent",
+        "inheritDefault": "Follow default agent ({{agent}})",
+        "inheritDefaultUnset": "Follow default agent (not set)",
+        "notInstalled": "Not installed",
+        "model": "Model",
+        "modelAutoFlash": "Auto (prefer Flash fast model)",
+        "reasoningEffort": "Reasoning effort",
+        "reasoningAutoLow": "Auto (Low)",
+        "refreshOptions": "Refresh available options",
+        "loadingOptions": "Loading available model options…",
+        "cliManagedHint": "Model and reasoning effort follow this CLI's current configuration.",
+        "acpFallbackHint": "Antigravity runs in an isolated ACP session and falls back to the current available model on the same agent if unavailable.",
+        "inspectFailed": "Could not load ACP model options; generation will use default settings."
+      },
       "gitProfiles": {
         "layout": {
           "title": "AI commit message styles",
@@ -2839,6 +2858,9 @@
       "terminal": "Terminal",
       "stateManagement": "State Management",
       "appId": "App Identifier",
+      "onboardingGuide": "Setup Guide",
+      "onboardingGuideDesc": "Reopen the first-run wizard to configure appearance, agents, and preferences",
+      "openOnboardingGuide": "Reopen",
       "description": "Krosna is a shared desktop workspace for the local AI coding agents you already use. Claude Code, Codex, Antigravity CLI, OpenCode, and Qoder CLI can work within one flow—from projects and sessions to an embedded terminal, Skills, Hooks, and MCP—so you can preserve context, switch collaborators, and keep complex work moving."
     },
     "quickMenu": {
@@ -3191,6 +3213,27 @@
       "clearFailed": "Unable to clear usage history"
     },
     "archived": {
+      "searchLabel": "Search",
+      "projectLabel": "Project",
+      "sortWithinProject": "Sort within projects",
+      "manage": "Manage archives",
+      "selectVisible": "Select visible sessions on this page",
+      "selectSession": "Select session “{{session}}”",
+      "clearSelection": "Clear selection",
+      "clearFilters": "Clear filters",
+      "restoreNamed": "Restore session “{{session}}”",
+      "sessionActions": "Actions for session “{{session}}”",
+      "deleteAcrossProjects": "Delete archives across all projects",
+      "confirmDeleteNamed": "Permanently delete “{{session}}”?",
+      "confirmDeleteProject": "Project: {{project}}. This cannot be undone.",
+      "confirmDeleteAllProjects": "Permanently delete {{count}} archived sessions across all projects?",
+      "confirmDeleteAllScope": "This includes sessions outside the current filters and cannot be undone.",
+      "deletePermanently": "Delete permanently",
+      "sessionsDeleted": "{{count}} sessions deleted",
+      "sessionsChanged": "These sessions are no longer archived.",
+      "restoreFailed": "Could not restore the sessions. Try again.",
+      "deleteFailed": "Could not delete the archived sessions. Try again.",
+      "unknownTime": "Unknown date",
       "title": "Archived Sessions",
       "headerDesc": "View, restore, or permanently delete archived sessions.",
       "empty": "No archived sessions",
@@ -3528,6 +3571,76 @@
       "teal": "Teal",
       "indigo": "Indigo",
       "copper": "Copper"
+    }
+  },
+  "onboarding": {
+    "railAriaLabel": "Setup steps",
+    "close": "Close setup guide",
+    "skip": "Skip setup",
+    "back": "Back",
+    "continue": "Continue",
+    "finish": "Get Started",
+    "steps": {
+      "appearance": "Appearance",
+      "agents": "Agents",
+      "project": "Project",
+      "preferences": "Preferences"
+    },
+    "appearance": {
+      "title": "Choose language & appearance",
+      "subtitle": "Changes apply immediately and can be updated anytime in Settings",
+      "languageLabel": "Interface language",
+      "languageDesc": "Choose the display language for menus, prompts, and dialogs",
+      "modeLabel": "Color mode",
+      "modeDesc": "Pick light, dark, or follow your system preference",
+      "lightMode": "Light",
+      "darkMode": "Dark",
+      "systemMode": "System",
+      "themeStyleLabel": "Theme palette",
+      "themes": {
+        "lightGlass": "Clear Blue",
+        "lightWarm": "Warm Study",
+        "darkStarry": "Starry Night",
+        "darkMocha": "Warm Mocha"
+      }
+    },
+    "agents": {
+      "title": "Detect installed CLI agents",
+      "subtitle": "Scan your machine for installed coding agents and choose a default",
+      "scanning": "Scanning installed CLI agents…",
+      "detectedSummary": "Detected {{installed}} of {{total}} supported agents",
+      "rescan": "Rescan",
+      "installed": "Installed",
+      "notInstalled": "Not found",
+      "setDefault": "Set default",
+      "defaultBadge": "Default",
+      "copyInstall": "Copy install command",
+      "copyFailed": "Failed to copy install command"
+    },
+    "project": {
+      "title": "Open your first project",
+      "subtitle": "Pick a local folder to manage terminals, agents, and Git in one context",
+      "emptyTitle": "Choose a local project folder",
+      "emptyDesc": "Works with any local directory or Git repository",
+      "selectedTitle": "Project opened",
+      "chooseFolder": "Choose folder",
+      "changeFolder": "Change folder",
+      "recentTitle": "Recent projects",
+      "openRecent": "Open",
+      "skipHint": "You can also skip this step and open a folder or clone a repository anytime from the sidebar."
+    },
+    "preferences": {
+      "title": "Workbench preferences",
+      "subtitle": "Configure shell integration, desktop alerts, and startup behavior",
+      "contextMenuTitle": "Explorer context menu",
+      "contextMenuDesc": "Add \"Open with Krosna\" to the Windows folder context menu",
+      "contextMenuFailed": "Failed to update Explorer context menu integration",
+      "notificationsTitle": "Desktop completion alerts",
+      "notificationsDesc": "Notify when an agent finishes a turn or waits for confirmation",
+      "restoreProjectTitle": "Restore last project on startup",
+      "restoreProjectDesc": "Reopen your previous workspace and terminal tabs automatically",
+      "shellTitle": "Default terminal shell",
+      "shellDesc": "Shell used when opening a new plain terminal tab"
     }
   }
 }

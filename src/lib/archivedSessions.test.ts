@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterAndSortArchivedRows,
+  groupArchivedRowsByProject,
   normalizeArchivedSessionGroups,
   type ArchivedRow,
 } from "@/lib/archivedSessions";
@@ -86,4 +87,23 @@ describe("filterAndSortArchivedRows", () => {
       ],
     });
   });
+});
+
+it("keeps project groups contiguous without disturbing the chosen order within a project", () => {
+  const olderKrosnaRow = {
+    ...rows[0],
+    session: { ...rows[0].session, id: "older-krosna", archivedAt: 10 },
+  };
+  const newestKrosnaRow = {
+    ...rows[0],
+    session: { ...rows[0].session, id: "newest-krosna", archivedAt: 300 },
+  };
+  const sorted = filterAndSortArchivedRows([...rows, olderKrosnaRow, newestKrosnaRow], {
+    query: "", agent: "all", project: "all", sort: "recent",
+  });
+  const grouped = groupArchivedRowsByProject(sorted);
+  expect([...grouped.keys()]).toEqual([rows[0].projectPath, rows[1].projectPath]);
+  expect([...grouped.values()].flat().map((row) => row.session.id)).toEqual([
+    "newest-krosna", "claude-session", "older-krosna", "codex-session",
+  ]);
 });

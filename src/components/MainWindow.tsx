@@ -11,6 +11,7 @@ import AppLayout from "./layout/AppLayout";
 import { BackgroundCloseController } from "./BackgroundCloseController";
 import { startWorkspaceRecoverySync } from "@/store/slices/workspaceRecovery";
 import { TerminalHistoryDrawer } from "./TerminalHistoryDrawer";
+import { OnboardingModal } from "./OnboardingModal";
 import { usePixelPetFileSync } from "@/hooks/usePixelPetFileSync";
 
 /** 主窗口专用入口；语音窗口不加载工作区组件和项目后台任务。 */
@@ -64,5 +65,5 @@ export default function MainWindow({ persistentSettingsReady }: { persistentSett
     return startClipboardSessionSync();
   }, [persistentSettingsReady]);
 
-  return <><BackgroundCloseController /><TerminalHistoryDrawer /><AppLayout /></>;
+  return <><BackgroundCloseController /><TerminalHistoryDrawer /><OnboardingModal /><AppLayout /></>;
 }

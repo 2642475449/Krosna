@@ -13,6 +13,7 @@ import type {
   LayoutNode,
   ProjectWorkspace,
   AppState,
+  ArchiveSessionActions,
 } from "./types";
 import { DEFAULT_PIXEL_PET_CONFIG, PIXEL_PET_PRESETS } from "@/lib/pixelPetConfig";
 export type * from "./types";
@@ -75,6 +76,7 @@ import {
 } from "@/lib/sessions";
 import { normalizeArchivedSessionGroups } from "@/lib/archivedSessions";
 import { createProjectScopedStorage } from "@/lib/projectScopedStorage";
+import { createArchivedSessionActions } from "./slices/archivedSessionsSlice";
 import {
   createDefaultRemoteNotificationChannels,
   type RemoteNotificationProvider,
@@ -711,8 +713,9 @@ function transitionAttentionById(
   );
 }
 
-const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
+const createAppState = (archiveActions: ArchiveSessionActions): StateCreator<AppState> => (set, get) => {
   return {
+      ...archiveActions,
       ...createNetworkProxySlice((partial) => set(partial)),
       ...createVoicePolishSlice((partial) => set(partial)),
       ...createAsrLanguageSlice((partial) => set(partial)),
@@ -1528,84 +1531,6 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
           };
         }),
 
-      unarchiveSession: (projectPath, sessionId) =>
-        set((state) => {
-          const archivedSessions = state.projectArchivedSessions[projectPath] || [];
-          const sessionToUnarchive = archivedSessions.find((s) => s.id === sessionId);
-          if (!sessionToUnarchive) return state;
-
-          const { archived: _, archivedAt: __, ...restoredSession } = sessionToUnarchive;
-          const newArchived = archivedSessions.filter((s) => s.id !== sessionId);
-          const existingSessions = state.projectSessions[projectPath] || [];
-          const sessions = [restoredSession, ...existingSessions];
-
-          const isCurrentProject = state.currentProject?.path === projectPath;
-          if (isCurrentProject) {
-            const currentWorkspace = state.projectWorkspaces[projectPath] || createDefaultWorkspace();
-            return {
-              ...syncProjectState(state, projectPath, sessions, currentWorkspace),
-              projectArchivedSessions: {
-                ...state.projectArchivedSessions,
-                [projectPath]: newArchived,
-              },
-            };
-          }
-
-          return {
-            projectSessions: { ...state.projectSessions, [projectPath]: sessions },
-            projectArchivedSessions: {
-              ...state.projectArchivedSessions,
-              [projectPath]: newArchived,
-            },
-          };
-        }),
-
-      deleteArchivedSession: (projectPath, sessionId) =>
-        set((state) => {
-          const archivedSessions = (state.projectArchivedSessions[projectPath] || []).filter(
-            (s) => s.id !== sessionId
-          );
-          return {
-            projectArchivedSessions: {
-              ...state.projectArchivedSessions,
-              [projectPath]: archivedSessions,
-            },
-            projectAttentionItems: {
-              ...state.projectAttentionItems,
-              [projectPath]: transitionAttentionItems(
-                state.projectAttentionItems[projectPath] ?? [],
-                (item) => item.sessionId === sessionId,
-                "expired",
-                "session-deleted",
-                Date.now()
-              ),
-            },
-          };
-        }),
-
-      deleteAllArchivedSessions: (projectPath) =>
-        set((state) => {
-          const deletedIds = new Set(
-            (state.projectArchivedSessions[projectPath] ?? []).map((session) => session.id)
-          );
-          return {
-            projectArchivedSessions: {
-              ...state.projectArchivedSessions,
-              [projectPath]: [],
-            },
-            projectAttentionItems: {
-              ...state.projectAttentionItems,
-              [projectPath]: transitionAttentionItems(
-                state.projectAttentionItems[projectPath] ?? [],
-                (item) => deletedIds.has(item.sessionId),
-                "expired",
-                "session-deleted",
-                Date.now()
-              ),
-            },
-          };
-        }),
-
       archiveAllSessionsInSection: (section) =>
         set((state) => {
           if (!state.currentProject) return state;
@@ -1971,11 +1896,13 @@ const createAppState: StateCreator<AppState, [], [], AppState> = (set, get) => {
     };
 };
 
-function createPersistOptions(storage?: StateStorage) {
+const APP_STORAGE_KEY = "krosna-settings";
+
+function createPersistOptions(storage: StateStorage) {
   return {
-    name: "krosna-settings",
+    name: APP_STORAGE_KEY,
     version: 5,
-    storage: createJSONStorage(() => storage ?? getDefaultStateStorage()),
+    storage: createJSONStorage(() => storage),
     migrate: (persistedState: unknown) =>
       rehydrateMigrationState(persistedState as Partial<AppState> | undefined),
     partialize: (state: AppState) => {
@@ -2110,8 +2037,20 @@ function createPersistOptions(storage?: StateStorage) {
   };
 }
 
-export function createAppStore(storage?: StateStorage) {
-  return create<AppState>()(persist(createAppState, createPersistOptions(storage)));
+export function createAppStore(storage = getDefaultStateStorage()) {
+  const initializePersisted = (actions: ArchiveSessionActions) =>
+    persist(createAppState(actions), createPersistOptions(storage));
+  const initialize: ReturnType<typeof initializePersisted> = (set, get, api) => {
+    const archiveActions = createArchivedSessionActions({
+      set,
+      storage,
+      storageKey: APP_STORAGE_KEY,
+      syncCurrentProject: (state, path, sessions) =>
+        syncProjectState(state, path, sessions, state.projectWorkspaces[path] ?? createDefaultWorkspace()),
+    });
+    return initializePersisted(archiveActions)(set, get, api);
+  };
+  return create<AppState>()(initialize);
 }
 
 export const useAppStore = createAppStore();

@@ -5,6 +5,7 @@ import type { PersistentSettings } from "@/types";
 import { useAuxiliaryDockStore } from "../auxiliaryDock";
 import { applyRuntimePersistentSettings, getRuntimePersistentSettingsSnapshot, persistentSettingsSync } from "./persistentSettingsRuntime";
 import { useShortcutStore } from "./shortcutSlice";
+import { useGitCommitGenerationStore } from "./gitCommitGenerationSlice";
 
 const RUNTIME_OWNED_FIELDS = new Set(["lastProjectPath", "explorerContextMenuEnabled", "terminalQuickCommands"]);
 
@@ -17,6 +18,7 @@ function applyPatch(settings: Partial<PersistentSettings>, revision?: number): v
   applyRuntimePersistentSettings({ ...snapshot, ...applied });
   if (applied.keyboardShortcuts !== undefined) useShortcutStore.getState().setPersistedOverrides(applied.keyboardShortcuts);
   if (applied.auxiliaryDockWidths !== undefined) useAuxiliaryDockStore.getState().restoreWidths(applied.auxiliaryDockWidths);
+  if (applied.gitCommitGenerationConfig !== undefined) useGitCommitGenerationStore.getState().setPersistedConfig(applied.gitCommitGenerationConfig);
 }
 
 export function applyPersistentSettingsUpdate(payload: unknown): void {

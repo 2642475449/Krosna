@@ -65,31 +65,26 @@ pub async fn git_unstage_files(project_path: String, files: Vec<String>) -> Resu
 fn git_unstage_files_sync(project_path: String, files: Vec<String>) -> Result<(), String> {
     let repo = open_repo(&project_path)?;
     ensure_repository_allows_normal_commit(&repo)?;
+    if files.is_empty() {
+        return Ok(());
+    }
+    drop(repo);
 
-    if let Ok(head) = repo.head() {
-        let head_commit = head
-            .peel_to_commit()
-            .map_err(|e| format!("获取 HEAD 提交失败: {}", e))?;
-
-        let pathspecs: Vec<&std::path::Path> = files
-            .iter()
-            .map(|f| std::path::Path::new(f.as_str()))
-            .collect();
-        repo.reset_default(Some(&head_commit.into_object()), pathspecs.iter().copied())
-            .map_err(|e| format!("取消暂存失败: {}", e))?;
+    // 省略提交参数，Git 会在初始仓库中从空树恢复索引。
+    let output =
+        super::utils::run_git_with_literal_paths(&project_path, &["reset", "--quiet"], &files)
+            .map_err(|error| format!("取消暂存失败: {}", error))?;
+    if output.status.success() {
         return Ok(());
     }
 
-    // Initial repository without HEAD: unstage by removing entries from the index.
-    let mut index = repo.index().map_err(|e| format!("获取索引失败: {}", e))?;
-    for file in &files {
-        index
-            .remove_path(std::path::Path::new(file))
-            .map_err(|e| format!("取消暂存 {} 失败: {}", file, e))?;
-    }
-    index.write().map_err(|e| format!("写入索引失败: {}", e))?;
-
-    Ok(())
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let detail = stderr.trim();
+    Err(if detail.is_empty() {
+        "取消暂存失败".to_string()
+    } else {
+        format!("取消暂存失败: {}", detail)
+    })
 }
 
 /// Discard changes.
@@ -122,7 +117,8 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
     }
 
     let mut tracked_paths = Vec::new();
-    for file in &files {
+    let mut untracked_paths = Vec::new();
+    for file in files {
         let status = status_map
             .get(file.as_str())
             .copied()
@@ -137,7 +133,7 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
         let is_untracked_only = status.contains(git2::Status::WT_NEW) && !has_staged_change;
 
         if is_untracked_only {
-            super::utils::trash_worktree_path(&project_path, file)?;
+            untracked_paths.push(file);
             continue;
         }
 
@@ -145,7 +141,7 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
         // change. Ignore an old rename path passed by the UI: restoring it can
         // make libgit2 report success without touching the actual file.
         if status != git2::Status::CURRENT {
-            tracked_paths.push(file.as_str());
+            tracked_paths.push(file);
         }
     }
 
@@ -153,12 +149,11 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
         // Restore the working tree from the index, retaining any staged change.
         // Use Git itself instead of libgit2's selective checkout: on Windows the
         // latter can return success while a path was not actually updated.
-        let output = git_command()
-            .args(["restore", "--worktree", "--"])
-            .args(&tracked_paths)
-            .current_dir(crate::path_utils::normalize_input_path(&project_path))
-            .output()
-            .map_err(|e| format!("执行 git restore 失败: {}", e))?;
+        let output = super::utils::run_git_with_literal_paths(
+            &project_path,
+            &["restore", "--worktree"],
+            &tracked_paths,
+        )?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -177,6 +172,8 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
             .include_untracked(true)
             .include_ignored(false)
             .recurse_untracked_dirs(true);
+        let tracked_paths: std::collections::HashSet<&str> =
+            tracked_paths.iter().map(String::as_str).collect();
         let remaining_paths: Vec<String> = repo
             .statuses(Some(&mut verify_opts))
             .map_err(|e| format!("验证丢弃结果失败: {}", e))?
@@ -201,6 +198,11 @@ fn git_discard_changes_sync(project_path: String, files: Vec<String>) -> Result<
                 remaining_paths.join(", ")
             ));
         }
+    }
+
+    // 先完成并验证已跟踪文件的恢复，避免 Git 报错前就移动未跟踪文件。
+    for file in untracked_paths {
+        super::utils::trash_worktree_path(&project_path, &file)?;
     }
 
     Ok(())
@@ -287,15 +289,21 @@ mod tests {
     use tempfile::TempDir;
 
     fn committed_repo() -> (TempDir, Repository) {
+        committed_repo_with_files(&["tracked.txt"])
+    }
+
+    fn committed_repo_with_files(files: &[&str]) -> (TempDir, Repository) {
         let temp_dir = TempDir::new().unwrap();
         let repo = Repository::init(temp_dir.path()).unwrap();
         repo.config()
             .unwrap()
             .set_bool("core.autocrlf", false)
             .unwrap();
-        fs::write(temp_dir.path().join("tracked.txt"), "base\n").unwrap();
         let mut index = repo.index().unwrap();
-        index.add_path(std::path::Path::new("tracked.txt")).unwrap();
+        for file in files {
+            fs::write(temp_dir.path().join(file), "base\n").unwrap();
+            index.add_path(std::path::Path::new(file)).unwrap();
+        }
         index.write().unwrap();
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
@@ -304,6 +312,43 @@ mod tests {
             .unwrap();
         drop(tree);
         (temp_dir, repo)
+    }
+
+    #[test]
+    fn unstage_only_resets_the_selected_literal_path_before_and_after_first_commit() {
+        for has_head in [true, false] {
+            let (temp_dir, repo) = if has_head {
+                committed_repo()
+            } else {
+                let temp_dir = TempDir::new().unwrap();
+                let repo = Repository::init(temp_dir.path()).unwrap();
+                (temp_dir, repo)
+            };
+            let head_before = repo.head().ok().and_then(|head| head.target());
+            let selected = "[ab].txt";
+            let unselected = "a.txt";
+            let mut index = repo.index().unwrap();
+            for file in [selected, unselected] {
+                fs::write(temp_dir.path().join(file), b"edited\n").unwrap();
+                index.add_path(std::path::Path::new(file)).unwrap();
+            }
+            index.write().unwrap();
+
+            let project_path = temp_dir.path().to_string_lossy().into_owned();
+            super::git_unstage_files_sync(project_path.clone(), vec![selected.to_string()])
+                .unwrap();
+            super::git_unstage_files_sync(project_path, vec![]).unwrap();
+
+            index.read(true).unwrap();
+            assert!(index.get_path(std::path::Path::new(selected), 0).is_none());
+            assert!(index
+                .get_path(std::path::Path::new(unselected), 0)
+                .is_some());
+            assert_eq!(repo.head().ok().and_then(|head| head.target()), head_before);
+            for file in [selected, unselected] {
+                assert_eq!(fs::read(temp_dir.path().join(file)).unwrap(), b"edited\n");
+            }
+        }
     }
 
     #[test]
@@ -351,6 +396,81 @@ mod tests {
             repo.status_file(std::path::Path::new("tracked.txt"))
                 .unwrap(),
             Status::INDEX_MODIFIED
+        );
+    }
+
+    #[test]
+    fn discard_matches_the_selected_filename_literally() {
+        let (temp_dir, _) = committed_repo_with_files(&["[01].txt", "0.txt"]);
+        for file in ["[01].txt", "0.txt"] {
+            fs::write(temp_dir.path().join(file), "changed\n").unwrap();
+        }
+
+        git_discard_changes_sync(
+            temp_dir.path().to_string_lossy().into_owned(),
+            vec!["[01].txt".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read(temp_dir.path().join("[01].txt")).unwrap(),
+            b"base\n"
+        );
+        assert_eq!(
+            fs::read(temp_dir.path().join("0.txt")).unwrap(),
+            b"changed\n"
+        );
+    }
+
+    #[test]
+    fn discard_handles_a_list_exceeding_the_windows_command_line_limit() {
+        let selected: Vec<String> = (0..1500)
+            .map(|i| format!("tracked-{i:04}-with-a-long-enough-name.txt"))
+            .collect();
+        assert!(selected.iter().map(|file| file.len() + 1).sum::<usize>() > 32767);
+        let mut files: Vec<&str> = selected.iter().map(String::as_str).collect();
+        files.push("unselected.txt");
+        let (temp_dir, _) = committed_repo_with_files(&files);
+        for file in &files {
+            fs::write(temp_dir.path().join(file), "changed\n").unwrap();
+        }
+
+        git_discard_changes_sync(
+            temp_dir.path().to_string_lossy().into_owned(),
+            selected.clone(),
+        )
+        .unwrap();
+
+        for file in &files[..files.len() - 1] {
+            assert_eq!(fs::read(temp_dir.path().join(file)).unwrap(), b"base\n");
+        }
+        assert_eq!(
+            fs::read(temp_dir.path().join("unselected.txt")).unwrap(),
+            b"changed\n"
+        );
+    }
+
+    #[test]
+    fn discard_keeps_untracked_files_in_place_if_restore_fails() {
+        let (temp_dir, repo) = committed_repo();
+        fs::write(temp_dir.path().join("tracked.txt"), "changed\n").unwrap();
+        fs::write(temp_dir.path().join("untracked.txt"), "keep me\n").unwrap();
+        fs::write(repo.path().join("index.lock"), "").unwrap();
+
+        let error = git_discard_changes_sync(
+            temp_dir.path().to_string_lossy().into_owned(),
+            vec!["untracked.txt".to_string(), "tracked.txt".to_string()],
+        )
+        .unwrap_err();
+
+        assert!(error.contains("index.lock"), "{error}");
+        assert_eq!(
+            fs::read(temp_dir.path().join("tracked.txt")).unwrap(),
+            b"changed\n"
+        );
+        assert_eq!(
+            fs::read(temp_dir.path().join("untracked.txt")).unwrap(),
+            b"keep me\n"
         );
     }
 

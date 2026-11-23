@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckOutlined,
   CloseOutlined,
@@ -11,7 +11,21 @@ import {
 } from "@ant-design/icons";
 import { Button, Input, Modal, Select, Switch, Tooltip, message } from "antd";
 import { useTranslation } from "react-i18next";
-import type { GitCommitMessageProfile } from "@/types";
+import type {
+  AgentCliInfo,
+  AiAgentId,
+  GitCommitGeneratorCapabilities,
+  GitCommitMessageProfile,
+} from "@/types";
+import {
+  AI_AGENT_ORDER,
+  getAgentDisplayName,
+  isAiAgentId,
+} from "@/lib/agents";
+import {
+  gitInspectCommitGeneratorOptions,
+  inspectAgentClis,
+} from "@/lib/api";
 import {
   createDuplicateGitCommitMessageProfileName,
   GIT_COMMIT_MESSAGE_PRESET_TEMPLATES,
@@ -23,10 +37,16 @@ import {
   type GitCommitMessagePresetTemplate,
 } from "@/lib/gitCommitMessageProfiles";
 import { useAppStore } from "@/store";
+import {
+  resolveEffectiveCommitAgentId,
+  useGitCommitGenerationStore,
+} from "@/store/slices/gitCommitGenerationSlice";
 import { LedgerRowPopover } from "./LedgerRowPopover";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 const FETCH_INTERVAL_MINUTES = [1, 3, 5, 10, 20, 30, 60] as const;
+const INHERIT_AGENT_VALUE = "__inherit__";
+const AUTO_OPTION_VALUE = "__auto__";
 
 /** Manages Git background fetch cadence and AI commit-message profiles in a compact ledger. */
 export function GitSettingsPage() {
@@ -34,6 +54,8 @@ export function GitSettingsPage() {
   const autoFetch = useAppStore((s) => s.gitAutoFetch);
   const interval = useAppStore((s) => s.gitAutoFetchIntervalMinutes);
   const setAutoFetch = useAppStore((s) => s.setGitAutoFetch);
+  const defaultAgentId = useAppStore((s) => s.defaultAgentId);
+  const currentProjectPath = useAppStore((s) => s.currentProject?.path ?? null);
   const gitCommitMessageProfiles = useAppStore((state) => state.gitCommitMessageProfiles);
   const defaultGitCommitMessageProfileId = useAppStore(
     (state) => state.defaultGitCommitMessageProfileId,
@@ -41,6 +63,138 @@ export function GitSettingsPage() {
   const setGitCommitMessageProfiles = useAppStore(
     (state) => state.setGitCommitMessageProfiles,
   );
+  const commitGenerationConfig = useGitCommitGenerationStore((s) => s.config);
+  const setCommitGenerationConfig = useGitCommitGenerationStore((s) => s.setConfig);
+
+  const [agentClis, setAgentClis] = useState<AgentCliInfo[]>([]);
+  const [generatorCapabilities, setGeneratorCapabilities] =
+    useState<GitCommitGeneratorCapabilities | null>(null);
+  const [loadingCapabilities, setLoadingCapabilities] = useState(false);
+  const [capabilitiesError, setCapabilitiesError] = useState(false);
+
+  const effectiveAgentId = resolveEffectiveCommitAgentId(
+    commitGenerationConfig,
+    defaultAgentId,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    inspectAgentClis()
+      .then((list) => {
+        if (!cancelled) setAgentClis(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadGeneratorCapabilities = useCallback(
+    async (agentId: AiAgentId) => {
+      setLoadingCapabilities(true);
+      setCapabilitiesError(false);
+      try {
+        const capabilities = await gitInspectCommitGeneratorOptions(
+          agentId,
+          currentProjectPath,
+        );
+        setGeneratorCapabilities(capabilities);
+      } catch {
+        setGeneratorCapabilities(null);
+        setCapabilitiesError(true);
+      } finally {
+        setLoadingCapabilities(false);
+      }
+    },
+    [currentProjectPath],
+  );
+
+  useEffect(() => {
+    if (effectiveAgentId !== "antigravity") {
+      setGeneratorCapabilities(null);
+      setCapabilitiesError(false);
+      setLoadingCapabilities(false);
+      return;
+    }
+    void loadGeneratorCapabilities("antigravity");
+  }, [effectiveAgentId, loadGeneratorCapabilities]);
+
+  const installedById = useMemo(
+    () => new Map(agentClis.map((cli) => [cli.id, cli.installed])),
+    [agentClis],
+  );
+
+  const generatorAgentOptions = useMemo(() => {
+    const inheritLabel = defaultAgentId
+      ? t("settings.agents.gitGenerator.inheritDefault", {
+          agent: getAgentDisplayName(defaultAgentId),
+        })
+      : t("settings.agents.gitGenerator.inheritDefaultUnset");
+    return [
+      { value: INHERIT_AGENT_VALUE, label: inheritLabel },
+      ...AI_AGENT_ORDER.map((id) => {
+        const installed = installedById.get(id);
+        const name = getAgentDisplayName(id);
+        return {
+          value: id,
+          label:
+            installed === false
+              ? `${name} (${t("settings.agents.gitGenerator.notInstalled")})`
+              : name,
+        };
+      }),
+    ];
+  }, [defaultAgentId, installedById, t]);
+
+  const generatorModelOptions = useMemo(() => {
+    const items = [
+      {
+        value: AUTO_OPTION_VALUE,
+        label: t("settings.agents.gitGenerator.modelAutoFlash"),
+      },
+      ...(generatorCapabilities?.models ?? []).map((opt) => ({
+        value: opt.value,
+        label: opt.name,
+      })),
+    ];
+    if (
+      commitGenerationConfig.model &&
+      !items.some((item) => item.value === commitGenerationConfig.model)
+    ) {
+      items.push({
+        value: commitGenerationConfig.model,
+        label: commitGenerationConfig.model,
+      });
+    }
+    return items;
+  }, [commitGenerationConfig.model, generatorCapabilities?.models, t]);
+
+  const generatorEffortOptions = useMemo(() => {
+    const items = [
+      {
+        value: AUTO_OPTION_VALUE,
+        label: t("settings.agents.gitGenerator.reasoningAutoLow"),
+      },
+      ...(generatorCapabilities?.reasoningEfforts ?? []).map((opt) => ({
+        value: opt.value,
+        label: opt.name,
+      })),
+    ];
+    if (
+      commitGenerationConfig.reasoningEffort &&
+      !items.some((item) => item.value === commitGenerationConfig.reasoningEffort)
+    ) {
+      items.push({
+        value: commitGenerationConfig.reasoningEffort,
+        label: commitGenerationConfig.reasoningEffort,
+      });
+    }
+    return items;
+  }, [
+    commitGenerationConfig.reasoningEffort,
+    generatorCapabilities?.reasoningEfforts,
+    t,
+  ]);
 
   // 账本行就近锚定编辑浮层状态
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -338,6 +492,103 @@ export function GitSettingsPage() {
             onChange={setDefaultProfile}
           />
         </div>
+      </section>
+
+      <section
+        className="app-git-generator"
+        aria-label={t("settings.agents.gitGenerator.title")}
+      >
+        <div className="app-git-generator-head">
+          <span className="app-git-generator-title">
+            {t("settings.agents.gitGenerator.title")}
+          </span>
+          {effectiveAgentId === "antigravity" && (
+            <Button
+              size="small"
+              type="text"
+              icon={<ReloadOutlined aria-hidden="true" spin={loadingCapabilities} />}
+              disabled={loadingCapabilities}
+              onClick={() => void loadGeneratorCapabilities("antigravity")}
+            >
+              {t("settings.agents.gitGenerator.refreshOptions")}
+            </Button>
+          )}
+        </div>
+
+        <div className="app-git-generator-fields">
+          <div className="app-ledger-pref-item">
+            <span className="app-ledger-pref-label">
+              {t("settings.agents.gitGenerator.agent")}
+            </span>
+            <Select
+              size="small"
+              className="app-git-generator-select"
+              popupMatchSelectWidth={false}
+              value={commitGenerationConfig.agentId ?? INHERIT_AGENT_VALUE}
+              aria-label={t("settings.agents.gitGenerator.agent")}
+              options={generatorAgentOptions}
+              onChange={(value) =>
+                setCommitGenerationConfig({
+                  agentId: value === INHERIT_AGENT_VALUE || !isAiAgentId(value) ? null : value,
+                })
+              }
+            />
+          </div>
+
+          {effectiveAgentId === "antigravity" && (
+            <>
+              <div className="app-ledger-pref-item">
+                <span className="app-ledger-pref-label">
+                  {t("settings.agents.gitGenerator.model")}
+                </span>
+                <Select
+                  size="small"
+                  className="app-git-generator-select"
+                  popupMatchSelectWidth={false}
+                  loading={loadingCapabilities}
+                  value={commitGenerationConfig.model ?? AUTO_OPTION_VALUE}
+                  aria-label={t("settings.agents.gitGenerator.model")}
+                  options={generatorModelOptions}
+                  onChange={(value) =>
+                    setCommitGenerationConfig({
+                      model: value === AUTO_OPTION_VALUE ? null : String(value),
+                    })
+                  }
+                />
+              </div>
+
+              <div className="app-ledger-pref-item">
+                <span className="app-ledger-pref-label">
+                  {t("settings.agents.gitGenerator.reasoningEffort")}
+                </span>
+                <Select
+                  size="small"
+                  className="app-git-generator-effort-select"
+                  popupMatchSelectWidth={false}
+                  loading={loadingCapabilities}
+                  value={commitGenerationConfig.reasoningEffort ?? AUTO_OPTION_VALUE}
+                  aria-label={t("settings.agents.gitGenerator.reasoningEffort")}
+                  options={generatorEffortOptions}
+                  onChange={(value) =>
+                    setCommitGenerationConfig({
+                      reasoningEffort: value === AUTO_OPTION_VALUE ? null : String(value),
+                    })
+                  }
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <p className="app-git-generator-hint">
+          {effectiveAgentId === "antigravity"
+            ? loadingCapabilities
+              ? t("settings.agents.gitGenerator.loadingOptions")
+              : capabilitiesError
+                ? t("settings.agents.gitGenerator.inspectFailed")
+                : t("settings.agents.gitGenerator.acpFallbackHint")
+            : t("settings.agents.gitGenerator.cliManagedHint")}
+        </p>
       </section>
 
       <div

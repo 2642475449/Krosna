@@ -18,6 +18,7 @@ import { CopyFeedbackIcon } from "@/components/ui/CopyFeedbackIcon";
 import { useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingRow } from "@/components/settings/SettingRow";
+import { useOnboardingStore } from "@/store/slices/onboardingSlice";
 import { AboutFlowBackdrop } from "./AboutFlowBackdrop";
 
 const ABOUT_LINKS: Record<"website" | "github", string | null> = {
@@ -316,6 +317,14 @@ export const AboutPage: FC = () => {
           <span className="break-all font-mono text-sm text-[var(--cs-text-secondary)]">
             com.krosna.desktop
           </span>
+        </SettingRow>
+        <SettingRow
+          label={t("settings.about.onboardingGuide")}
+          description={t("settings.about.onboardingGuideDesc")}
+        >
+          <Button onClick={() => useOnboardingStore.getState().openOnboarding()}>
+            {t("settings.about.openOnboardingGuide")}
+          </Button>
         </SettingRow>
       </SettingsSection>
 

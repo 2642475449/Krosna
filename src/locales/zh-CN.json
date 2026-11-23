@@ -1002,10 +1002,13 @@
     "gitCommitSuccess": "提交成功",
     "gitCommitFailed": "提交失败",
     "gitCommitEmptyMessage": "请输入提交信息",
-    "gitGenerateCommitMessage": "AI 生成完整提交信息",
+    "gitGenerateCommitMessage": "生成提交信息",
     "gitGenerateCommitMessageSuccess": "已生成完整提交信息",
     "gitGenerateCommitMessageSuccessWithProfile": "已使用“{{profile}}”生成提交信息",
     "gitGenerateCommitMessageFailed": "生成完整提交信息失败",
+    "gitGenerateCommitMessageDraftPreserved": "草稿已在生成期间修改，已保留当前输入",
+    "gitGenerateCommitMessageRetryHint": "可重试或前往「设置 → Git」调整生成配置。",
+    "gitGenerateCommitMessageAgentRequired": "请先在「设置 → Git」或「设置 → 智能体」中选择用于生成提交信息的智能体。",
     "gitGenerationExitCode": "退出码：{{code}}。",
     "gitGenerationErrors": {
       "capacity": "当前 CLI 模型暂时繁忙，已尝试 {{attempts}} 次。请稍后重新生成。",
@@ -1701,6 +1704,22 @@
       "defaultChanged": "已将 {{name}} 设为默认智能体",
       "defaultUnavailable": "默认智能体未安装或当前不可用，请重新选择。",
       "defaultRequired": "请先在设置 → 智能体中选择默认智能体。",
+      "gitGenerator": {
+        "title": "提交信息生成配置",
+        "agent": "生成智能体",
+        "inheritDefault": "跟随默认智能体（{{agent}}）",
+        "inheritDefaultUnset": "跟随默认智能体（未设置）",
+        "notInstalled": "未安装",
+        "model": "模型",
+        "modelAutoFlash": "自动（优先 Flash 快模型）",
+        "reasoningEffort": "推理强度",
+        "reasoningAutoLow": "自动（低推理）",
+        "refreshOptions": "刷新可用选项",
+        "loadingOptions": "正在读取可用模型选项…",
+        "cliManagedHint": "模型与推理强度沿用该 CLI 的当前配置。",
+        "acpFallbackHint": "Antigravity 通过 ACP 独立会话生成；若所选快模型不可用或被拒绝，将自动沿用当前可用模型。",
+        "inspectFailed": "未能读取 ACP 模型选项，生成时将自动使用默认配置。"
+      },
       "gitProfiles": {
         "layout": {
           "title": "AI 提交信息风格",
@@ -2839,6 +2858,9 @@
       "terminal": "终端",
       "stateManagement": "状态管理",
       "appId": "应用标识",
+      "onboardingGuide": "新手指引",
+      "onboardingGuideDesc": "重新打开首次安装配置向导，快速调整外观、智能体与偏好",
+      "openOnboardingGuide": "重新打开",
       "description": "Krosna 是为本地 AI 编程智能体打造的统一工作台。它将 Claude Code、Codex、Antigravity CLI、OpenCode 与 Qoder CLI 放进同一条工作流：从项目与会话，到嵌入式终端、Skills、Hooks 和 MCP，你可以保持上下文、切换协作者，并持续推进复杂任务。"
     },
     "quickMenu": {
@@ -3191,6 +3213,27 @@
       "clearFailed": "无法清除用量历史"
     },
     "archived": {
+      "searchLabel": "搜索",
+      "projectLabel": "项目",
+      "sortWithinProject": "项目内排序",
+      "manage": "归档管理",
+      "selectVisible": "选择本页可见会话",
+      "selectSession": "选择会话「{{session}}」",
+      "clearSelection": "清除选择",
+      "clearFilters": "清除筛选",
+      "restoreNamed": "恢复会话「{{session}}」",
+      "sessionActions": "会话「{{session}}」的操作",
+      "deleteAcrossProjects": "删除所有项目的归档会话",
+      "confirmDeleteNamed": "永久删除会话「{{session}}」？",
+      "confirmDeleteProject": "所属项目：{{project}}。此操作不可撤销。",
+      "confirmDeleteAllProjects": "永久删除所有项目的 {{count}} 个归档会话？",
+      "confirmDeleteAllScope": "包含当前筛选条件之外的会话。此操作不可撤销。",
+      "deletePermanently": "永久删除",
+      "sessionsDeleted": "已删除 {{count}} 个会话",
+      "sessionsChanged": "这些会话已不在归档中。",
+      "restoreFailed": "未能恢复会话，请重试。",
+      "deleteFailed": "未能删除归档会话，请重试。",
+      "unknownTime": "时间未知",
       "title": "已归档会话",
       "headerDesc": "查看、恢复或永久删除已归档的历史会话。",
       "empty": "暂无已归档会话",
@@ -3528,6 +3571,76 @@
       "teal": "蓝绿色",
       "indigo": "靛蓝色",
       "copper": "铜色"
+    }
+  },
+  "onboarding": {
+    "railAriaLabel": "初始化步骤导航",
+    "close": "关闭引导",
+    "skip": "跳过设置",
+    "back": "返回",
+    "continue": "继续",
+    "finish": "开始使用",
+    "steps": {
+      "appearance": "外观",
+      "agents": "智能体",
+      "project": "项目",
+      "preferences": "偏好"
+    },
+    "appearance": {
+      "title": "选择语言与外观",
+      "subtitle": "所有选项即时生效，之后随时可在设置中调整",
+      "languageLabel": "界面语言",
+      "languageDesc": "设置菜单、提示与引导界面的显示语言",
+      "modeLabel": "外观模式",
+      "modeDesc": "选择浅色、深色或自动跟随系统主题",
+      "lightMode": "浅色",
+      "darkMode": "深色",
+      "systemMode": "跟随系统",
+      "themeStyleLabel": "配色方案",
+      "themes": {
+        "lightGlass": "清朗蓝白",
+        "lightWarm": "暖木书房",
+        "darkStarry": "深邃星空",
+        "darkMocha": "暖棕摩卡"
+      }
+    },
+    "agents": {
+      "title": "检测本机智能体 CLI",
+      "subtitle": "自动识别已安装的终端智能体，并设置新建会话时的默认工具",
+      "scanning": "正在检测本机已安装的智能体 CLI…",
+      "detectedSummary": "已检测到 {{installed}} / {{total}} 个可用智能体",
+      "rescan": "重新检测",
+      "installed": "已安装",
+      "notInstalled": "未检测到",
+      "setDefault": "设为默认",
+      "defaultBadge": "当前默认",
+      "copyInstall": "复制安装命令",
+      "copyFailed": "复制命令失败，请手动复制"
+    },
+    "project": {
+      "title": "打开你的第一个项目",
+      "subtitle": "选择一个本地代码目录，即可在同一上下文中管理终端、智能体与 Git",
+      "emptyTitle": "选择本地项目目录",
+      "emptyDesc": "支持任意本地代码文件夹或 Git 仓库",
+      "selectedTitle": "已打开项目",
+      "chooseFolder": "选择文件夹",
+      "changeFolder": "更换文件夹",
+      "recentTitle": "最近打开",
+      "openRecent": "打开",
+      "skipHint": "也可以先跳过此步，稍后在左侧边栏或标题栏随时打开本地项目或克隆仓库。"
+    },
+    "preferences": {
+      "title": "配置工作台偏好",
+      "subtitle": "按日常使用习惯启用右键集成、通知与终端环境",
+      "contextMenuTitle": "资源管理器右键菜单",
+      "contextMenuDesc": "在 Windows 文件夹右键菜单中添加「使用 Krosna 打开」",
+      "contextMenuFailed": "更新右键菜单集成失败，请稍后在设置中重试",
+      "notificationsTitle": "任务完成桌面通知",
+      "notificationsDesc": "智能体完成回复或等待确认时发送系统通知",
+      "restoreProjectTitle": "启动时自动恢复上次项目",
+      "restoreProjectDesc": "重新打开 Krosna 时恢复上次的工作区与终端标签",
+      "shellTitle": "默认终端 Shell",
+      "shellDesc": "新建普通终端标签页时使用的命令行环境"
     }
   }
 }

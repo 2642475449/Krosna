@@ -41,6 +41,35 @@ it("keeps text on antd primary surfaces readable", () => {
   }
 });
 
+it("keeps unchecked, checked, mixed, hover and focused checkboxes distinct in every theme", () => {
+  const checkbox = ANTD_COMPONENT_OVERRIDES.Checkbox;
+  // WCAG 1.4.11：控件轮廓、状态图形和焦点环必须与相邻底色至少达到 3:1。
+  const minNonTextContrast = 3;
+  const surfaces = ["bg-app", "bg-card-solid", "bg-elevated", "bg-hover", "bg-active"];
+
+  for (const theme of THEMES) {
+    const mark = resolveToken(theme, checkbox.colorWhite);
+    const restingFill = resolveToken(theme, checkbox.colorBgContainer);
+    const outline = resolveToken(theme, checkbox.colorBorder);
+    const selected = resolveToken(theme, checkbox.colorPrimary);
+    const selectedHover = resolveToken(theme, checkbox.colorPrimaryHover);
+    const focus = resolveToken(theme, checkbox.colorPrimaryBorder);
+
+    expect(getContrastRatio(outline, restingFill), `${theme} checkbox outline`).toBeGreaterThanOrEqual(minNonTextContrast);
+    expect(getContrastRatio(selected, restingFill), `${theme} mixed-state mark`).toBeGreaterThanOrEqual(minNonTextContrast);
+    for (const fill of [selected, selectedHover]) {
+      expect(getContrastRatio(mark, fill), `${theme} checked mark`).toBeGreaterThanOrEqual(MIN_UI_CONTRAST_RATIO);
+    }
+
+    for (const surface of surfaces) {
+      const background = readThemeVariables(themeCss, theme)[surface];
+      for (const [state, indicator] of Object.entries({ outline, selected, selectedHover, focus })) {
+        expect(getContrastRatio(indicator, background), `${theme} ${state} on ${surface}`).toBeGreaterThanOrEqual(minNonTextContrast);
+      }
+    }
+  }
+});
+
 it("overrides tooltip text and background as a pair", () => {
   // 回归：全局 colorTextLightSolid 为近黑色时，Tooltip 若沿用 AntD 默认灰色背景会变成灰底深字
   const tooltip = ANTD_COMPONENT_OVERRIDES.Tooltip;

@@ -891,6 +891,52 @@
   min-width: 148px;
 }
 
+.app-git-generator {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--cs-border-card);
+  border-radius: 9px;
+  background: var(--cs-bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-git-generator-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-git-generator-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cs-text-primary);
+}
+
+.app-git-generator-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+}
+
+.app-git-generator-select {
+  min-width: 196px;
+}
+
+.app-git-generator-effort-select {
+  min-width: 144px;
+}
+
+.app-git-generator-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--cs-text-tertiary);
+}
+
 .app-git-ledger {
   position: relative;
   border: 1px solid var(--cs-border-card);
@@ -1165,7 +1211,28 @@
   }
 }
 .app-about-settings > .app-about-hero { margin-bottom: 24px; }
-.app-archived-grid { display: grid; grid-template-columns: 24px minmax(0, 1.7fr) minmax(110px, .7fr) minmax(140px, .7fr) 72px; }
+.app-archived-count.ant-tag { margin: 0; background: var(--cs-bg-hover); color: var(--cs-text-secondary); font-size: 12px; }
+.app-archived-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(120px, 170px) minmax(120px, 190px) minmax(120px, 160px) auto; gap: 10px; align-items: end; }
+.app-archived-field { display: grid; gap: 4px; min-width: 0; }
+.app-archived-field > label { color: var(--cs-text-secondary); font-size: 12px; }
+.app-archived-field > .ant-select, .app-archived-field > .ant-input-affix-wrapper { width: 100%; min-width: 0; }
+.app-archived-search .ant-input-prefix, .app-archived-muted { color: var(--cs-text-tertiary); }
+.app-archived-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--cs-border-card); background: var(--cs-bg-hover); color: var(--cs-text-primary); font-size: 12px; }
+.app-archived-grid { display: grid; grid-template-columns: 24px minmax(0, 1.7fr) minmax(110px, .7fr) minmax(132px, .6fr) 72px; align-items: center; gap: 16px; padding-inline: 16px; border-bottom: 1px solid var(--cs-border-card); }
+.app-archived-header { min-height: 44px; color: var(--cs-text-secondary); font-size: 12px; font-weight: 500; }
+.app-archived-row { min-height: 52px; color: var(--cs-text-primary); }
+.app-archived-row:hover, .app-archived-row:focus-within { background: var(--cs-bg-hover); }
+.app-archived-group-button { display: flex; align-items: center; text-align: start; gap: 8px; width: 100%; min-height: 42px; padding: 6px 16px; border-bottom: 1px solid var(--cs-border-card); color: var(--cs-text-primary); font-size: 12px; }
+.app-archived-group-button:hover { background: var(--cs-bg-hover); }
+.app-archived-folder-icon { color: var(--cs-accent-yellow); }
+.app-archived-group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
+.app-archived-group-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cs-text-tertiary); font-family: var(--font-mono); }
+.app-archived-agent, .app-archived-compact-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--cs-text-secondary); font-size: 14px; }
+.app-archived-date { color: var(--cs-text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.app-archived-compact-meta { display: none; flex-wrap: wrap; gap: 3px 6px; font-size: 12px; }
+.app-archived-compact-meta > time { padding-inline-start: 6px; border-inline-start: 1px solid var(--cs-border-card); font-variant-numeric: tabular-nums; }
+.app-archived-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.app-archived-pagination { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px 16px; color: var(--cs-text-secondary); font-size: 12px; }
 .app-network-targets { row-gap: 0; }
 .app-settings :is(button, summary):focus-visible, .app-settings-disclosure__trigger:focus-visible { outline: 2px solid var(--cs-primary); outline-offset: 3px; }
 .app-settings .ant-input, .app-settings .ant-input-affix-wrapper, .app-settings .ant-select, .app-settings .ant-input-number { max-width: 100%; }
@@ -1176,9 +1243,15 @@
   .app-settings-nav__item { justify-content: flex-start; padding-inline: 10px; }
 }
 @container settings (min-width: 700px) { .app-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container settings (max-width: 1100px) {
+  .app-archived-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+  .app-archived-search { grid-column: 1 / -1; }
+}
 @container settings (max-width: 850px) {
-  .app-archived-grid { grid-template-columns: 24px minmax(0, 1fr) 140px 72px; }
-  .app-archived-grid > :nth-child(3) { display: none; }
+  .app-archived-grid { grid-template-columns: 24px minmax(0, 1fr) 72px; }
+  .app-archived-wide-meta { display: none; }
+  .app-archived-row { min-height: 58px; padding-block: 6px; }
+  .app-archived-compact-meta { display: flex; margin-top: 2px; }
 }
 @container settings (max-width: 640px) {
   .app-settings-content { padding: 24px 20px 32px; }
@@ -1186,8 +1259,9 @@
   .app-setting-row { align-items: flex-start; flex-direction: column; gap: 8px; }
   .app-setting-row__control { max-width: 100%; }
   .app-about-highlights { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .app-archived-grid { grid-template-columns: 24px minmax(0, 1fr) 64px; gap: 8px; padding-inline: 4px; }
-  .app-archived-grid > :nth-child(4) { display: none; }
+  .app-archived-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-archived-grid { grid-template-columns: 24px minmax(0, 1fr) 64px; gap: 8px; padding-inline: 8px; }
+  .app-archived-group-button, .app-archived-selection, .app-archived-pagination { padding-inline: 8px; }
 }
 @container settings (max-width: 440px) {
   .app-settings-content { padding-inline: 16px; }
