@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, { error: Error 
     if (!this.state.error) return this.props.children;
     return (
       <div role="alert" className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 p-6"
-        style={{ color: "var(--cs-text-primary)", background: "var(--cs-bg-content)" }}>
+        style={{ color: "var(--cs-text-primary)", background: "var(--cs-bg-card-solid)" }}>
         <strong>{i18n.t("errorBoundary.title")}</strong>
         <p>{i18n.t("errorBoundary.description")}</p>
         <pre className="app-thin-scrollbar max-h-40 max-w-full overflow-auto whitespace-pre-wrap text-xs">{String(this.state.error)}</pre>

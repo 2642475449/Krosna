@@ -25,6 +25,7 @@
   position: absolute;
   inset: 0;
   display: none;
+  background: var(--cs-bg-card-solid);
 }
 
 .app-workspace-tab-content[data-active="true"] {

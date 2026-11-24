@@ -141,7 +141,7 @@ export function TerminalHistoryView({ session, onResume, onReturn }: TerminalHis
     : t("terminal.resumeSession");
 
   return (
-    <div className="app-terminal-history flex h-full min-h-0 flex-col bg-[var(--cs-bg-app)]">
+    <div className="app-terminal-history flex h-full min-h-0 flex-col bg-[var(--cs-bg-card-solid)]">
       <div className="app-terminal-history__banner flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-2.5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
           <AgentIcon agentId={agentId} size={18} />

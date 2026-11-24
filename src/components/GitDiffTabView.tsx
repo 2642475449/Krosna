@@ -178,7 +178,7 @@ function GitDiffTabView({ tabId, isActive = true }: GitDiffTabViewProps) {
           {imageVersions.map((version) => (
             <section
               key={version.label}
-              className="flex min-h-[240px] min-w-0 flex-col bg-[var(--cs-bg-app)]"
+              className="flex min-h-[240px] min-w-0 flex-col bg-[var(--cs-bg-card-solid)]"
             >
               <div className="shrink-0 border-b border-[var(--cs-border-sidebar)] px-3 py-2 text-[11px] font-medium text-[var(--cs-text-secondary)]">
                 {version.label}
@@ -284,7 +284,7 @@ function GitDiffTabView({ tabId, isActive = true }: GitDiffTabViewProps) {
       </div>
 
       <MonacoContextMenu
-        className="flex-1 min-h-0"
+        className="flex-1 min-h-0 bg-[var(--cs-bg-card-solid)]"
         getEditors={() => {
           const editor = diffEditorRef.current;
           return editor

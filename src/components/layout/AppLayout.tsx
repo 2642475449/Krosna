@@ -119,7 +119,7 @@ const RemoteWorkspaceModals = lazy(() => import("@/components/remote/RemoteWorks
 
 function WorkspaceContentFallback() {
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex h-full items-center justify-center bg-[var(--cs-bg-card-solid)]">
       <Spin size="small" />
     </div>
   );

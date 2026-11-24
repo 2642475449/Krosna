@@ -7,10 +7,6 @@
   background: var(--cs-bg-body);
 }
 
-[data-theme="light-warm"] .app-session-resume {
-  background: var(--cs-bg-content);
-}
-
 .app-session-resume__content {
   display: flex;
   flex-direction: column;

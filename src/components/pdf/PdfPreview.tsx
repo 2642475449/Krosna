@@ -840,7 +840,7 @@ export default function PdfPreview({
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollContainerRef}
-          className="h-full overflow-auto bg-[var(--cs-bg-layout)]"
+          className="h-full overflow-auto bg-[var(--cs-bg-card-solid)]"
           style={{ overflowAnchor: "none" }}
         >
           <div className="flex w-max min-w-full flex-col items-center gap-4 p-6">

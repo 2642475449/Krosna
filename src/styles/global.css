@@ -1984,11 +1984,11 @@ html, body, #root {
 }
 
 .app-file-document-view {
-  background: var(--cs-bg-app);
+  background: var(--cs-bg-card-solid);
 }
 
 .app-markdown-preview-shell {
-  background: var(--cs-bg-app);
+  background: var(--cs-bg-card-solid);
   /* 正文按内容撑高；横向居中交给 article 的 auto margin，避免 flex 拉伸滚动锚点。 */
   display: block;
 }

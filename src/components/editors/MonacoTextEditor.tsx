@@ -224,7 +224,7 @@ function MonacoTextEditor({
   return (
     <MonacoContextMenu
       filePath={filePath}
-      className="flex-1 min-h-0 w-full"
+      className="flex-1 min-h-0 w-full bg-[var(--cs-bg-card-solid)]"
       getEditors={() => (editorRef.current ? [editorRef.current] : [])}
       saveAction={
         onSave

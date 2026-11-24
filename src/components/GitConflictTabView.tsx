@@ -56,7 +56,7 @@ function ConflictSourcePane({
   const isDeletion = content === null;
 
   return (
-    <section className="flex min-h-0 flex-col bg-[var(--cs-bg-app)]">
+    <section className="flex min-h-0 flex-col bg-[var(--cs-bg-card-solid)]">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--cs-border-sidebar)] px-3">
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--cs-text-primary)]">{title}</span>
         {isDeletion && onAcceptDeletion && deleteActionLabel ? (
@@ -70,9 +70,10 @@ function ConflictSourcePane({
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={unavailableLabel} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 bg-[var(--cs-bg-card-solid)]">
           <Editor
             height="100%"
+            loading={null}
             language={language}
             theme={theme}
             value={content}
@@ -292,7 +293,7 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--cs-bg-app)]">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--cs-bg-card-solid)]">
       {modalContextHolder}
       {stale ? <Alert type="warning" showIcon title={t("sidebar.gitConflictStale")} /> : null}
       {loadError ? <Alert type="error" showIcon title={loadError} /> : null}
@@ -331,7 +332,7 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
         ))}
       </div>
 
-      <section className="flex min-h-[260px] flex-[1.15] flex-col border-t border-[var(--cs-border-sidebar)] bg-[var(--cs-bg-app)]">
+      <section className="flex min-h-[260px] flex-[1.15] flex-col border-t border-[var(--cs-border-sidebar)] bg-[var(--cs-bg-card-solid)]">
         <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-[var(--cs-border-sidebar)] px-3">
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--cs-text-primary)]">{t("sidebar.gitConflictResolverResult")}</span>
           {blocks.length > 0 ? <div className="flex flex-wrap items-center gap-1 py-1" aria-label={t("sidebar.gitConflictBlocks")}>
@@ -344,9 +345,10 @@ export function GitConflictTabView({ projectPath, filePath, isBinary }: GitConfl
           </div> : null}
           <Button size="small" disabled={resolving || remoteBusy || result === initialResult} onClick={() => confirmReplacement(() => setResult(initialResult))}>{t("sidebar.gitConflictResolverReset")}</Button>
         </div>
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 bg-[var(--cs-bg-card-solid)]">
           <Editor
             height="100%"
+            loading={null}
             language={language}
             theme={theme}
             value={result}

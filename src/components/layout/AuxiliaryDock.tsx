@@ -612,7 +612,7 @@ export default function AuxiliaryDock({
           </div>
         ) : null}
 
-        <div className="relative min-h-0 flex-1" style={{ background: "transparent" }}>
+        <div className="relative min-h-0 flex-1 bg-[var(--cs-bg-card-solid)]">
           {!activeTab ? (
             <div className="flex h-full items-center justify-center px-8">
               <div className="w-full max-w-72 space-y-1">
