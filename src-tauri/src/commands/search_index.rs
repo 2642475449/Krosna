@@ -25,7 +25,8 @@ use scheduling::{ProjectRuntime, SearchActivityGuard, UpdateBatch};
 // Schema v2 retains a row for non-text candidates.  That makes a watcher-driven
 // update able to account for a file moving between indexed and skipped without
 // rescanning the project.
-const INDEX_SCHEMA_VERSION: u32 = 2;
+// 升级 SQLite 后重建可再生缓存，避免继续写入旧版 FTS5 索引。
+const INDEX_SCHEMA_VERSION: u32 = 3;
 const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const STATUS_EMIT_INTERVAL: Duration = Duration::from_millis(150);
 const SCHEDULER_TICK: Duration = Duration::from_millis(250);
@@ -2235,7 +2236,7 @@ fn quote_fts5_literal(query: &str) -> String {
     format!("\"{}\"", query.replace('"', "\"\""))
 }
 
-// 向 v2 索引追加双字表，保留现有路径、三元词和文件 ID；不重新发现目录。
+// 向缺少双字表的索引追加双字表，保留现有路径、三元词和文件 ID；不重新发现目录。
 fn upgrade_short_query_database(
     path: &Path,
     project: &ResolvedProject,

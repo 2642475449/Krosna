@@ -91,7 +91,7 @@ fn windows_search_index_review_lifecycle() {
     let has_name = |name| {
         search_project_entry_index(app, &project, name).is_ok_and(|entries| entries.len() == 1)
     };
-    wait_for("restored v2 cache reconciliation", || {
+    wait_for("restored cache reconciliation", || {
         has_name("archive.log")
     });
     let request = ContentSearchRequest {
