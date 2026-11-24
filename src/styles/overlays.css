@@ -113,6 +113,43 @@
 [data-theme] .ant-drawer :is(.ant-drawer-header, .ant-drawer-footer) { border-color: var(--cs-overlay-divider); }
 [data-theme] .ant-drawer .ant-drawer-footer { padding: 12px 20px; background: var(--cs-overlay-footer-bg); }
 
+/* 通知、弹窗、提示框与抽屉：约束长路径、URL、分支名等无空格文本在容器内折行，避免撑破 Flex 子项或溢出浮层。 */
+[data-theme] :is(
+  .ant-notification .ant-notification-notice-wrapper,
+  .ant-notification .ant-notification-notice-section,
+  .ant-notification .ant-notification-notice-title,
+  .ant-notification .ant-notification-notice-description,
+  .ant-modal .ant-modal-title,
+  .ant-modal .ant-modal-confirm-paragraph,
+  .ant-modal .ant-modal-confirm-title,
+  .ant-modal .ant-modal-confirm-content,
+  .ant-alert .ant-alert-section,
+  .ant-alert .ant-alert-title,
+  .ant-alert .ant-alert-description,
+  .ant-drawer .ant-drawer-title
+) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-theme] :is(
+  .ant-notification .ant-notification-notice-title,
+  .ant-notification .ant-notification-notice-description,
+  .ant-modal .ant-modal-title,
+  .ant-modal .ant-modal-confirm-title,
+  .ant-modal .ant-modal-confirm-content,
+  .ant-alert .ant-alert-title,
+  .ant-alert .ant-alert-description,
+  .ant-popover .ant-popover-title,
+  .ant-popover .ant-popover-inner-content,
+  .ant-tooltip .ant-tooltip-container,
+  .ant-tooltip .ant-tooltip-inner,
+  .ant-drawer .ant-drawer-title
+) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* 自定义全宽正文沿用自己的布局，不额外叠加标准弹窗内边距。 */
 [data-theme] :is(.app-session-launcher-modal, .app-global-search-modal, .app-onboarding-modal) .ant-modal-container {
   padding: 0;

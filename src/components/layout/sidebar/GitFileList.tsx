@@ -17,19 +17,19 @@ import type { GitFileStatus, GitStatusType } from "@/types";
 import { getFileIconByName } from "@/lib/fileIcon";
 import { getVirtualRange } from "@/lib/virtualList";
 
-const FILE_ROW_HEIGHT = 22;
+const FILE_ROW_HEIGHT = 28;
 const FILE_ROW_OVERSCAN = 8;
 const INITIAL_RENDERED_ROWS = 40;
 
-/** 文件状态徽章配置 */
-const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  modified: { label: "M", color: "#d97706", bg: "rgba(217,119,6,0.12)" },
-  added: { label: "A", color: "var(--cs-success)", bg: "color-mix(in srgb, var(--cs-success) 12%, transparent)" },
-  deleted: { label: "D", color: "var(--cs-error)", bg: "color-mix(in srgb, var(--cs-error) 12%, transparent)" },
-  untracked: { label: "U", color: "#6b7280", bg: "rgba(107,114,128,0.12)" },
-  renamed: { label: "R", color: "#2563eb", bg: "rgba(37,99,235,0.12)" },
-  typechange: { label: "T", color: "#0891b2", bg: "rgba(8,145,178,0.12)" },
-  conflicted: { label: "C", color: "#9333ea", bg: "rgba(147,51,234,0.12)" },
+/** 文件状态徽章标签 */
+const STATUS_LABEL: Record<string, string> = {
+  modified: "M",
+  added: "A",
+  deleted: "D",
+  untracked: "U",
+  renamed: "R",
+  typechange: "T",
+  conflicted: "C",
 };
 
 /** 分割 Git 路径为文件名和父路径 */
@@ -163,40 +163,38 @@ export function GitFileList({
   }
 
   return (
-    <div className="git-file-list">
+    <div className="git-file-list mb-1">
       {/* 分组标题 */}
-      <div className="group flex items-center justify-between px-2" style={{ height: 22 }}>
+      <div className="git-file-section-header group">
         <button
-          className="flex items-center gap-1.5 text-left text-[13px] font-semibold"
-          style={{ color: "var(--cs-text-primary)" }}
+          type="button"
+          className="flex min-w-0 items-center gap-1.5 text-left text-[12px] font-semibold text-[var(--cs-text-secondary)] hover:text-[var(--cs-text-primary)]"
           onClick={onToggleCollapse}
         >
           <DownOutlined className="app-disclosure-chevron text-[9px]" data-open={!collapsed} />
-          <span>{sectionTitle}</span>
+          <span className="truncate">{sectionTitle}</span>
         </button>
-        <div className="flex items-center gap-1">
-          <span key={files.length} className="app-badge-pop inline-flex items-center justify-center rounded-full px-1.5 text-[10px] leading-[16px] font-medium tabular-nums"
-            style={{
-              color: "var(--cs-text-secondary)",
-              background: "color-mix(in srgb, var(--cs-text-secondary) 10%, transparent)",
-              minWidth: 18,
-            }}
-          >
-            {files.length}
-          </span>
-          <div className="hidden group-hover:flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-1">
+          <div className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
             <Tooltip title={actionText} mouseEnterDelay={0.4}>
               <Button
                 type="text"
                 size="small"
+                aria-label={actionText}
                 icon={staged ? <MinusOutlined /> : <CheckOutlined />}
                 disabled={actionsDisabled}
-                style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
+                className="h-5 w-5 min-w-5 p-0 text-[var(--cs-text-secondary)]"
                 onClick={onToggleAll}
               />
             </Tooltip>
             {extraActions}
           </div>
+          <span
+            key={files.length}
+            className="app-badge-pop inline-flex min-w-[18px] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--cs-text-secondary)_10%,transparent)] px-1.5 font-mono text-[10px] font-medium leading-[16px] tabular-nums text-[var(--cs-text-secondary)]"
+          >
+            {files.length}
+          </span>
         </div>
       </div>
 
@@ -208,13 +206,14 @@ export function GitFileList({
           style={{ height: files.length * FILE_ROW_HEIGHT }}
         >
           {files.slice(renderedRange.start, renderedRange.end).map((file, visibleIndex) => {
-            const badge = STATUS_BADGE[file.statusType] ?? STATUS_BADGE.modified;
+            const statusLabel = STATUS_LABEL[file.statusType] ?? "M";
             const { fileName, parentPath } = splitGitPath(file.path);
             const fileVisual = getFileIconByName(fileName);
             const addedText = renderDiffStat(file.insertions, "+");
             const removedText = renderDiffStat(file.deletions, "-");
             const fileKey = `${staged ? "staged" : "unstaged"}-${file.path}`;
-            const selected = activeDiffKey === fileKey;
+            const selected = activeDiffKey === fileKey || openingDiffPath === file.path;
+            const isDeletedUnstaged = !staged && file.statusType === "deleted";
             const hunkActionsAvailable =
               file.statusType !== "conflicted" &&
               file.statusType !== "deleted" &&
@@ -222,96 +221,88 @@ export function GitFileList({
               file.statusType !== "untracked";
 
             return (
-            <div
-              key={fileKey}
-              className="absolute inset-x-0"
-              style={{ top: (renderedRange.start + visibleIndex) * FILE_ROW_HEIGHT }}
-            >
-              <Dropdown trigger={["contextMenu"]} menu={buildFileMenu(file, staged)}>
-                <div
-                  className="group flex items-center gap-1.5 px-2 cursor-pointer"
-                  style={{
-                    height: 22,
-                    background:
-                      openingDiffPath === file.path || selected
-                        ? "color-mix(in srgb, var(--cs-bg-hover) 82%, transparent)"
-                        : "transparent",
-                    borderLeft:
-                      openingDiffPath === file.path || selected
-                        ? "2px solid var(--cs-marker-color)"
-                        : "2px solid transparent",
-                  }}
-                  onClick={() => {
-                    onViewDiff(
-                      file.path,
-                      staged,
-                      file.oldPath,
-                      hunkActionsAvailable,
-                      true,
-                      file.statusType,
-                    );
-                  }}
-                  onDoubleClick={() => {
-                    onViewDiff(
-                      file.path,
-                      staged,
-                      file.oldPath,
-                      hunkActionsAvailable,
-                      false,
-                      file.statusType,
-                    );
-                  }}
-                >
-                  <span style={{ color: fileVisual.color, fontSize: 14, display: "inline-flex" }}>{fileVisual.icon}</span>
-                  <span
-                    className="truncate flex-1 min-w-0 text-[13px] leading-[22px]"
-                    style={{
-                      color: "var(--cs-text-primary)",
-                      textDecoration: !staged && file.statusType === "deleted" ? "line-through" : undefined,
-                      opacity: !staged && file.statusType === "deleted" ? 0.5 : 1,
+              <div
+                key={fileKey}
+                className="absolute inset-x-0"
+                style={{ top: (renderedRange.start + visibleIndex) * FILE_ROW_HEIGHT }}
+              >
+                <Dropdown trigger={["contextMenu"]} menu={buildFileMenu(file, staged)}>
+                  <div
+                    className="git-file-row group"
+                    data-selected={selected ? "true" : "false"}
+                    onClick={() => {
+                      onViewDiff(
+                        file.path,
+                        staged,
+                        file.oldPath,
+                        hunkActionsAvailable,
+                        true,
+                        file.statusType,
+                      );
+                    }}
+                    onDoubleClick={() => {
+                      onViewDiff(
+                        file.path,
+                        staged,
+                        file.oldPath,
+                        hunkActionsAvailable,
+                        false,
+                        file.statusType,
+                      );
                     }}
                   >
-                    {file.oldPath ? (
-                      <span className="mr-1 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-                        {file.oldPath} →
-                      </span>
-                    ) : null}
-                    {fileName}
-                    {parentPath ? (
-                      <span className="ml-1.5 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
-                        {parentPath}
-                      </span>
-                    ) : null}
-                  </span>
-                  <div className="ml-auto flex items-center shrink-0 gap-2">
-                    <span className="git-file-diff-stats">
-                      {addedText ? <span className="git-file-diff-added">{addedText}</span> : null}
-                      {removedText ? <span className="git-file-diff-removed">{removedText}</span> : null}
+                    <span
+                      className="inline-flex shrink-0 text-[14px]"
+                      style={{ color: fileVisual.color }}
+                    >
+                      {fileVisual.icon}
                     </span>
-                    <span className="shrink-0 inline-flex w-4 justify-center text-[12px] font-semibold leading-[22px]" style={{ color: badge.color }}>
-                      {badge.label}
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[13px] leading-[22px] text-[var(--cs-text-primary)] ${
+                        isDeletedUnstaged ? "line-through opacity-50" : ""
+                      }`}
+                    >
+                      {file.oldPath ? (
+                        <span className="mr-1 font-mono text-[11px] text-[var(--cs-text-tertiary)]">
+                          {file.oldPath} →
+                        </span>
+                      ) : null}
+                      {fileName}
+                      {parentPath ? (
+                        <span className="ml-1.5 font-mono text-[11px] text-[var(--cs-text-tertiary)]">
+                          {parentPath}
+                        </span>
+                      ) : null}
                     </span>
-                    <div className="git-file-action-slot">
-                      <Tooltip title={actionText} mouseEnterDelay={0.4}>
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={staged ? <MinusOutlined /> : <CheckOutlined />}
-                          disabled={actionsDisabled}
-                          style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
-                          className="git-file-action-button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (actionsDisabled) return;
-                            onToggleFile(file);
-                          }}
-                        />
-                      </Tooltip>
+                    <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                      <span className="git-file-diff-stats">
+                        {addedText ? <span className="git-file-diff-added">{addedText}</span> : null}
+                        {removedText ? <span className="git-file-diff-removed">{removedText}</span> : null}
+                      </span>
+                      <span className="git-status-badge" data-status={file.statusType}>
+                        {statusLabel}
+                      </span>
+                      <div className="git-file-action-slot">
+                        <Tooltip title={actionText} mouseEnterDelay={0.4}>
+                          <Button
+                            type="text"
+                            size="small"
+                            aria-label={actionText}
+                            icon={staged ? <MinusOutlined /> : <CheckOutlined />}
+                            disabled={actionsDisabled}
+                            className="git-file-action-button h-5 w-5 min-w-5 p-0 text-[var(--cs-text-secondary)]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (actionsDisabled) return;
+                              onToggleFile(file);
+                            }}
+                          />
+                        </Tooltip>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Dropdown>
-            </div>
+                </Dropdown>
+              </div>
             );
           })}
         </div>

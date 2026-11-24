@@ -1169,6 +1169,7 @@ export interface GitBranchListItem {
   upstream: string | null;
   ahead: number;
   behind: number;
+  worktreePath?: string | null;
 }
 
 export interface GitDiffHunk {

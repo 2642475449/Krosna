@@ -1,5 +1,64 @@
+use std::collections::HashMap;
 use super::types::{GitBranchListItem, GitRemoteResult};
 use super::utils::{git_command, open_repo, with_git_repository_access, GitRepositoryAccess};
+
+fn normalize_worktree_compare_path(path: &str) -> String {
+    let trimmed = path.trim().replace('\\', "/");
+    let stripped = trimmed.trim_end_matches('/');
+    #[cfg(windows)]
+    {
+        stripped.to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        stripped.to_string()
+    }
+}
+
+fn parse_worktree_branches(stdout: &str, current_worktree_path: &str) -> HashMap<String, String> {
+    let current_norm = normalize_worktree_compare_path(current_worktree_path);
+    let mut map = HashMap::new();
+    let mut active_path: Option<String> = None;
+
+    for raw_line in stdout.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            active_path = None;
+            continue;
+        }
+        if let Some(wt_path) = line.strip_prefix("worktree ") {
+            active_path = Some(wt_path.trim().to_string());
+        } else if let Some(branch_ref) = line.strip_prefix("branch refs/heads/") {
+            if let Some(wt_path) = active_path.as_ref() {
+                if normalize_worktree_compare_path(wt_path) != current_norm {
+                    map.insert(branch_ref.trim().to_string(), wt_path.clone());
+                }
+            }
+        }
+    }
+
+    map
+}
+
+fn list_other_worktree_branches(project_path: &str, repo: &git2::Repository) -> HashMap<String, String> {
+    let normalized = crate::path_utils::normalize_input_path(project_path);
+    let current_workdir = repo
+        .workdir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| normalized.to_string_lossy().to_string());
+
+    let output = match git_command()
+        .args(["worktree", "list", "--porcelain"])
+        .current_dir(&normalized)
+        .output()
+    {
+        Ok(out) if out.status.success() => out,
+        _ => return HashMap::new(),
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_worktree_branches(&stdout, &current_workdir)
+}
 
 /// List all branches (local and remote).
 #[tauri::command]
@@ -13,6 +72,7 @@ pub async fn git_list_branches(project_path: String) -> Result<Vec<GitBranchList
 pub fn git_list_branches_blocking(project_path: String) -> Result<Vec<GitBranchListItem>, String> {
     with_git_repository_access(&project_path, GitRepositoryAccess::Read, || {
         let repo = open_repo(&project_path)?;
+        let other_worktrees = list_other_worktree_branches(&project_path, &repo);
 
         // Get current HEAD branch name
         let current_branch = repo
@@ -41,6 +101,11 @@ pub fn git_list_branches_blocking(project_path: String) -> Result<Vec<GitBranchL
             }
 
             let is_current = name == current_branch;
+            let worktree_path = if is_current {
+                None
+            } else {
+                other_worktrees.get(&name).cloned()
+            };
 
             // Get upstream info
             let (upstream, ahead, behind) = match branch.upstream() {
@@ -69,6 +134,7 @@ pub fn git_list_branches_blocking(project_path: String) -> Result<Vec<GitBranchL
                 upstream,
                 ahead,
                 behind,
+                worktree_path,
             });
         }
 
@@ -96,6 +162,7 @@ pub fn git_list_branches_blocking(project_path: String) -> Result<Vec<GitBranchL
                 upstream: None,
                 ahead: 0,
                 behind: 0,
+                worktree_path: None,
             });
         }
 
@@ -278,4 +345,33 @@ pub fn git_merge_branch_blocking(
             })
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_worktree_branches;
+
+    #[test]
+    fn parses_other_worktrees_and_excludes_current_workdir() {
+        let porcelain = "\
+worktree D:/repo/main
+HEAD 1111111111111111111111111111111111111111
+branch refs/heads/main
+
+worktree C:/Users/dev/worktrees/feature-a
+HEAD 2222222222222222222222222222222222222222
+branch refs/heads/feature-a
+
+worktree C:/Users/dev/worktrees/detached
+HEAD 3333333333333333333333333333333333333333
+detached
+";
+        let map = parse_worktree_branches(porcelain, "D:\\repo\\main\\");
+        assert!(!map.contains_key("main"));
+        assert_eq!(
+            map.get("feature-a").map(String::as_str),
+            Some("C:/Users/dev/worktrees/feature-a")
+        );
+        assert_eq!(map.len(), 1);
+    }
 }

@@ -4,7 +4,9 @@ import type { MenuProps } from "antd";
 import {
   BranchesOutlined,
   CheckOutlined,
+  DownOutlined,
   EllipsisOutlined,
+  HistoryOutlined,
   LoadingOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -240,8 +242,9 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     defaultAgentId,
   );
   const [openingDiffPath, setOpeningDiffPath] = useState<string | null>(null);
-  const [showGitChangesPanel, setShowGitChangesPanel] = useState(true);
-  const [showGitGraphPanel, setShowGitGraphPanel] = useState(true);
+  const [activeView, setActiveView] = useState<"changes" | "graph">(() =>
+    gitGraphCollapsed ? "changes" : "graph",
+  );
   const [showBranchPanel, setShowBranchPanel] = useState(false);
   const [stagedCollapsed, setStagedCollapsed] = useState(false);
   const [changesCollapsed, setChangesCollapsed] = useState(false);
@@ -250,6 +253,23 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const [discardConfirmTitle, setDiscardConfirmTitle] = useState("");
   const [discardSubmitting, setDiscardSubmitting] = useState(false);
   const [initializingRepository, setInitializingRepository] = useState(false);
+
+  useEffect(() => {
+    if (fileHistoryPath) {
+      setActiveView("graph");
+    }
+  }, [fileHistoryPath]);
+
+  const handleSelectView = useCallback(
+    (nextView: "changes" | "graph") => {
+      setActiveView(nextView);
+      const shouldCollapseGraph = nextView !== "graph";
+      if (gitGraphCollapsed !== shouldCollapseGraph) {
+        toggleGitGraphCollapsed();
+      }
+    },
+    [gitGraphCollapsed, toggleGitGraphCollapsed],
+  );
 
   const canGenerateCommitMessage =
     !generatingCommitMessage &&
@@ -283,14 +303,14 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   ];
   const collapsePanelMenuItems: MenuProps["items"] = [
     {
-      key: "toggle-git-changes-panel",
+      key: "view-changes",
       label: t("sidebar.gitChangesPanel"),
-      icon: showGitChangesPanel ? <CheckOutlined /> : <span className="inline-block w-[14px]" />,
+      icon: activeView === "changes" ? <CheckOutlined /> : <span className="inline-block w-[14px]" />,
     },
     {
-      key: "toggle-git-graph-panel",
+      key: "view-graph",
       label: t("sidebar.gitGraphPanel"),
-      icon: showGitGraphPanel ? <CheckOutlined /> : <span className="inline-block w-[14px]" />,
+      icon: activeView === "graph" ? <CheckOutlined /> : <span className="inline-block w-[14px]" />,
     },
   ];
 
@@ -619,17 +639,18 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
   const handleCollapsePanelMenuClick = useCallback(
     ({ key }: { key: string }) => {
       switch (key) {
-        case "toggle-git-changes-panel":
-          setShowGitChangesPanel((value) => !value);
+        case "view-changes":
+          setFileHistoryPath(null);
+          handleSelectView("changes");
           break;
-        case "toggle-git-graph-panel":
-          setShowGitGraphPanel((value) => !value);
+        case "view-graph":
+          handleSelectView("graph");
           break;
         default:
           break;
       }
     },
-    []
+    [handleSelectView],
   );
 
   const handleGenerateCommitMessage = useCallback(async (profileId?: string) => {
@@ -780,43 +801,60 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
     );
   }
 
+  const aheadCount = branchInfo?.ahead ?? 0;
+  const behindCount = branchInfo?.behind ?? 0;
+  const conflictFiles = unstagedFiles.filter((f) => f.statusType === "conflicted");
+  const showConflictPanel =
+    !fileHistoryPath && (conflictFiles.length > 0 || operationState !== "clean");
+  const effectiveView = fileHistoryPath ? "graph" : activeView;
+
   return (
     <div className="app-sidebar-panel flex h-full min-h-0 flex-col">
-      {/* Header */}
-      <div
-        className="flex shrink-0 items-center justify-between px-2"
-        style={{ height: 32, borderBottom: "1px solid var(--cs-border-sidebar)" }}
-      >
-        <Tooltip title={t("sidebar.gitBranchList")} mouseEnterDelay={0.4}>
-          <button
-            type="button"
-            className="flex items-center gap-1.5 text-sm font-semibold cursor-pointer"
-            style={{ color: "var(--cs-text-primary)" }}
-            onClick={() => setShowBranchPanel(!showBranchPanel)}
-          >
-            <BranchesOutlined style={{ fontSize: 14 }} />
-            <span className="max-w-[120px] truncate">{branchName}</span>
-          </button>
-        </Tooltip>
+      {/* Workbench Header */}
+      <div className="git-workbench-header">
+        <GitBranchPanel
+          key={currentProject.path}
+          disabled={!!statusError || committing || remoteBusy || gitActionsBlocked}
+          projectPath={currentProject.path}
+          currentBranch={branchName}
+          visible={showBranchPanel}
+          onVisibleChange={setShowBranchPanel}
+          onBranchChanged={loadGitData}
+        >
+          <Tooltip title={t("sidebar.gitBranchSwitchHint")} mouseEnterDelay={0.4}>
+            <button
+              type="button"
+              className="git-branch-trigger"
+              data-open={showBranchPanel ? "true" : "false"}
+              aria-expanded={showBranchPanel}
+            >
+              <BranchesOutlined className="shrink-0 text-[13px] text-[var(--cs-primary)]" />
+              <span className="git-branch-trigger-name">{branchName}</span>
+              {(aheadCount > 0 || behindCount > 0) && (
+                <span className="git-branch-trigger-sync">
+                  {aheadCount > 0 ? <span className="text-[var(--cs-success)]">↑{aheadCount}</span> : null}
+                  {behindCount > 0 ? <span className="text-[var(--cs-error)]">↓{behindCount}</span> : null}
+                </span>
+              )}
+              <DownOutlined className="git-branch-trigger-chevron shrink-0" />
+            </button>
+          </Tooltip>
+        </GitBranchPanel>
+
         <div className="flex shrink-0 items-center gap-0.5">
-          {showGitChangesPanel && !fileHistoryPath && (
-            <Tooltip title={statusError || t("sidebar.gitLocalRefresh")} mouseEnterDelay={0.4}>
-              <Button
-                type="text"
-                size="small"
-                aria-label={t("sidebar.gitLocalRefresh")}
-                icon={loading ? <LoadingOutlined /> : <ReloadOutlined />}
-                style={{
-                  width: 24,
-                  height: 24,
-                  padding: 0,
-                  color: statusError ? "var(--cs-error)" : "var(--cs-text-secondary)",
-                }}
-                onClick={() => void loadGitData()}
-                disabled={loading || committing || remoteBusy || gitOperationInProgress}
-              />
-            </Tooltip>
-          )}
+          <Tooltip title={statusError || t("sidebar.gitLocalRefresh")} mouseEnterDelay={0.4}>
+            <Button
+              type="text"
+              size="small"
+              aria-label={t("sidebar.gitLocalRefresh")}
+              icon={loading ? <LoadingOutlined /> : <ReloadOutlined />}
+              className={`h-6 w-6 min-w-6 p-0 ${
+                statusError ? "text-[var(--cs-error)]" : "text-[var(--cs-text-secondary)]"
+              }`}
+              onClick={() => void loadGitData()}
+              disabled={loading || committing || remoteBusy || gitOperationInProgress}
+            />
+          </Tooltip>
           <GitRemoteToolbar
             key={`${currentProject.path}:${rawBranchName}`}
             projectPath={currentProject.path}
@@ -829,88 +867,99 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
         </div>
       </div>
 
-      {/* Branch panel (collapsible) */}
-      {showBranchPanel && (
-        <GitBranchPanel
-          key={currentProject.path}
-          disabled={!!statusError || committing || remoteBusy || gitActionsBlocked}
-          projectPath={currentProject?.path ?? null}
-          currentBranch={branchName}
-          visible={showBranchPanel}
-          onClose={() => setShowBranchPanel(false)}
-          onBranchChanged={loadGitData}
-        />
-      )}
+      {/* Segmented View Tabs */}
+      <div className="git-view-tabs" role="tablist" aria-label={t("sidebar.gitPanelTitle")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={effectiveView === "changes"}
+          className="git-view-tab"
+          data-active={effectiveView === "changes" ? "true" : "false"}
+          onClick={() => {
+            setFileHistoryPath(null);
+            handleSelectView("changes");
+          }}
+        >
+          <span>{t("sidebar.gitChangesPanel")}</span>
+          <span
+            className="git-view-tab-badge"
+            data-nonzero={fileStatuses.length > 0 ? "true" : "false"}
+          >
+            {fileStatuses.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={effectiveView === "graph"}
+          className="git-view-tab"
+          data-active={effectiveView === "graph" ? "true" : "false"}
+          onClick={() => handleSelectView("graph")}
+        >
+          <span>{t("sidebar.gitGraphPanel")}</span>
+          {fileHistoryPath ? (
+            <HistoryOutlined className="text-[11px] text-[var(--cs-primary)]" />
+          ) : null}
+        </button>
+      </div>
 
-      {/* 展开长分支列表时，为更改和提交图形至少保留一半高度。 */}
-      <div className="flex min-h-0 grow shrink-0 basis-1/2 flex-col overflow-y-auto app-project-tree-scroll px-1 py-1 empty:hidden">
-        {/* Conflict panel */}
-        {!fileHistoryPath && (() => {
-          const conflictFiles = unstagedFiles.filter(
-            (f) => f.statusType === "conflicted"
-          );
-          if (conflictFiles.length > 0 || (branchInfo?.operationState ?? "clean") !== "clean") {
-            return (
-              <div className="mb-2">
-                <GitConflictPanel
-                  projectPath={currentProject!.path}
-                  conflictFiles={conflictFiles}
-                  operationState={operationState}
-                  onConflictResolved={loadGitData}
-                  onOpenConflictResolver={(filePath) => {
-                    handleViewDiff(filePath, false, undefined, false, false, "conflicted");
-                  }}
-                />
-              </div>
-            );
-          }
-          return null;
-        })()}
+      {/* Changes View */}
+      {effectiveView === "changes" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {showConflictPanel && (
+            <div className="shrink-0 border-b border-[var(--cs-border-sidebar)] px-2 py-2">
+              <GitConflictPanel
+                projectPath={currentProject.path}
+                conflictFiles={conflictFiles}
+                operationState={operationState}
+                onConflictResolved={loadGitData}
+                onOpenConflictResolver={(filePath) => {
+                  handleViewDiff(filePath, false, undefined, false, false, "conflicted");
+                }}
+              />
+            </div>
+          )}
 
-        {/* Changes section */}
-        {showGitChangesPanel && !fileHistoryPath && (
-          <div>
-            {/* Commit composer */}
-            <GitCommitComposer
-              remoteReady={remoteReady}
-              branchName={branchName}
-              commitMessage={commitMessageDraft}
-              onCommitMessageChange={(value) => {
-                if (currentProject) setCommitMessageDraft(currentProject.path, value);
-              }}
-              onClearCommitMessage={() => {
-                if (currentProject) clearCommitMessageDraft(currentProject.path);
-              }}
-              hasLocalChanges={hasLocalChanges}
-              stagedChangeCount={stagedFiles.length}
-              unstagedChangeCount={unstagedFiles.length}
-              aheadCount={branchInfo?.ahead ?? 0}
-              behindCount={branchInfo?.behind ?? 0}
-              hasSyncChanges={hasSyncChanges}
-              syncChangeCount={syncChangeCount}
-              operationState={operationState}
-              committing={committing || remoteBusy || !!statusError}
-              canGenerateCommitMessage={canGenerateCommitMessage}
-              generateCommitMessageHint={
-                effectiveCommitAgentId
-                  ? `${t("sidebar.gitGenerateCommitMessage")} · ${getAgentDisplayName(effectiveCommitAgentId)}`
-                  : t("sidebar.gitGenerateCommitMessageAgentRequired")
-              }
-              generatingCommitMessage={generatingCommitMessage}
-              commitMessageProfiles={gitCommitMessageProfiles}
-              defaultCommitMessageProfileId={defaultGitCommitMessageProfileId}
-              onCommit={commit}
-              onCommitAmend={commitAmend}
-              onCommitAndPush={commitAndPush}
-              onCommitAndSync={commitAndSync}
-              onPush={push}
-              onPull={pull}
-              onPullWithStash={pullWithStash}
-              onSyncChanges={syncChanges}
-              onGenerateCommitMessage={handleGenerateCommitMessage}
-            />
+          <GitCommitComposer
+            remoteReady={remoteReady}
+            branchName={branchName}
+            commitMessage={commitMessageDraft}
+            onCommitMessageChange={(value) => {
+              if (currentProject) setCommitMessageDraft(currentProject.path, value);
+            }}
+            onClearCommitMessage={() => {
+              if (currentProject) clearCommitMessageDraft(currentProject.path);
+            }}
+            hasLocalChanges={hasLocalChanges}
+            stagedChangeCount={stagedFiles.length}
+            unstagedChangeCount={unstagedFiles.length}
+            aheadCount={aheadCount}
+            behindCount={behindCount}
+            hasSyncChanges={hasSyncChanges}
+            syncChangeCount={syncChangeCount}
+            operationState={operationState}
+            committing={committing || remoteBusy || !!statusError}
+            canGenerateCommitMessage={canGenerateCommitMessage}
+            generateCommitMessageHint={
+              effectiveCommitAgentId
+                ? `${t("sidebar.gitGenerateCommitMessage")} · ${getAgentDisplayName(effectiveCommitAgentId)}`
+                : t("sidebar.gitGenerateCommitMessageAgentRequired")
+            }
+            generatingCommitMessage={generatingCommitMessage}
+            commitMessageProfiles={gitCommitMessageProfiles}
+            defaultCommitMessageProfileId={defaultGitCommitMessageProfileId}
+            onCommit={commit}
+            onCommitAmend={commitAmend}
+            onCommitAndPush={commitAndPush}
+            onCommitAndSync={commitAndSync}
+            onPush={push}
+            onPull={pull}
+            onPullWithStash={pullWithStash}
+            onSyncChanges={syncChanges}
+            onGenerateCommitMessage={handleGenerateCommitMessage}
+          />
 
-            {/* Staged files */}
+          <div className="app-project-tree-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
             <GitFileList
               files={stagedFiles}
               staged={true}
@@ -927,7 +976,6 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
               actionsDisabled={gitActionsBlocked}
             />
 
-            {/* Unstaged files */}
             <GitFileList
               files={unstagedFiles}
               staged={false}
@@ -950,44 +998,49 @@ function SidebarGitPanel({ currentProject }: SidebarGitPanelProps) {
                   <Button
                     type="text"
                     size="small"
+                    aria-label={t("sidebar.moreActions", { defaultValue: "更多操作" })}
                     icon={<EllipsisOutlined />}
-                    style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
+                    className="h-5 w-5 min-w-5 p-0 text-[var(--cs-text-secondary)]"
                   />
                 </Dropdown>
               }
             />
 
-            {/* 刷新时保留空状态高度，首次加载仅隐藏内容，避免下方图形跳动。 */}
             {fileStatuses.length === 0 && (
-              <div className={`flex flex-col items-center justify-center gap-2 py-8 text-[var(--cs-text-tertiary)]${loading && isRepo !== true ? " invisible" : ""}`}>
-                <CheckOutlined className="text-2xl" />
-                <span className="text-sm">{t("sidebar.gitNoChanges")}</span>
+              <div
+                className={`flex flex-col items-center justify-center gap-2 py-10 text-[var(--cs-text-tertiary)]${
+                  loading && isRepo !== true ? " invisible" : ""
+                }`}
+              >
+                <CheckOutlined className="text-xl" />
+                <span className="text-xs">{t("sidebar.gitNoChanges")}</span>
+                <Button
+                  type="link"
+                  size="small"
+                  className="text-xs"
+                  onClick={() => handleSelectView("graph")}
+                >
+                  {t("sidebar.gitViewGraph")}
+                </Button>
               </div>
             )}
           </div>
-        )}
-
-        {/* Graph section */}
-        {showGitGraphPanel && (
-          <div className={fileHistoryPath
-            ? "flex min-h-0 flex-1 flex-col"
-            : showGitChangesPanel
-              ? "mt-auto shrink-0"
-              : "shrink-0"}
-          >
-            <GitGraphSection
-              projectPath={currentProject?.path ?? null}
-              collapsed={fileHistoryPath ? false : gitGraphCollapsed}
-              onToggleCollapse={toggleGitGraphCollapsed}
-              sectionTitle={t("sidebar.gitGraphPanel")}
-              refreshText={t("sidebar.gitRefresh")}
-              placeholderText={t("sidebar.gitGraphPlaceholder")}
-              fileHistoryPath={fileHistoryPath}
-              onClearFileHistory={() => setFileHistoryPath(null)}
-            />
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <GitGraphSection
+            embeddedTab
+            projectPath={currentProject.path}
+            collapsed={false}
+            onToggleCollapse={toggleGitGraphCollapsed}
+            sectionTitle={t("sidebar.gitGraphPanel")}
+            refreshText={t("sidebar.gitRefresh")}
+            placeholderText={t("sidebar.gitGraphPlaceholder")}
+            fileHistoryPath={fileHistoryPath}
+            onClearFileHistory={() => setFileHistoryPath(null)}
+          />
+        </div>
+      )}
 
       {/* Discard confirmation modal */}
       <Modal

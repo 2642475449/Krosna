@@ -131,6 +131,8 @@ interface GitGraphSectionProps {
   placeholderText: string;
   fileHistoryPath?: string | null;
   onClearFileHistory?: () => void;
+  /** 作为独立标签页全高展示时隐藏折叠标题栏 */
+  embeddedTab?: boolean;
 }
 
 export function GitGraphSection({
@@ -142,6 +144,7 @@ export function GitGraphSection({
   placeholderText,
   fileHistoryPath = null,
   onClearFileHistory,
+  embeddedTab = false,
 }: GitGraphSectionProps) {
   const { i18n, t } = useTranslation();
   const openGitDiffTab = useAppStore((state) => state.openGitDiffTab);
@@ -631,36 +634,55 @@ export function GitGraphSection({
   return (
     <div
       ref={graphContainerRef}
-      className={`flex min-h-0 flex-col ${fileHistoryPath ? "flex-1" : ""}`}
-      style={{ borderTop: "1px solid var(--cs-border-sidebar)" }}
+      className={`flex min-h-0 flex-col ${embeddedTab || fileHistoryPath ? "flex-1" : ""}`}
+      style={embeddedTab ? undefined : { borderTop: "1px solid var(--cs-border-sidebar)" }}
     >
-      <div className="flex items-center justify-between px-2" style={{ height: 22 }}>
-        <button
-          className="flex items-center gap-1.5 text-left text-[13px] font-semibold"
-          style={{ color: "var(--cs-text-primary)" }}
-          onClick={fileHistoryPath ? undefined : onToggleCollapse}
-        >
-          <DownOutlined className={`text-[9px] transition-transform ${collapsed ? "-rotate-90" : ""}`} />
-          <span>{fileHistoryPath ? t("sidebar.gitFileHistoryPanel") : sectionTitle}</span>
-        </button>
-        <div className="flex items-center gap-1">
+      {embeddedTab ? (
+        <div className="flex shrink-0 items-center justify-between px-2.5 py-1.5">
+          <span className="text-[11px] font-medium text-[var(--cs-text-tertiary)]">
+            {fileHistoryPath ? t("sidebar.gitFileHistoryPanel") : sectionTitle}
+          </span>
           <Tooltip title={refreshText} mouseEnterDelay={0.4}>
             <Button
               type="text"
               size="small"
+              aria-label={refreshText}
               icon={graphLoading ? <LoadingOutlined /> : <ReloadOutlined />}
-              style={{
-                width: 24,
-                height: 24,
-                padding: 0,
-                color: "var(--cs-text-secondary)",
-              }}
+              className="h-6 w-6 min-w-6 p-0 text-[var(--cs-text-secondary)]"
               onClick={() => void refreshGraph()}
               disabled={graphLoading}
             />
           </Tooltip>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between px-2" style={{ height: 22 }}>
+          <button
+            className="flex items-center gap-1.5 text-left text-[13px] font-semibold"
+            style={{ color: "var(--cs-text-primary)" }}
+            onClick={fileHistoryPath ? undefined : onToggleCollapse}
+          >
+            <DownOutlined className={`text-[9px] transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+            <span>{fileHistoryPath ? t("sidebar.gitFileHistoryPanel") : sectionTitle}</span>
+          </button>
+          <div className="flex items-center gap-1">
+            <Tooltip title={refreshText} mouseEnterDelay={0.4}>
+              <Button
+                type="text"
+                size="small"
+                icon={graphLoading ? <LoadingOutlined /> : <ReloadOutlined />}
+                style={{
+                  width: 24,
+                  height: 24,
+                  padding: 0,
+                  color: "var(--cs-text-secondary)",
+                }}
+                onClick={() => void refreshGraph()}
+                disabled={graphLoading}
+              />
+            </Tooltip>
+          </div>
+        </div>
+      )}
 
       {fileHistoryPath ? (
         <div

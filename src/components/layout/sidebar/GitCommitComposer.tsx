@@ -349,17 +349,25 @@ export function GitCommitComposer({
     }),
   );
 
+  const commitScopeText = hasMixedChanges
+    ? t("sidebar.gitCommitScopeStagedOnly", { count: stagedChangeCount })
+    : hasStagedChanges
+      ? t("sidebar.gitCommitScopeStaged", { count: stagedChangeCount })
+      : hasUnstagedChanges
+        ? t("sidebar.gitCommitScopeAll", { count: unstagedChangeCount })
+        : t("sidebar.gitCommitShortcut", { defaultValue: "Ctrl+Enter" });
+
   return (
-    <div className="shrink-0 px-2 pb-2 pt-2">
+    <div className="git-composer-shell">
       <div className={`git-commit-composer mb-2 ${composerShake ? "app-error-shake" : ""}`}>
         <div className="git-commit-composer-body">
           <Input.TextArea
             className="git-commit-composer-input"
-            aria-label={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
+            aria-label={t("sidebar.gitCommitPlaceholderShort", { branch: branchName })}
             value={commitMessage}
             onChange={(e) => onCommitMessageChange(e.target.value)}
-            placeholder={t("sidebar.gitCommitPlaceholder", { branch: branchName })}
-            autoSize={{ minRows: 3, maxRows: 10 }}
+            placeholder={t("sidebar.gitCommitPlaceholderShort", { branch: branchName })}
+            autoSize={{ minRows: 2, maxRows: 8 }}
             variant="borderless"
             onKeyDown={(e) => {
               if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canCommit) {
@@ -370,8 +378,18 @@ export function GitCommitComposer({
           />
         </div>
         <div className="git-commit-composer-footer">
-          <span className="git-commit-composer-shortcut" aria-hidden="true">
-            Ctrl+Enter
+          <span
+            className="git-commit-composer-scope"
+            data-accent={hasMixedChanges ? "true" : "false"}
+            title={
+              hasMixedChanges
+                ? t("sidebar.gitCommitStagedOnlyHint", {
+                    defaultValue: "将仅提交已暂存更改，未暂存更改会保留。",
+                  })
+                : undefined
+            }
+          >
+            {commitScopeText}
           </span>
           <div className="git-commit-ai-group">
             <Tooltip
@@ -461,16 +479,6 @@ export function GitCommitComposer({
         </Dropdown>
       </div>
 
-      {hasMixedChanges ? (
-        <div
-          className="mt-1.5 px-1 text-xs leading-[1.4] select-text cursor-text"
-          style={{ color: "var(--cs-text-tertiary)" }}
-        >
-          {t("sidebar.gitCommitStagedOnlyHint", {
-            defaultValue: "将仅提交已暂存更改，未暂存更改会保留。",
-          })}
-        </div>
-      ) : null}
       <Modal
         centered
         title={t("sidebar.gitStageAllCommitConfirmTitle", {

@@ -127,6 +127,7 @@ pub struct GitBranchListItem {
     pub upstream: Option<String>,
     pub ahead: usize,
     pub behind: usize,
+    pub worktree_path: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
