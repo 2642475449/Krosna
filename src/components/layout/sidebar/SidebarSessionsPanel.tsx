@@ -133,7 +133,7 @@ function SidebarSessionsPanel({
       >
         <div
           data-active={isActive ? "true" : "false"}
-          className="app-sidebar-list-item app-session-list-item app-marker-host app-marker-left group flex items-center gap-2 cursor-pointer"
+          className="app-sidebar-list-item app-session-list-item group flex items-center gap-2 cursor-pointer"
           onClick={() => onOpenSession(session.id)}
         >
           <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">

@@ -251,54 +251,46 @@ export function GitFileList({
                       );
                     }}
                   >
-                    <span
-                      className="inline-flex shrink-0 text-[14px]"
-                      style={{ color: fileVisual.color }}
-                    >
-                      {fileVisual.icon}
-                    </span>
-                    <span
-                      className={`min-w-0 flex-1 truncate text-[13px] leading-[22px] text-[var(--cs-text-primary)] ${
-                        isDeletedUnstaged ? "line-through opacity-50" : ""
-                      }`}
-                    >
-                      {file.oldPath ? (
-                        <span className="mr-1 font-mono text-[11px] text-[var(--cs-text-tertiary)]">
-                          {file.oldPath} →
-                        </span>
-                      ) : null}
-                      {fileName}
-                      {parentPath ? (
-                        <span className="ml-1.5 font-mono text-[11px] text-[var(--cs-text-tertiary)]">
-                          {parentPath}
-                        </span>
-                      ) : null}
-                    </span>
-                    <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                      <span className="git-file-diff-stats">
-                        {addedText ? <span className="git-file-diff-added">{addedText}</span> : null}
-                        {removedText ? <span className="git-file-diff-removed">{removedText}</span> : null}
+                    {file.oldPath ? (
+                      <span className="mr-1 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
+                        {file.oldPath} →
                       </span>
-                      <span className="git-status-badge" data-status={file.statusType}>
-                        {statusLabel}
+                    ) : null}
+                    {fileName}
+                    {parentPath ? (
+                      <span className="ml-1.5 text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>
+                        {parentPath}
                       </span>
-                      <div className="git-file-action-slot">
-                        <Tooltip title={actionText} mouseEnterDelay={0.4}>
-                          <Button
-                            type="text"
-                            size="small"
-                            aria-label={actionText}
-                            icon={staged ? <MinusOutlined /> : <CheckOutlined />}
-                            disabled={actionsDisabled}
-                            className="git-file-action-button h-5 w-5 min-w-5 p-0 text-[var(--cs-text-secondary)]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (actionsDisabled) return;
-                              onToggleFile(file);
-                            }}
-                          />
-                        </Tooltip>
-                      </div>
+                    ) : null}
+                  </span>
+                  <div className="ml-auto flex items-center shrink-0 gap-1.5">
+                    <span className="git-file-diff-stats">
+                      {addedText ? <span className="git-file-diff-added">{addedText}</span> : null}
+                      {removedText ? <span className="git-file-diff-removed">{removedText}</span> : null}
+                    </span>
+                    <div className="git-file-trailing">
+                      <span
+                        className="git-file-status-badge inline-flex w-5 justify-center text-[12px] font-semibold leading-[22px]"
+                        style={{ color: badge.color }}
+                      >
+                        {badge.label}
+                      </span>
+                      <Tooltip title={actionText} mouseEnterDelay={0.4}>
+                        <Button
+                          type="text"
+                          size="small"
+                          aria-label={actionText}
+                          icon={staged ? <MinusOutlined /> : <CheckOutlined />}
+                          disabled={actionsDisabled}
+                          style={{ width: 20, height: 20, padding: 0, color: "var(--cs-text-secondary)" }}
+                          className="git-file-action-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (actionsDisabled) return;
+                            onToggleFile(file);
+                          }}
+                        />
+                      </Tooltip>
                     </div>
                   </div>
                 </Dropdown>

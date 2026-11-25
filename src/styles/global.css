@@ -401,7 +401,6 @@ html, body, #root {
 
 .app-marker-top[data-active="true"]::before,
 .app-marker-bottom[data-active="true"]::before,
-.app-marker-left[data-active="true"]::before,
 .app-marker-rail[data-active="true"]::before {
   content: "";
   position: absolute;
@@ -425,14 +424,6 @@ html, body, #root {
   right: 0;
   width: auto;
   height: var(--cs-marker-thickness);
-}
-
-.app-marker-left[data-active="true"]::before {
-  top: 0;
-  left: 0;
-  width: var(--cs-marker-thickness);
-  bottom: 0;
-  height: auto;
 }
 
 .app-marker-rail[data-active="true"]::before {
@@ -1005,13 +996,22 @@ html, body, #root {
   color: var(--cs-error);
 }
 
-.git-file-action-slot {
-  display: inline-flex;
+.git-file-trailing {
+  display: grid;
   align-items: center;
-  justify-content: center;
+  justify-items: center;
   width: 20px;
   min-width: 20px;
   height: 20px;
+}
+
+.git-file-status-badge,
+.git-file-action-button {
+  grid-area: 1 / 1;
+}
+
+.git-file-status-badge {
+  transition: opacity 140ms ease;
 }
 
 .git-file-action-button {
@@ -1020,7 +1020,14 @@ html, body, #root {
   transition: opacity 140ms ease;
 }
 
+.group:hover .git-file-status-badge,
+.group:focus-within .git-file-status-badge {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .group:hover .git-file-action-button,
+.group:focus-within .git-file-action-button,
 .git-file-action-button:focus-visible {
   opacity: 1;
   pointer-events: auto;

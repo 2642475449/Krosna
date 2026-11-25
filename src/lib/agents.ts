@@ -62,6 +62,9 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
     installCommands: [
       { shell: "PowerShell", command: "irm https://claude.ai/install.ps1 | iex" },
     ],
+    terminal: {
+      forceStableCursor: true,
+    },
     capabilities: {
       interactiveTerminal: "full",
       initialPrompt: "full",

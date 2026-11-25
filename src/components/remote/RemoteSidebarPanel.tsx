@@ -260,7 +260,7 @@ export function RemoteSidebarPanel() {
                     <Dropdown key={item.id} menu={{ items: getHostMenuItems(item) }} trigger={["contextMenu"]}>
                       <div
                         data-active={isActiveHost ? "true" : "false"}
-                        className="app-sidebar-list-item app-session-list-item app-marker-host app-marker-left group flex items-center gap-2 cursor-pointer"
+                        className="app-sidebar-list-item app-session-list-item group flex items-center gap-2 cursor-pointer"
                         onClick={() => useRemoteWorkspaceStore.getState().setSelectedHost(item.id)}
                       >
                         <span className="app-remote-host-dot" data-state={state} title={connectionStateLabel(item.id)} />
@@ -393,7 +393,7 @@ export function RemoteSidebarPanel() {
                     >
                       <div
                         data-active={isActiveSession ? "true" : "false"}
-                        className="app-sidebar-list-item app-session-list-item app-marker-host app-marker-left group flex items-center gap-2 cursor-pointer"
+                        className="app-sidebar-list-item app-session-list-item group flex items-center gap-2 cursor-pointer"
                         onClick={() => useRemoteWorkspaceStore.getState().openRemoteTab(selectedHost.id, session.id)}
                       >
                         <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">

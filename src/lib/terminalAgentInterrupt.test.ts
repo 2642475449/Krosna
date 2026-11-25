@@ -34,7 +34,7 @@ it("does not mark Escape or silence alone as a successful interruption", () => {
 it("repairs the prompt caret after interruption but leaves permission and question overlays alone", () => {
   const session: Session = {
     id: "session", name: "task", path: "project", createdAt: 1,
-    agentId: "claude", active: true, status: "waiting",
+    agentId: "codex", active: true, status: "waiting",
   };
   expect(canRestoreTerminalInputCursor({ ...session, lastEventType: "interrupted" })).toBe(true);
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed" })).toBe(true);
@@ -45,6 +45,7 @@ it("repairs the prompt caret after interruption but leaves permission and questi
   expect(canRestoreTerminalInputCursor({ ...session, status: "running" })).toBe(false);
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed", active: false })).toBe(false);
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed", agentId: "antigravity" })).toBe(false);
+  expect(canRestoreTerminalInputCursor({ ...session, status: "completed", agentId: "claude" })).toBe(false);
 });
 
 it("waits for the PTY acknowledgement even when idle evidence arrives first", () => {

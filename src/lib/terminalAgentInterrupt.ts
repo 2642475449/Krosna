@@ -10,10 +10,10 @@ export type TerminalInterruptBaseline = Pick<Session,
 >;
 export interface TerminalScreenLine { row: number; text: string }
 
-/** 权限/提问对话框仍归 CLI 管理；只在普通输入提示符处修复原生插入光标。 */
+/** 权限/提问对话框仍归 CLI 管理；只在依赖原生插入光标的 CLI 普通输入提示符处修复光标。 */
 export function canRestoreTerminalInputCursor(session: Session | undefined): boolean {
   if (!session?.active || session.archived || !isAiAgentId(session.agentId)
-    || session.agentId === "antigravity") return false;
+    || session.agentId === "antigravity" || session.agentId === "claude") return false;
   return session.status === "completed" || (session.status === "waiting"
     && session.lastEventType !== "permission_request" && session.lastEventType !== "waiting_input");
 }
