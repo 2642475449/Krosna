@@ -125,14 +125,6 @@ export function GitCommitComposer({
       ? "当前没有可同步的远程变更"
       : null;
 
-  const commitMenuDisabledReason = operationInProgress
-    ? operationBlockedReason
-    : committing
-    ? "Git 操作进行中，请稍候"
-    : !hasLocalChanges && !hasSyncChanges
-      ? "当前没有可用的提交或同步操作"
-      : null;
-
   const primaryActionDisabledReason = primaryAction === "commit" ? commitDisabledReason : operationInProgress ? operationBlockedReason : committing ? t("sidebar.gitBusy") : t("sidebar.gitNoChanges");
   const primaryActionText = primaryAction === "commit" ? primaryCommitText
     : primaryAction === "push" ? `↑ ${t("sidebar.remoteActions.push")} ${aheadCount}`
@@ -463,19 +455,15 @@ export function GitCommitComposer({
           open={commitMenuOpen}
           onOpenChange={setCommitMenuOpen}
         >
-          <Tooltip title={canOpenCommitMenu ? t("sidebar.moreActions", { defaultValue: "更多提交操作" }) : commitMenuDisabledReason} mouseEnterDelay={0.4}>
-            <span>
-              <Button
-                className="git-commit-menu-btn"
-                data-ready={canPrimaryAction ? "true" : "false"}
-                aria-label={t("sidebar.moreActions", { defaultValue: "更多提交操作" })}
-                size="middle"
-                disabled={!canOpenCommitMenu}
-              >
-                <DownOutlined className="text-[10px]" />
-              </Button>
-            </span>
-          </Tooltip>
+          <Button
+            className="git-commit-menu-btn"
+            data-ready={canPrimaryAction ? "true" : "false"}
+            aria-label={t("sidebar.moreActions", { defaultValue: "更多提交操作" })}
+            size="middle"
+            disabled={!canOpenCommitMenu}
+          >
+            <DownOutlined className="text-[10px]" />
+          </Button>
         </Dropdown>
       </div>
 

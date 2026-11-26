@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 /** 状态栏仅显示剩余额度圆环和数值，周期等含义保留在悬停提示与无障碍描述中。 */
 export function QuotaUsageRing({ label, descriptionLabel = label, remaining }: { label: string; descriptionLabel?: string; remaining: number }) {
   const { t } = useTranslation();
-  const value = Math.max(0, Math.min(100, Math.round(remaining)));
+  const value = Number.isFinite(remaining) ? Math.max(0, Math.min(100, Math.round(remaining))) : 0;
   const description = `${descriptionLabel} · ${t("statusBar.codexUsage.remaining", { value })}`;
   const tone = value <= 15 ? "text-[var(--cs-error)]" : value <= 35 ? "text-[var(--cs-warning)]" : "text-[var(--cs-success)]";
   return (

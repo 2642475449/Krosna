@@ -817,17 +817,28 @@ export function AntigravityUsageStatus({
   onRefresh: () => void;
 }) {
   const { t } = useTranslation();
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setClock((n) => n + 1), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const hasData = Boolean(usage && hasUsageData(usage));
   const compactWindows = hasData ? usage?.windows ?? [] : [];
   const summary = t("statusBar.antigravityUsage.title");
-  const accessibleSummary = compactWindows.map((window) =>
-    `${antigravityQuotaLabel(window, t)} · ${t("statusBar.codexUsage.remaining", { value: Math.round(window.remainingPercent) })}`,
-  ).join("; ");
+  const accessibleSummary = compactWindows.map((window) => {
+    const remaining = Number.isFinite(window.remainingPercent)
+      ? Math.max(0, Math.min(100, Math.round(window.remainingPercent)))
+      : 0;
+    return `${antigravityQuotaLabel(window, t)} · ${t("statusBar.codexUsage.remaining", { value: remaining })}`;
+  }).join("; ");
   const statusError = error ?? usage?.error;
+  const updatedAt = usage?.updatedAt != null && Number.isFinite(usage.updatedAt) && usage.updatedAt > 0
+    ? usage.updatedAt
+    : null;
 
   const content = (
     <div
-      className="app-overlay-surface w-[300px] overflow-hidden"
+      className="app-overlay-surface w-[300px] max-w-[calc(100vw-24px)] overflow-hidden"
     >
       <div
         className="flex items-center justify-between gap-3 px-3 py-2"
@@ -841,16 +852,22 @@ export function AntigravityUsageStatus({
             </div>
             <div className="text-[10px]" style={{ color: "var(--cs-text-tertiary)" }}>
               {statusError && hasData ? `${t("statusBar.usage.stale")} · ` : ""}
-              {usage?.updatedAt ? formatUpdatedAt(usage.updatedAt, t) : t("statusBar.antigravityUsage.pending")}
+              {updatedAt ? formatUpdatedAt(updatedAt, t) : t("statusBar.antigravityUsage.pending")}
             </div>
           </div>
         </div>
         <button
           type="button"
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px]"
-          style={{ color: "var(--cs-text-tertiary)", background: "transparent", border: 0 }}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] transition-colors"
+          style={{
+            color: "var(--cs-text-tertiary)",
+            background: "transparent",
+            border: 0,
+            cursor: isLoading ? "wait" : "pointer",
+          }}
           disabled={isLoading}
           title={t("common.refresh")}
+          aria-label={t("common.refresh")}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -860,17 +877,22 @@ export function AntigravityUsageStatus({
           {isLoading ? <LoadingOutlined style={{ fontSize: 12 }} /> : <ReloadOutlined style={{ fontSize: 12 }} />}
         </button>
       </div>
-      <div className="space-y-3 px-3 py-3">
+      <div className="app-thin-scrollbar max-h-[65vh] space-y-3 overflow-y-auto px-3 py-3">
         {hasData && usage ? usage.windows.map((window) => (
           <AntigravityUsageWindowRow key={window.id} window={window} />
         )) : (
           <div className="flex items-start gap-2 text-[12px]" style={{ color: "var(--cs-text-tertiary)" }}>
-            {isLoading ? <LoadingOutlined /> : <WarningOutlined />}
-            <span>{statusError || t("statusBar.antigravityUsage.unavailable")}</span>
+            <span className="mt-0.5 shrink-0">{isLoading ? <LoadingOutlined /> : <WarningOutlined />}</span>
+            <span className="min-w-0 flex-1 break-words">{statusError || t("statusBar.antigravityUsage.unavailable")}</span>
           </div>
         )}
         {statusError && hasData ? (
-          <div className="text-[11px] text-[var(--cs-text-tertiary)]">{statusError}</div>
+          <div className="flex items-start gap-1.5 border-t pt-2 text-[11px]" style={{ borderColor: "color-mix(in srgb, var(--cs-border-sidebar) 76%, transparent)", color: "var(--cs-text-tertiary)" }}>
+            <WarningOutlined style={{ fontSize: 11, marginTop: 2 }} />
+            <span className="app-thin-scrollbar min-w-0 max-h-[96px] flex-1 overflow-y-auto whitespace-pre-wrap break-words">
+              {statusError}
+            </span>
+          </div>
         ) : null}
       </div>
     </div>
@@ -890,7 +912,12 @@ export function AntigravityUsageStatus({
         type="button"
         className="flex h-7 shrink-0 items-center justify-start gap-2 rounded-[5px] px-2 text-left text-[13px] font-medium leading-none"
         aria-label={`${t("statusBar.antigravityUsage.title")} · ${accessibleSummary || summary}`}
-        style={{ background: "transparent", border: 0, color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)" }}
+        style={{
+          background: "transparent",
+          border: 0,
+          color: hasData ? "var(--cs-text-secondary)" : "var(--cs-text-tertiary)",
+          cursor: "pointer",
+        }}
       >
         <AgentIcon agentId="antigravity" size={20} />
         {compactWindows.length > 0 ? compactWindows.map((window) => (
@@ -904,21 +931,26 @@ export function AntigravityUsageStatus({
 
 function AntigravityUsageWindowRow({ window }: { window: AntigravityQuotaWindow }) {
   const { t } = useTranslation();
-  const remaining = Math.max(0, Math.min(100, Math.round(window.remainingPercent)));
+  const remaining = Number.isFinite(window.remainingPercent)
+    ? Math.max(0, Math.min(100, Math.round(window.remainingPercent)))
+    : 0;
   const color = codexUsageBarColor(remaining);
+  const label = antigravityQuotaLabel(window, t);
   const resetLabel = formatQuotaResetTime(null, window.resetDescription, t);
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-[12px]">
-        <span className="font-medium" style={{ color: "var(--cs-text-primary)" }}>{antigravityQuotaLabel(window, t)}</span>
-        <span className="tabular-nums" style={{ color: "var(--cs-text-secondary)" }}>
+        <span className="min-w-0 truncate font-medium" style={{ color: "var(--cs-text-primary)" }} title={label}>
+          {label}
+        </span>
+        <span className="shrink-0 tabular-nums" style={{ color: "var(--cs-text-secondary)" }}>
           {t("statusBar.codexUsage.remaining", { value: remaining })}
         </span>
       </div>
       <div className="h-[6px] overflow-hidden rounded-full" style={{ background: "color-mix(in srgb, var(--cs-text-tertiary) 24%, transparent)" }}>
         <div className="h-full rounded-full" style={{ width: `${remaining}%`, background: color }} />
       </div>
-      <div className="text-[11px]" style={{ color: "var(--cs-text-tertiary)" }}>{resetLabel}</div>
+      <div className="text-[11px] tabular-nums" style={{ color: "var(--cs-text-tertiary)" }}>{resetLabel}</div>
     </div>
   );
 }

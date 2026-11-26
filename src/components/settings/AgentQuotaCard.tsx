@@ -139,14 +139,17 @@ function AntigravityQuotaCardBody({ usage }: { usage: AntigravityUsage | null })
 
 function AntigravityQuotaBar({ window }: { window: AntigravityQuotaWindow }) {
   const { t } = useTranslation();
-  const remaining = Math.max(0, Math.min(100, Math.round(window.remainingPercent)));
+  const remaining = Number.isFinite(window.remainingPercent)
+    ? Math.max(0, Math.min(100, Math.round(window.remainingPercent)))
+    : 0;
+  const label = antigravityQuotaLabel(window, t);
   const resetLabel = formatQuotaResetTime(null, window.resetDescription, t);
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3 text-[12px]">
-        <span className="font-medium text-[var(--cs-text-primary)]">{antigravityQuotaLabel(window, t)}</span>
-        <span className="tabular-nums text-[var(--cs-text-secondary)]">
+        <span className="min-w-0 truncate font-medium text-[var(--cs-text-primary)]" title={label}>{label}</span>
+        <span className="shrink-0 tabular-nums text-[var(--cs-text-secondary)]">
           {t("statusBar.codexUsage.remaining", { value: remaining })}
         </span>
       </div>
@@ -156,7 +159,7 @@ function AntigravityQuotaBar({ window }: { window: AntigravityQuotaWindow }) {
         value={remaining}
         aria-hidden="true"
       />
-      <div className="text-[11px] text-[var(--cs-text-tertiary)]">{resetLabel}</div>
+      <div className="text-[11px] tabular-nums text-[var(--cs-text-tertiary)]">{resetLabel}</div>
     </div>
   );
 }

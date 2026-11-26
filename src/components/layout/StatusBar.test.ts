@@ -93,3 +93,18 @@ test("all Antigravity model groups and all returned periods appear in the status
   expect(visibleText).toContain("96");
   expect(visibleText).toContain("42");
 });
+
+test("Antigravity status bar guards non-finite percentages from rendering NaN", () => {
+  const markup = renderToStaticMarkup(createElement(AntigravityUsageStatus, {
+    usage: {
+      windows: [{ id: "3p-5h", scope: "Claude and GPT", window: "session", remainingPercent: Number.NaN, resetDescription: "1970-01-01T00:00:00Z" }],
+      status: "ok",
+      updatedAt: 0,
+      error: null,
+    },
+    isLoading: false,
+    error: null,
+    onRefresh: () => {},
+  }));
+  expect(markup).not.toContain("NaN");
+});

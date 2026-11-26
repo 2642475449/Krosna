@@ -25,3 +25,32 @@ test("all locales preserve the same date format, timestamp precedence and unknow
     expect(formatQuotaResetTime(null, "provider description", i18n.t)).toContain("provider description");
   }
 });
+
+test("epoch-zero, pre-2000 sentinel timestamps, and blank descriptions fall back to resetUnknown", async () => {
+  const i18n = createInstance();
+  await i18n.init({ lng: "zh", resources: { zh: { translation: zh } } });
+  const unknown = i18n.t("statusBar.codexUsage.resetUnknown");
+
+  for (const invalid of [
+    0,
+    -1,
+    Number.NaN,
+    "",
+    "   ",
+    "0",
+    "1970-01-01T00:00:00Z",
+    "1970-01-01T00:00:00.000Z",
+    "1970-01-01T00:00:00-08:00",
+    "0001-01-01T00:00:00Z",
+  ]) {
+    expect(formatQuotaDateTime(invalid)).toBeNull();
+  }
+
+  expect(formatQuotaResetTime(0, null, i18n.t)).toBe(unknown);
+  expect(formatQuotaResetTime(null, "1970-01-01T00:00:00Z", i18n.t)).toBe(unknown);
+  expect(formatQuotaResetTime(null, "1970-01-01T00:00:00.000Z", i18n.t)).toBe(unknown);
+  expect(formatQuotaResetTime(null, "0001-01-01T00:00:00Z", i18n.t)).toBe(unknown);
+  expect(formatQuotaResetTime(null, "0", i18n.t)).toBe(unknown);
+  expect(formatQuotaResetTime(null, "   ", i18n.t)).toBe(unknown);
+  expect(formatQuotaResetTime(0, "2026-11-26T20:04:00Z", i18n.t)).not.toBe(unknown);
+});
