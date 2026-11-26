@@ -466,6 +466,7 @@ pub fn run() {
             commands::git::git_pull_rebase,
             commands::git::git_list_branches,
             commands::git::git_create_branch,
+            commands::git::git_create_worktree,
             commands::git::git_switch_branch,
             commands::git::git_delete_branch,
             commands::git::git_merge_branch,

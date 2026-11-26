@@ -521,6 +521,37 @@ html, body, #root {
   transform: rotate(180deg);
 }
 
+.app-statusbar-git-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  max-width: 220px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--cs-radius-control, 6px);
+  background: transparent;
+  color: var(--cs-text-secondary);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.app-statusbar-git-trigger:hover,
+.app-statusbar-git-trigger[data-open="true"] {
+  background: var(--cs-bg-hover);
+  color: var(--cs-text-primary);
+}
+
+.app-statusbar-git-chevron {
+  font-size: 9px;
+  color: var(--cs-text-tertiary);
+  transition: transform 150ms ease;
+}
+
+.app-statusbar-git-trigger[data-open="true"] .app-statusbar-git-chevron {
+  transform: rotate(180deg);
+}
+
 /* 透明 Popover 包装层去描边与阴影，由内部 .app-overlay-surface 承载单一浮层外壳。 */
 .git-branch-popover-overlay .ant-popover-container {
   padding: 0;

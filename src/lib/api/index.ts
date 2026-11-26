@@ -1839,6 +1839,18 @@ export async function gitCreateBranch(
   await invoke("git_create_branch", { projectPath, name });
 }
 
+export async function gitCreateWorktree(
+  projectPath: string,
+  branchName: string,
+  worktreePath?: string
+): Promise<string> {
+  return await invoke("git_create_worktree", {
+    projectPath,
+    branchName,
+    worktreePath: worktreePath ?? null,
+  });
+}
+
 export async function gitSwitchBranch(
   projectPath: string,
   name: string

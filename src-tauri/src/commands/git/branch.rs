@@ -347,9 +347,131 @@ pub fn git_merge_branch_blocking(
     })
 }
 
+fn sanitize_worktree_dir_suffix(branch_name: &str) -> String {
+    let mut result = String::with_capacity(branch_name.len());
+    let mut prev_dash = false;
+    for ch in branch_name.chars() {
+        let invalid = matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+            || ch.is_whitespace();
+        if invalid {
+            if !prev_dash {
+                result.push('-');
+                prev_dash = true;
+            }
+        } else {
+            result.push(ch);
+            prev_dash = false;
+        }
+    }
+    result.trim_matches(|c| c == '-' || c == '.').to_string()
+}
+
+fn resolve_default_worktree_path(
+    workdir: &std::path::Path,
+    branch_name: &str,
+) -> Result<std::path::PathBuf, String> {
+    let suffix = sanitize_worktree_dir_suffix(branch_name);
+    if suffix.is_empty() {
+        return Err("无效的工作树分支名称".to_string());
+    }
+    let repo_name = workdir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("repo");
+    let parent = workdir
+        .parent()
+        .ok_or_else(|| "无法确定工作树上级目录".to_string())?;
+    Ok(parent.join(format!("{}-{}", repo_name, suffix)))
+}
+
+/// Create a new git worktree (and branch if it does not yet exist) as a sibling directory.
+#[tauri::command]
+pub async fn git_create_worktree(
+    project_path: String,
+    branch_name: String,
+    worktree_path: Option<String>,
+) -> Result<String, String> {
+    crate::commands::run_background_task("git_create_worktree", move || {
+        git_create_worktree_blocking(project_path, branch_name, worktree_path)
+    })
+    .await
+}
+
+pub fn git_create_worktree_blocking(
+    project_path: String,
+    branch_name: String,
+    worktree_path: Option<String>,
+) -> Result<String, String> {
+    let trimmed_branch = branch_name.trim();
+    if trimmed_branch.is_empty() {
+        return Err("分支名称不能为空".to_string());
+    }
+    if trimmed_branch.chars().any(char::is_whitespace) || trimmed_branch.contains("..") {
+        return Err("分支名称格式无效".to_string());
+    }
+
+    with_git_repository_access(&project_path, GitRepositoryAccess::Write, || {
+        let repo = open_repo(&project_path)?;
+        let workdir = repo
+            .workdir()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_else(|| std::path::PathBuf::from(&project_path));
+
+        let target_path = match worktree_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+        {
+            Some(custom) => std::path::PathBuf::from(custom),
+            None => resolve_default_worktree_path(&workdir, trimmed_branch)?,
+        };
+
+        if target_path.exists() {
+            return Err(format!(
+                "目标工作树目录已存在: {}",
+                target_path.to_string_lossy().replace('\\', "/")
+            ));
+        }
+
+        let target_path_str = target_path.to_string_lossy().to_string();
+        let branch_exists = repo
+            .find_branch(trimmed_branch, git2::BranchType::Local)
+            .is_ok();
+
+        let mut cmd = git_command();
+        cmd.current_dir(&project_path);
+        if branch_exists {
+            cmd.args(["worktree", "add", &target_path_str, trimmed_branch]);
+        } else {
+            cmd.args(["worktree", "add", "-b", trimmed_branch, &target_path_str]);
+        }
+
+        let output = cmd
+            .output()
+            .map_err(|e| format!("执行 git worktree add 失败: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let detail = if !stderr.is_empty() { stderr } else { stdout };
+            return Err(if detail.is_empty() {
+                "创建工作树失败".to_string()
+            } else {
+                detail
+            });
+        }
+
+        Ok(target_path.to_string_lossy().replace('\\', "/"))
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_worktree_branches;
+    use super::{
+        parse_worktree_branches, resolve_default_worktree_path, sanitize_worktree_dir_suffix,
+    };
+    use std::path::Path;
 
     #[test]
     fn parses_other_worktrees_and_excludes_current_workdir() {
@@ -373,5 +495,18 @@ detached
             Some("C:/Users/dev/worktrees/feature-a")
         );
         assert_eq!(map.len(), 1);
+    }
+
+    #[test]
+    fn sanitizes_branch_name_and_resolves_sibling_worktree_path() {
+        assert_eq!(sanitize_worktree_dir_suffix("feat/login-ui"), "feat-login-ui");
+        assert_eq!(sanitize_worktree_dir_suffix("release/v1.8.39"), "release-v1.8.39");
+        let resolved =
+            resolve_default_worktree_path(Path::new("E:/7.project/test/Termflow"), "feat/worktree")
+                .expect("should resolve sibling path");
+        assert_eq!(
+            resolved.to_string_lossy().replace('\\', "/"),
+            "E:/7.project/test/Termflow-feat-worktree"
+        );
     }
 }

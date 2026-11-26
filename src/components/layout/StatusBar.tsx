@@ -1,5 +1,5 @@
 import { formatQuotaResetTime } from "@/lib/quotaDateTime";
-import { CloseOutlined, DatabaseOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { BranchesOutlined, CloseOutlined, DatabaseOutlined, DownOutlined, LoadingOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { listen } from "@tauri-apps/api/event";
 import { message, Popover, Tooltip } from "antd";
 import type { TFunction } from "i18next";
@@ -12,6 +12,8 @@ import { MemoryDiagnosticsPopover } from "./MemoryDiagnosticsPopover";
 import { QuotaUsageRing } from "./QuotaUsageRing";
 import { QuotaUsageStatus } from "./QuotaUsageStatus";
 import { WorkbenchFeedback } from "./WorkbenchFeedback";
+import { GitBranchPanel } from "./sidebar/GitBranchPanel";
+import { EMPTY_GIT_STATUS, useGitStatusStore } from "@/store/slices/gitStatus";
 import { getSearchIndexStatus, gitCancelCloneTask, inspectAgentClis, rebuildProjectIndex } from "@/lib/api";
 import { openSettingsPage } from "@/lib/settingsNavigation";
 import { summarizeBackgroundTasks } from "@/lib/backgroundTasks";
@@ -54,6 +56,11 @@ function StatusBar() {
   const [agentVersion, setAgentVersion] = useState<string | null>(null);
   const [cancellingTaskIds, setCancellingTaskIds] = useState<string[]>([]);
   const [rebuildingIndex, setRebuildingIndex] = useState(false);
+  const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
+  const gitStatusEntry = useGitStatusStore(
+    (state) => state.entries[currentProject?.path ?? ""] ?? EMPTY_GIT_STATUS,
+  );
+  const refreshGitStatus = useGitStatusStore((state) => state.refresh);
   const [searchIndexStatus, setSearchIndexStatus] = useState<ProjectSearchIndexStatus | null>(null);
   const [searchIndexStatusProjectPath, setSearchIndexStatusProjectPath] = useState<string | null>(null);
   const [searchIndexStatusError, setSearchIndexStatusError] = useState<string | null>(null);
@@ -128,6 +135,12 @@ function StatusBar() {
       disposed = true;
     };
   }, [claudeCliInfo?.version, effectiveAgentId]);
+
+  useEffect(() => {
+    const projectPath = currentProject?.path ?? null;
+    if (!projectPath || gitStatusEntry.isRepo !== null || gitStatusEntry.loading) return;
+    void refreshGitStatus(projectPath);
+  }, [currentProject?.path, gitStatusEntry.isRepo, gitStatusEntry.loading, refreshGitStatus]);
 
   useEffect(() => {
     const projectPath = currentProject?.path ?? null;
@@ -597,6 +610,47 @@ function StatusBar() {
           </Popover>
         ) : null}
         {backgroundTaskSummary.totalCount > 0 && (fileTab || versionLabel) ? <span className="app-statusbar-divider" aria-hidden="true" /> : null}
+        {currentProject?.path && gitStatusEntry.isRepo ? (
+          <>
+            <GitBranchPanel
+              projectPath={currentProject.path}
+              currentBranch={gitStatusEntry.branchInfo?.branchName || t("sidebar.gitDetached")}
+              visible={branchPopoverOpen}
+              onVisibleChange={setBranchPopoverOpen}
+              placement="topRight"
+              onBranchChanged={async () => {
+                if (currentProject?.path) {
+                  await refreshGitStatus(currentProject.path);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="app-statusbar-git-trigger"
+                data-open={branchPopoverOpen ? "true" : "false"}
+                aria-label={t("sidebar.gitBranchSwitchHint")}
+                title={gitStatusEntry.branchInfo?.branchName || t("sidebar.gitDetached")}
+              >
+                <BranchesOutlined className="shrink-0 text-[12px]" />
+                <span className="max-w-[150px] truncate font-mono text-[12px] leading-none">
+                  {gitStatusEntry.branchInfo?.branchName || t("sidebar.gitDetached")}
+                </span>
+                {(gitStatusEntry.branchInfo?.ahead ?? 0) > 0 && (
+                  <span className="font-mono text-[10px] tabular-nums text-[var(--cs-success)]">
+                    ↑{gitStatusEntry.branchInfo?.ahead}
+                  </span>
+                )}
+                {(gitStatusEntry.branchInfo?.behind ?? 0) > 0 && (
+                  <span className="font-mono text-[10px] tabular-nums text-[var(--cs-error)]">
+                    ↓{gitStatusEntry.branchInfo?.behind}
+                  </span>
+                )}
+                <DownOutlined className="app-statusbar-git-chevron" />
+              </button>
+            </GitBranchPanel>
+            <span className="app-statusbar-divider" aria-hidden="true" />
+          </>
+        ) : null}
         <MemoryDiagnosticsPopover />
         {fileTab ? <FileStatusDetails tabId={fileTab.id} path={fileTab.resourceId} /> : <span
           className="min-w-0 max-w-[360px] truncate text-[12px]"
