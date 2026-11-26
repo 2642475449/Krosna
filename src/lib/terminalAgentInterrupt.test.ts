@@ -46,6 +46,7 @@ it("repairs the prompt caret after interruption but leaves permission and questi
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed", active: false })).toBe(false);
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed", agentId: "antigravity" })).toBe(false);
   expect(canRestoreTerminalInputCursor({ ...session, status: "completed", agentId: "claude" })).toBe(false);
+  expect(canRestoreTerminalInputCursor({ ...session, status: "completed", agentId: "pi" })).toBe(false);
 });
 
 it("waits for the PTY acknowledgement even when idle evidence arrives first", () => {

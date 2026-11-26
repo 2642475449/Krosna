@@ -33,6 +33,7 @@ import {
   ANTD_PRIMARY_COLORS,
   ANTD_TEXT_LIGHT_SOLID,
 } from "./lib/antdTheme";
+import { installGlobalTooltipOverlayGuard } from "./lib/tooltipOverlayGuard";
 
 const STARTUP_THEME_STORAGE_KEY = "krosna-startup-theme";
 // 按窗口用途加载内容，隐藏语音窗口不解析、执行主工作区模块。
@@ -149,8 +150,10 @@ function App() {
       event.preventDefault();
     };
     document.addEventListener("contextmenu", preventNativeContextMenu);
+    const uninstallTooltipOverlayGuard = installGlobalTooltipOverlayGuard(document);
     return () => {
       document.removeEventListener("contextmenu", preventNativeContextMenu);
+      uninstallTooltipOverlayGuard();
     };
   }, []);
 

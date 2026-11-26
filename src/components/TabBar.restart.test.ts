@@ -21,11 +21,15 @@ interface TestState {
   splitTab: ReturnType<typeof vi.fn>;
   setDragState: ReturnType<typeof vi.fn>;
   promoteTab: ReturnType<typeof vi.fn>;
+  updateSession: ReturnType<typeof vi.fn>;
+  togglePinSession: ReturnType<typeof vi.fn>;
+  archiveSession: ReturnType<typeof vi.fn>;
 }
 
 const mocks = vi.hoisted(() => ({
   state: {} as TestState,
   restart: vi.fn(),
+  archiveRuntime: vi.fn(),
   slots: [] as unknown[],
   cursor: 0,
 }));
@@ -48,13 +52,14 @@ vi.mock("react", async (importOriginal) => ({
 }));
 vi.mock("react-dom", () => ({ createPortal: vi.fn() }));
 vi.mock("antd", () => ({
-  Button: "test-button", Tooltip: "test-tooltip", Dropdown: "test-dropdown", Modal: "test-modal",
+  Button: "test-button", Tooltip: "test-tooltip", Dropdown: "test-dropdown", Input: "test-input", Modal: "test-modal",
   message: { error: vi.fn(), success: vi.fn() },
 }));
 vi.mock("@ant-design/icons", () => Object.fromEntries([
   "CloseOutlined", "ExportOutlined", "LoadingOutlined", "SettingOutlined", "PlusOutlined",
   "FolderOpenFilled", "CopyOutlined", "StopOutlined", "CloseCircleOutlined", "ClockCircleOutlined",
-  "ShopOutlined", "ReloadOutlined", "AimOutlined",
+  "ShopOutlined", "ReloadOutlined", "DownOutlined", "AimOutlined", "EditOutlined", "InboxOutlined",
+  "PushpinOutlined", "PushpinFilled",
 ].map((name) => [name, `test-${name}`])));
 vi.mock("@/store", () => ({ useAppStore: Object.assign(
   (select: (state: TestState) => unknown) => select(mocks.state),
@@ -66,7 +71,9 @@ vi.mock("@/lib/appShortcuts", () => ({ getAppShortcut: () => null }));
 vi.mock("@/lib/api", () => ({
   inspectAgentClis: vi.fn(), openInAssociatedApplication: vi.fn(), openInFileManager: vi.fn(),
 }));
-vi.mock("@/lib/tabClose", () => ({ closeTabRuntime: vi.fn(), confirmCloseTab: vi.fn() }));
+vi.mock("@/lib/tabClose", () => ({
+  archiveSessionRuntime: mocks.archiveRuntime, closeTabRuntime: vi.fn(), confirmCloseTab: vi.fn(),
+}));
 vi.mock("@/lib/fileIcon", () => ({ getFileIconByName: () => ({ color: "", icon: null }) }));
 vi.mock("@/lib/scheduledTasks", () => ({ SCHEDULED_TASKS_TAB_ID: "scheduled" }));
 vi.mock("@/components/ui/ShortcutHint", () => ({ ShortcutHint: "test-shortcut" }));
@@ -104,8 +111,9 @@ function render() {
   const nodes = elements(tree);
   const menus = nodes.filter((node) => node.type === "test-dropdown" &&
     (node.props.trigger as string[]).includes("contextMenu")) as unknown as ReactElement<DropdownProps>[];
+  const tooltips = nodes.filter((node) => node.type === "test-tooltip") as unknown as ReactElement<{ open?: boolean }>[];
   const modal = nodes.find((node) => node.type === "test-modal") as unknown as ReactElement<ModalProps>;
-  return { menus, modal };
+  return { menus, tooltips, modal };
 }
 
 function selectRestart() {
@@ -120,6 +128,7 @@ beforeEach(() => {
   mocks.slots = [];
   mocks.cursor = 0;
   mocks.restart.mockResolvedValue(undefined);
+  mocks.archiveRuntime.mockResolvedValue(undefined);
   mocks.state = {
     sessions: [{ id: "agent", name: "Original name", path: "D:/project", createdAt: 1,
       agentId: "codex", active: true, status: "running" }],
@@ -127,6 +136,7 @@ beforeEach(() => {
     panesById: { main: { tabIds: ["agent"] } },
     currentProject: { path: "D:/project" }, dragState: null, defaultTerminalShell: "powershell",
     setActiveSession: vi.fn(), closeTab: vi.fn(), splitTab: vi.fn(), setDragState: vi.fn(), promoteTab: vi.fn(),
+    updateSession: vi.fn(), togglePinSession: vi.fn(), archiveSession: vi.fn(),
   };
 });
 
@@ -211,3 +221,43 @@ it.each(["project", "closed", "removed", "starting"] as const)(
     expect(render().modal.props.open).toBe(false);
   },
 );
+
+it("omits file path actions on session menus while keeping them on file and diff menus with close actions last", () => {
+  for (const [id, kind] of [["file", "file"], ["diff", "diff"]]) {
+    mocks.state.tabsById[id] = { id, kind, title: id, resourceId: `D:/project/${id}.ts` };
+    mocks.state.panesById.main.tabIds.push(id);
+  }
+  const { menus } = render();
+  const keysOf = (index: number) => menus[index].props.menu.items
+    .map((item) => item.key ?? "divider");
+
+  expect(keysOf(0)).toEqual([
+    "restart", "rename", "pin", "archive", "divider",
+    "split-right-move", "split-down-move", "divider",
+    "close", "close-others", "close-all",
+  ]);
+  expect(keysOf(1)).toEqual([
+    "split-right-move", "split-down-move", "divider",
+    "copy-path", "reveal-in-explorer", "open-folder", "open-associated-app", "divider",
+    "close", "close-others", "close-all",
+  ]);
+  expect(keysOf(2)).toEqual([
+    "split-right-move", "split-down-move", "divider",
+    "copy-path", "reveal-in-explorer", "open-associated-app", "divider",
+    "close", "close-others", "close-all",
+  ]);
+});
+
+it("suppresses tab bar tooltips while a tab context menu is open and restores them on close", () => {
+  const initial = render();
+  expect(initial.tooltips.length).toBeGreaterThan(0);
+  expect(initial.tooltips.every((tip) => tip.props.open === undefined)).toBe(true);
+
+  initial.menus[0].props.onOpenChange(true);
+  const whileOpen = render();
+  expect(whileOpen.tooltips.every((tip) => tip.props.open === false)).toBe(true);
+
+  whileOpen.menus[0].props.onOpenChange(false);
+  const afterClose = render();
+  expect(afterClose.tooltips.every((tip) => tip.props.open === undefined)).toBe(true);
+});

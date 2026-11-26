@@ -570,14 +570,6 @@ html, body, #root {
   box-shadow: 0 6px 20px var(--cs-shadow-overlay);
 }
 
-.git-branch-popover-search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid var(--cs-overlay-divider);
-}
-
 .git-branch-section-label {
   display: flex;
   align-items: center;
@@ -3038,6 +3030,62 @@ html, body, #root {
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.app-tabbar-context-menu {
+  min-width: 212px;
+  padding: 5px;
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: var(--cs-radius-control);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--cs-text-primary);
+  gap: 10px;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover {
+  background: var(--cs-bg-hover);
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+  margin-inline-end: 0;
+  font-size: 14px;
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cs-text-secondary);
+  transition: color 140ms ease;
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover .ant-dropdown-menu-item-icon {
+  color: var(--cs-text-primary);
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item .app-tabbar-context-menu-pin-active {
+  color: var(--cs-primary);
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover .app-tabbar-context-menu-pin-active {
+  color: var(--cs-primary);
+}
+
+.app-tabbar-context-menu .ant-dropdown-menu-item-divider {
+  margin: 5px 4px;
+  background-color: var(--cs-overlay-divider);
+}
+
+.app-tabbar-context-menu-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
 }
 
 /* 标签页关闭按钮 hover 显示 */

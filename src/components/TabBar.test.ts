@@ -4,15 +4,22 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  confirm: vi.fn(), runtime: vi.fn(), close: vi.fn(), activate: vi.fn(), drag: vi.fn(),
+  confirm: vi.fn(), runtime: vi.fn(), archiveRuntime: vi.fn(), close: vi.fn(), activate: vi.fn(), drag: vi.fn(),
+  updateSession: vi.fn(), togglePinSession: vi.fn(), archiveSession: vi.fn(),
   state: {} as Record<string, unknown>,
 }));
 vi.mock("@/store", () => ({ useAppStore: Object.assign(
   (select: (state: typeof mocks.state) => unknown) => select(mocks.state), { getState: () => mocks.state },
 ) }));
-vi.mock("@/lib/tabClose", () => ({ confirmCloseTab: mocks.confirm, closeTabRuntime: mocks.runtime }));
+vi.mock("@/lib/tabClose", () => ({
+  archiveSessionRuntime: mocks.archiveRuntime, confirmCloseTab: mocks.confirm, closeTabRuntime: mocks.runtime,
+}));
 vi.mock("@/hooks/useResumeSession", () => ({ useResumeSession: () => vi.fn() }));
-vi.mock("@/lib/api", () => ({ openInAssociatedApplication: vi.fn(), openInFileManager: vi.fn(), inspectAgentClis: vi.fn() }));
+vi.mock("@/lib/api", () => ({
+  openInAssociatedApplication: vi.fn(),
+  openInFileManager: vi.fn(),
+  inspectAgentClis: vi.fn().mockResolvedValue([]),
+}));
 vi.mock("react-i18next", () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
@@ -44,10 +51,12 @@ beforeEach(() => {
   });
   mocks.confirm.mockResolvedValue(true);
   mocks.runtime.mockResolvedValue(undefined);
+  mocks.archiveRuntime.mockResolvedValue(undefined);
   mocks.state = {
     sessions: [], tabsById: { file: tab }, panesById: { main: { tabIds: ["file"] } },
     dragState: null, currentProject: null, agentPermissionDefaults: {},
     setActiveSession: mocks.activate, closeTab: mocks.close, splitTab: vi.fn(), setDragState: mocks.drag, promoteTab: vi.fn(),
+    updateSession: mocks.updateSession, togglePinSession: mocks.togglePinSession, archiveSession: mocks.archiveSession,
   };
   host = document.createElement("div");
   document.body.append(host);
@@ -205,4 +214,64 @@ it("closes all other tabs together without waiting sequentially for each runtime
   expect(mocks.runtime.mock.calls).toEqual([[s1], [s2]]);
   resolveTeardown();
 });
+
+it("supports pin, rename modal, and archive actions from a session tab context menu", async () => {
+  const session = { id: "s1", name: "Codex 00:37:14", path: "D:/project", agentId: "codex", active: true, status: "waiting", pinned: false };
+  mocks.state.currentProject = { path: "D:/project" };
+  mocks.state.sessions = [session];
+  mocks.state.tabsById = { s1: { id: "s1", kind: "session", title: session.name, resourceId: "s1" } };
+  mocks.state.panesById = { main: { tabIds: ["s1"] } };
+
+  await act(async () => root.render(React.createElement(TabBar, { paneId: "main", tabIds: ["s1"], activeTabId: "s1" })));
+  const tabEl = host.querySelector(".tab-item")!;
+
+  const openMenu = async () => {
+    await act(async () => {
+      tabEl.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
+    return Array.from(document.body.querySelectorAll<HTMLElement>(".app-tabbar-context-menu .ant-dropdown-menu-item"));
+  };
+
+  const items = await openMenu();
+  const labels = items.map((el) => el.textContent ?? "");
+  expect(labels).not.toContain("common.copyPath");
+  expect(labels).not.toContain("common.openInExplorer");
+  expect(labels).not.toContain("tabBar.openInSystemFileManager");
+  expect(labels).toContain("sidebar.renameSession");
+  expect(labels).toContain("sidebar.pinSession");
+  expect(labels).toContain("sidebar.archiveSession");
+
+  // Pin
+  await act(async () => {
+    items.find((el) => el.textContent?.includes("sidebar.pinSession"))!.click();
+  });
+  expect(mocks.togglePinSession).toHaveBeenCalledExactlyOnceWith("s1");
+
+  // Rename via controlled modal
+  const itemsForRename = await openMenu();
+  await act(async () => {
+    itemsForRename.find((el) => el.textContent?.includes("sidebar.renameSession"))!.click();
+  });
+  const input = document.body.querySelector<HTMLInputElement>('.ant-modal input[placeholder="sidebar.sessionNamePlaceholder"]')!;
+  expect(input).not.toBeNull();
+  const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    nativeSetter.call(input, "Refactor TabBar");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const confirmBtn = Array.from(document.body.querySelectorAll<HTMLButtonElement>(".ant-modal-footer button"))
+    .find((btn) => btn.textContent?.includes("common.confirm"))!;
+  await act(async () => {
+    confirmBtn.click();
+  });
+  expect(mocks.updateSession).toHaveBeenCalledExactlyOnceWith("s1", { name: "Refactor TabBar", titleSource: "manual" });
+
+  // Archive
+  const itemsForArchive = await openMenu();
+  await act(async () => {
+    itemsForArchive.find((el) => el.textContent?.includes("sidebar.archiveSession"))!.click();
+  });
+  expect(mocks.archiveRuntime).toHaveBeenCalledExactlyOnceWith("s1", mocks.archiveSession);
+});
+
 

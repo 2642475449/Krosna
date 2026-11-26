@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Button, Checkbox, Dropdown, Input, message, Modal, Popover, Tooltip, type InputRef } from "antd";
+import { Button, Checkbox, Dropdown, message, Modal, Popover, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import {
   BranchesOutlined,
@@ -11,15 +11,11 @@ import {
   FolderOutlined,
   LoadingOutlined,
   MergeOutlined,
-  PlusOutlined,
-  SearchOutlined,
   SwapOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import {
-  gitCreateBranch,
-  gitCreateWorktree,
   gitSwitchBranch,
   gitDeleteBranch,
   gitMergeBranch,
@@ -61,7 +57,7 @@ function isRemoteHeadBranch(name: string) {
 /**
  * Git 分支切换浮层（Popover）
  *
- * 悬浮展示分支列表，支持即时筛选、快速创建、切换、删除、合并，
+ * 悬浮展示分支列表，支持切换、删除、合并，
  * 以及其他 worktree 占用分支的状态标识与路径引导。
  */
 export function GitBranchPanel({
@@ -85,19 +81,16 @@ export function GitBranchPanel({
   );
   const projectWindows = useOpenProjectsStore((s) => s.windows);
   const setOpenProjectWindows = useOpenProjectsStore((s) => s.setOpenProjectWindows);
-  const { branches, loading, error } = useGitBranchesStore(
+  const { branches, loading, error, updatedAt } = useGitBranchesStore(
     (s) => s.entries[projectPath ?? ""] ?? EMPTY_GIT_BRANCHES,
   );
   const refreshBranches = useGitBranchesStore((s) => s.refresh);
   const busy = useGitRemoteStore((s) => !!s.busy[projectPath ?? ""]);
-  const blocked = disabled || busy || loading;
-  const searchInputRef = useRef<InputRef>(null);
+  const blocked = disabled || busy;
+  const listboxRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [creating, setCreating] = useState(false);
-  const [creatingWorktree, setCreatingWorktree] = useState(false);
   const [deleteTargetBranch, setDeleteTargetBranch] = useState<string | null>(null);
   const [operatingBranch, setOperatingBranch] = useState<string | null>(null);
   const [openingWorktreePath, setOpeningWorktreePath] = useState<string | null>(null);
@@ -108,23 +101,23 @@ export function GitBranchPanel({
   >(null);
   const [worktreeOpenError, setWorktreeOpenError] = useState<string | null>(null);
 
-  const loadBranches = useCallback(async () => {
-    if (projectPath) await refreshBranches(projectPath);
+  const loadBranches = useCallback(async (force = true) => {
+    if (projectPath) await refreshBranches(projectPath, { force });
   }, [projectPath, refreshBranches]);
 
   useEffect(() => {
-    if (visible && !busy) {
-      void loadBranches();
+    // Warm the project cache before the first click; reopening still checks its TTL.
+    if (!busy) {
+      void loadBranches(false);
     }
   }, [visible, currentBranch, busy, loadBranches]);
 
   useEffect(() => {
     if (visible) {
       void setOpenProjectWindows();
-      const timer = window.setTimeout(() => searchInputRef.current?.focus(), 0);
+      const timer = window.setTimeout(() => listboxRef.current?.focus(), 0);
       return () => window.clearTimeout(timer);
     }
-    setQuery("");
   }, [setOpenProjectWindows, visible]);
 
   const handleOpenWorktreeProject = useCallback(
@@ -253,63 +246,6 @@ export function GitBranchPanel({
       }
     },
     [t],
-  );
-
-  // 创建分支
-  const handleCreateBranch = useCallback(
-    async (branchNameToCreate: string) => {
-      const trimmed = branchNameToCreate.trim();
-      if (!projectPath || !trimmed || disabled || useGitRemoteStore.getState().busy[projectPath]) {
-        return;
-      }
-      useGitRemoteStore.getState().setBusy(projectPath, "branch");
-      setCreating(true);
-      try {
-        await gitCreateBranch(projectPath, trimmed);
-        message.success(t("sidebar.gitBranchCreateSuccess"));
-        setQuery("");
-        await loadBranches();
-        await refreshGitStateAndGraph(projectPath, onBranchChanged);
-      } catch (e) {
-        message.error(
-          `${t("sidebar.gitBranchCreateFailed")}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      } finally {
-        setCreating(false);
-        useGitRemoteStore.getState().setBusy(projectPath, null);
-      }
-    },
-    [projectPath, disabled, loadBranches, onBranchChanged, t],
-  );
-
-  // 创建工作树（同时创建对应分支）并引导打开
-  const handleCreateWorktree = useCallback(
-    async (branchNameToCreate: string) => {
-      const trimmed = branchNameToCreate.trim();
-      if (!projectPath || !trimmed || disabled || useGitRemoteStore.getState().busy[projectPath]) {
-        return;
-      }
-      useGitRemoteStore.getState().setBusy(projectPath, "branch");
-      setCreatingWorktree(true);
-      try {
-        const createdPath = await gitCreateWorktree(projectPath, trimmed);
-        message.success(t("sidebar.gitBranchWorktreeCreateSuccess"));
-        setQuery("");
-        await loadBranches();
-        await refreshGitStateAndGraph(projectPath, onBranchChanged);
-        if (createdPath) {
-          requestOpenWorktreeProject(createdPath);
-        }
-      } catch (e) {
-        message.error(
-          `${t("sidebar.gitBranchWorktreeCreateFailed")}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      } finally {
-        setCreatingWorktree(false);
-        useGitRemoteStore.getState().setBusy(projectPath, null);
-      }
-    },
-    [projectPath, disabled, loadBranches, onBranchChanged, requestOpenWorktreeProject, t],
   );
 
   // 切换分支
@@ -509,30 +445,18 @@ export function GitBranchPanel({
     ],
   );
 
-  const trimmedQuery = query.trim();
-
-  const { localBranches, worktreeBranches, remoteBranches, canQuickCreate } = useMemo(
-    () => partitionGitBranches(branches, query),
-    [branches, query],
+  const { localBranches, worktreeBranches, remoteBranches } = useMemo(
+    () => partitionGitBranches(branches, ""),
+    [branches],
   );
 
   type SelectableItem =
-    | { id: string; kind: "create"; name: string }
-    | { id: string; kind: "create-worktree"; name: string }
     | { id: string; kind: "local"; branch: GitBranchListItem }
     | { id: string; kind: "worktree"; branch: GitBranchListItem }
     | { id: string; kind: "remote"; branch: GitBranchListItem };
 
   const selectableItems = useMemo<SelectableItem[]>(() => {
     const items: SelectableItem[] = [];
-    if (canQuickCreate) {
-      items.push({ id: "git-branch-option-create", kind: "create", name: trimmedQuery });
-      items.push({
-        id: "git-branch-option-create-worktree",
-        kind: "create-worktree",
-        name: trimmedQuery,
-      });
-    }
     for (const branch of localBranches) {
       items.push({ id: `git-branch-option-local-${branch.name}`, kind: "local", branch });
     }
@@ -543,7 +467,7 @@ export function GitBranchPanel({
       items.push({ id: `git-branch-option-remote-${branch.name}`, kind: "remote", branch });
     }
     return items;
-  }, [canQuickCreate, localBranches, remoteBranches, trimmedQuery, worktreeBranches]);
+  }, [localBranches, remoteBranches, worktreeBranches]);
 
   const itemIndexById = useMemo(() => {
     const map = new Map<string, number>();
@@ -555,7 +479,7 @@ export function GitBranchPanel({
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [query, visible]);
+  }, [visible]);
 
   useEffect(() => {
     if (selectableItems.length === 0) return;
@@ -569,18 +493,6 @@ export function GitBranchPanel({
   const activateSelectableItem = useCallback(
     (item: SelectableItem | null) => {
       if (!item) return;
-      if (item.kind === "create") {
-        if (!blocked && !creating && !creatingWorktree) {
-          void handleCreateBranch(item.name);
-        }
-        return;
-      }
-      if (item.kind === "create-worktree") {
-        if (!blocked && !creating && !creatingWorktree) {
-          void handleCreateWorktree(item.name);
-        }
-        return;
-      }
       if (item.kind === "worktree") {
         const worktreePath = item.branch.worktreePath?.trim();
         if (worktreePath) {
@@ -600,10 +512,6 @@ export function GitBranchPanel({
     },
     [
       blocked,
-      creating,
-      creatingWorktree,
-      handleCreateBranch,
-      handleCreateWorktree,
       handleSwitchBranch,
       requestOpenWorktreeProject,
     ],
@@ -626,104 +534,6 @@ export function GitBranchPanel({
 
   const popoverContent = (
     <div className="app-overlay-surface git-branch-popover-card">
-      <div className="git-branch-popover-search">
-        <Input
-          ref={searchInputRef}
-          size="small"
-          allowClear
-          role="combobox"
-          aria-expanded={visible}
-          aria-controls="git-branch-listbox"
-          aria-activedescendant={activeOption?.id}
-          value={query}
-          prefix={<SearchOutlined className="text-[var(--cs-text-tertiary)]" />}
-          placeholder={t("sidebar.gitBranchSearchPlaceholder")}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              moveActiveIndex(1);
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              moveActiveIndex(-1);
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              activateSelectableItem(activeOption);
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              onVisibleChange(false);
-            }
-          }}
-        />
-      </div>
-
-      {canQuickCreate && (
-        <div className="shrink-0 border-b border-[var(--cs-overlay-divider)] p-1.5">
-          <div
-            ref={(el) => {
-              optionRefs.current["git-branch-option-create"] = el;
-            }}
-            id="git-branch-option-create"
-            role="option"
-            aria-selected={activeOption?.id === "git-branch-option-create"}
-            data-highlighted={activeOption?.id === "git-branch-option-create" ? "true" : "false"}
-            className="git-branch-row"
-            onMouseEnter={() => {
-              const idx = itemIndexById.get("git-branch-option-create");
-              if (idx !== undefined) setActiveIndex(idx);
-            }}
-          >
-            <button
-              type="button"
-              className="git-branch-row-main"
-              disabled={blocked || creating || creatingWorktree}
-              onClick={() => void handleCreateBranch(trimmedQuery)}
-            >
-              {creating ? (
-                <LoadingOutlined className="text-[12px] text-[var(--cs-primary)]" />
-              ) : (
-                <PlusOutlined className="text-[12px] text-[var(--cs-primary)]" />
-              )}
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--cs-primary)]">
-                {t("sidebar.gitBranchCreateFromQuery", { name: trimmedQuery })}
-              </span>
-            </button>
-          </div>
-          <div
-            ref={(el) => {
-              optionRefs.current["git-branch-option-create-worktree"] = el;
-            }}
-            id="git-branch-option-create-worktree"
-            role="option"
-            aria-selected={activeOption?.id === "git-branch-option-create-worktree"}
-            data-highlighted={
-              activeOption?.id === "git-branch-option-create-worktree" ? "true" : "false"
-            }
-            className="git-branch-row"
-            onMouseEnter={() => {
-              const idx = itemIndexById.get("git-branch-option-create-worktree");
-              if (idx !== undefined) setActiveIndex(idx);
-            }}
-          >
-            <button
-              type="button"
-              className="git-branch-row-main"
-              disabled={blocked || creating || creatingWorktree}
-              onClick={() => void handleCreateWorktree(trimmedQuery)}
-            >
-              {creatingWorktree ? (
-                <LoadingOutlined className="text-[12px] text-[var(--cs-primary)]" />
-              ) : (
-                <FolderOutlined className="text-[12px] text-[var(--cs-primary)]" />
-              )}
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--cs-primary)]">
-                {t("sidebar.gitBranchCreateWorktreeFromQuery", { name: trimmedQuery })}
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {error && (
         <div
           role="alert"
@@ -737,11 +547,30 @@ export function GitBranchPanel({
       )}
 
       <div
+        ref={listboxRef}
         id="git-branch-listbox"
         role="listbox"
+        tabIndex={0}
+        aria-activedescendant={activeOption?.id}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            moveActiveIndex(1);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            moveActiveIndex(-1);
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            activateSelectableItem(activeOption);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onVisibleChange(false);
+          }
+        }}
         className="app-project-tree-scroll min-h-0 flex-1 overflow-y-auto p-1.5"
       >
-        {loading && branches.length === 0 ? (
+        {loading && updatedAt === null ? (
           <div className="flex items-center justify-center gap-2 py-6 text-[var(--cs-text-tertiary)]">
             <LoadingOutlined />
             <span className="text-xs">{t("common.loading", { defaultValue: "加载中..." })}</span>
@@ -977,7 +806,7 @@ export function GitBranchPanel({
               <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-[var(--cs-text-tertiary)]">
                 <BranchesOutlined className="text-lg" />
                 <span className="text-xs">
-                  {trimmedQuery ? t("sidebar.gitBranchNoMatch") : t("sidebar.gitBranchEmpty")}
+                  {t("sidebar.gitBranchEmpty")}
                 </span>
               </div>
             )}
@@ -993,6 +822,7 @@ export function GitBranchPanel({
         trigger={["click"]}
         placement={placement}
         arrow={false}
+        motion={{ motionName: "" }}
         open={visible}
         onOpenChange={onVisibleChange}
         classNames={{ root: "git-branch-popover-overlay" }}

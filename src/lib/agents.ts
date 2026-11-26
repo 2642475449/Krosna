@@ -182,6 +182,9 @@ export const AGENT_DEFINITIONS: Record<AiAgentId, AgentDefinition> = {
         command: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest",
       },
     ],
+    terminal: {
+      forceStableCursor: true,
+    },
     capabilities: {
       interactiveTerminal: "full",
       initialPrompt: "full",

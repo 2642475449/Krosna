@@ -422,33 +422,56 @@ fn install_pi_extension_at(extension_path: &Path) -> Result<AgentHookStatus, Str
 
 fn pi_extension_source() -> &'static str {
     r#"// Krosna managed Pi status extension
+import http from 'node:http';
 import { createRequire } from 'node:module';
 const requireRuntime = createRequire(import.meta.url);
 let sequence = 0;
 let outcome = 'completed';
+let turnInFlight = false;
 
-async function post(state, eventType, ctx) {
-  const port = process.env.KROSNA_INGEST_PORT;
+function post(state, eventType, ctx) {
+  const port = Number(process.env.KROSNA_INGEST_PORT);
   const token = process.env.KROSNA_INGEST_TOKEN;
   const sessionId = process.env.KROSNA_SESSION_ID;
-  if (!port || !token || !sessionId) return;
+  if (!port || !token || !sessionId) return Promise.resolve();
   const createdAt = Date.now();
   sequence += 1;
+  let providerSessionId;
   try {
-    await fetch(`http://127.0.0.1:${port}/internal/session-events`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-krosna-token': token },
-      body: JSON.stringify({
-        agent: 'pi', state, event_type: eventType,
-        event_id: `pi:${sessionId}:${eventType}:${createdAt}:${sequence}`,
-        session_id: sessionId,
-        project_path: process.env.KROSNA_PROJECT_PATH || process.cwd(),
-        provider_session_id: ctx.sessionManager.getSessionId(),
-        source: 'pi', created_at: createdAt,
-      }),
-      signal: AbortSignal.timeout(1200),
-    });
+    providerSessionId = ctx?.sessionManager?.getSessionId?.();
   } catch {}
+  const body = JSON.stringify({
+    agent: 'pi', state, event_type: eventType,
+    event_id: `pi:${sessionId}:${eventType}:${createdAt}:${sequence}`,
+    session_id: sessionId,
+    project_path: process.env.KROSNA_PROJECT_PATH || process.cwd(),
+    ...(providerSessionId ? { provider_session_id: providerSessionId } : {}),
+    source: 'pi', created_at: createdAt,
+  });
+  return new Promise((resolve) => {
+    try {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/internal/session-events',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+          'x-krosna-token': token,
+        },
+        timeout: 1200,
+      }, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('error', () => resolve());
+      req.on('timeout', () => { req.destroy(); resolve(); });
+      req.end(body);
+    } catch {
+      resolve();
+    }
+  });
 }
 
 export default function (pi) {
@@ -471,19 +494,26 @@ export default function (pi) {
     } catch {}
   });
   pi.on('agent_start', async (_event, ctx) => {
+    turnInFlight = true;
     outcome = 'completed';
     await post('running', 'working', ctx);
   });
-  pi.on('agent_before_settle', (event) => { outcome = event.outcome; });
-  pi.on('agent_settled', async (_event, ctx) => {
+  pi.on('agent_before_settle', (event) => {
+    if (event && typeof event.outcome === 'string') outcome = event.outcome;
+  });
+  pi.on('agent_settled', async (event, ctx) => {
+    turnInFlight = false;
+    if (event?.aborted === true) outcome = 'aborted';
     if (outcome === 'error') await post('error', 'process_error', ctx);
     else if (outcome === 'aborted') await post('waiting', 'agent_aborted', ctx);
     else await post('completed', 'assistant_complete', ctx);
   });
   pi.on('ui_prompt_start', async (_event, ctx) => {
+    if (!turnInFlight) return;
     await post('waiting', 'waiting_input', ctx);
   });
   pi.on('ui_prompt_end', async (_event, ctx) => {
+    if (!turnInFlight) return;
     await post('running', 'working', ctx);
   });
 }
@@ -1018,6 +1048,8 @@ mod tests {
         assert!(source.contains("pi.on('agent_start'"));
         assert!(source.contains("pi.on('agent_before_settle'"));
         assert!(source.contains("pi.on('agent_settled'"));
+        assert!(source.contains("http.request("));
+        assert!(source.contains("turnInFlight"));
         assert!(source.contains("outcome === 'error'"));
         assert!(source.contains("outcome === 'aborted'"));
         assert!(source.contains("'assistant_complete'"));

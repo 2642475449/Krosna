@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button, Tooltip, Dropdown, Modal, message } from "antd";
+import { Button, Tooltip, Dropdown, Input, Modal, message } from "antd";
 import type { MenuProps } from "antd";
 import {
   CloseOutlined,
@@ -17,6 +17,10 @@ import {
   ReloadOutlined,
   DownOutlined,
   AimOutlined,
+  EditOutlined,
+  InboxOutlined,
+  PushpinOutlined,
+  PushpinFilled,
 } from "@ant-design/icons";
 import { useAppStore, type SplitDirection, type TabDropPosition } from "@/store";
 import { openInAssociatedApplication, openInFileManager } from "@/lib/api";
@@ -27,7 +31,7 @@ import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
-import { closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
+import { archiveSessionRuntime, closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
 import { isSessionTurnRunning } from "@/lib/sessions";
 import { useResumeSession } from "@/hooks/useResumeSession";
 import { AgentIcon } from "@/components/AgentIcon";
@@ -59,7 +63,7 @@ interface TabMenuSvgProps extends TabMenuIconProps {
   children: ReactNode;
 }
 
-function TabMenuSvg({ size = 16, className, children }: TabMenuSvgProps) {
+function TabMenuSvg({ size = 14, className, children }: TabMenuSvgProps) {
   return (
     <svg
       viewBox="0 0 16 16"
@@ -78,8 +82,8 @@ function TabMenuSvg({ size = 16, className, children }: TabMenuSvgProps) {
 function SplitRightIcon({ size, className }: TabMenuIconProps) {
   return (
     <TabMenuSvg size={size} className={className}>
-      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M8.5 3.6V12.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.45" />
+      <path d="M8.5 3.5V12.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
     </TabMenuSvg>
   );
 }
@@ -87,8 +91,8 @@ function SplitRightIcon({ size, className }: TabMenuIconProps) {
 function SplitDownIcon({ size, className }: TabMenuIconProps) {
   return (
     <TabMenuSvg size={size} className={className}>
-      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M3.6 8.5H12.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.45" />
+      <path d="M3.5 8.5H12.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
     </TabMenuSvg>
   );
 }
@@ -137,23 +141,33 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const splitTab = useAppStore((s) => s.splitTab);
   const setDragState = useAppStore((s) => s.setDragState);
   const promoteTab = useAppStore((s) => s.promoteTab);
+  const updateSession = useAppStore((s) => s.updateSession);
+  const togglePinSession = useAppStore((s) => s.togglePinSession);
+  const archiveSession = useAppStore((s) => s.archiveSession);
 
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [availableAgents, setAvailableAgents] = useState<AgentCliInfo[] | null>(null);
   const [loadingAgents, setLoadingAgents] = useState(false);
   // 这里只保存浮层目标，进程状态始终读取 store，避免确认期间使用过期会话。
   const [pendingRestartId, setPendingRestartId] = useState<string | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [openTabMenuId, setOpenTabMenuId] = useState<string | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
+  const [newSessionMenuOpen, setNewSessionMenuOpen] = useState(false);
   const tabBarRef = useRef<HTMLDivElement | null>(null);
   const overflowControlRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const tabListRef = useRef<HTMLDivElement | null>(null);
   const pressStateRef = useRef<PressState | null>(null);
   const suppressClickRef = useRef(false);
+  const archivingSessionIdsRef = useRef<Set<string>>(new Set());
 
   const draggingTabId = dragState?.phase === "dragging" ? dragState.sourceTabId : null;
+  const suppressTabTooltips = Boolean(
+    openTabMenuId || overflowMenuOpen || newSessionMenuOpen || draggingTabId
+  );
   const dropTarget: DropTarget | null =
     dragState?.phase === "dragging" &&
     dragState.targetPaneId === paneId &&
@@ -177,6 +191,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     [sessions]
   );
   const pendingRestart = pendingRestartId ? sessionById.get(pendingRestartId) : undefined;
+  const renamingSession = renamingSessionId ? sessionById.get(renamingSessionId) : undefined;
 
   useEffect(() => {
     if (pendingRestartId && (!pendingRestart || pendingRestart.path !== currentProject?.path ||
@@ -184,6 +199,56 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       setPendingRestartId(null);
     }
   }, [currentProject?.path, pendingRestart, pendingRestartId, tabIds]);
+
+  useEffect(() => {
+    if (renamingSessionId && (!renamingSession || renamingSession.path !== currentProject?.path ||
+      !tabIds.includes(renamingSessionId))) {
+      setRenamingSessionId(null);
+      setRenameValue("");
+    }
+  }, [currentProject?.path, renamingSession, renamingSessionId, tabIds]);
+
+  function openRenameSession(sessionId: string) {
+    setOpenTabMenuId(null);
+    const state = useAppStore.getState();
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (!session || session.path !== state.currentProject?.path ||
+      !state.panesById[paneId]?.tabIds.includes(sessionId)) return;
+    setRenamingSessionId(sessionId);
+    setRenameValue(session.name);
+  }
+
+  function confirmRenameSession() {
+    const trimmed = renameValue.trim();
+    const sessionId = renamingSessionId;
+    if (!sessionId || !trimmed) return;
+    setRenamingSessionId(null);
+    setRenameValue("");
+    const state = useAppStore.getState();
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (!session || session.path !== state.currentProject?.path ||
+      !state.panesById[paneId]?.tabIds.includes(sessionId)) return;
+    updateSession(sessionId, { name: trimmed, titleSource: "manual" });
+    message.success(t("sidebar.sessionRenamed"));
+  }
+
+  async function handleArchiveSession(sessionId: string) {
+    if (archivingSessionIdsRef.current.has(sessionId)) return;
+    const state = useAppStore.getState();
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (!session || session.path !== state.currentProject?.path ||
+      !state.panesById[paneId]?.tabIds.includes(sessionId)) return;
+    archivingSessionIdsRef.current.add(sessionId);
+    try {
+      await archiveSessionRuntime(sessionId, archiveSession);
+      message.success(t("sidebar.sessionArchived"));
+    } catch (error) {
+      console.error("Failed to stop and archive session:", error);
+      message.error(t("sidebar.sessionArchiveFailed"));
+    } finally {
+      archivingSessionIdsRef.current.delete(sessionId);
+    }
+  }
 
   function requestRestart(sessionId: string) {
     setOpenTabMenuId(null);
@@ -263,6 +328,8 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
 
   useEffect(() => {
     setOverflowMenuOpen(false);
+    setNewSessionMenuOpen(false);
+    setOpenTabMenuId(null);
   }, [currentProject?.path, paneId]);
 
   useEffect(() => {
@@ -459,21 +526,87 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     const isDiff = tab?.kind === "diff";
     const session = isSettings || isScheduledTasks || isSkillMarket || isFile || isDiff ? null : sessionById.get(tabId);
 
+    const items: MenuProps["items"] = [];
 
-    const items: MenuProps["items"] = [
-      ...(session ? [
+    if (session) {
+      const isPinned = Boolean(session.pinned);
+      items.push(
         {
           key: "restart",
           label: t("tabBar.restartSession"),
           icon: <ReloadOutlined />,
           disabled: session.status === "starting",
         },
-        { type: "divider" as const },
-      ] : []),
+        {
+          key: "rename",
+          label: t("sidebar.renameSession"),
+          icon: <EditOutlined />,
+        },
+        {
+          key: "pin",
+          label: isPinned ? t("sidebar.unpinSession") : t("sidebar.pinSession"),
+          icon: isPinned
+            ? <PushpinFilled className="app-tabbar-context-menu-pin-active" />
+            : <PushpinOutlined />,
+        },
+        {
+          key: "archive",
+          label: t("sidebar.archiveSession"),
+          icon: <InboxOutlined />,
+        },
+        { type: "divider" },
+      );
+    }
+
+    items.push(
+      {
+        key: "split-right-move",
+        label: t(openTabs.length <= 1 ? "tabBar.splitNewTerminalRight" : "tabBar.splitMoveRight"),
+        icon: <SplitRightIcon />,
+        disabled: !currentProject,
+      },
+      {
+        key: "split-down-move",
+        label: t(openTabs.length <= 1 ? "tabBar.splitNewTerminalDown" : "tabBar.splitMoveDown"),
+        icon: <SplitDownIcon />,
+        disabled: !currentProject,
+      },
+    );
+
+    if (isFile || isDiff) {
+      items.push(
+        { type: "divider" },
+        {
+          key: "copy-path",
+          label: t("common.copyPath"),
+          icon: <CopyOutlined />,
+        },
+        {
+          key: "reveal-in-explorer",
+          label: t("common.openInExplorer"),
+          icon: <AimOutlined />,
+        },
+      );
+      if (isFile) {
+        items.push({
+          key: "open-folder",
+          label: t("tabBar.openInSystemFileManager"),
+          icon: <FolderOpenFilled />,
+        });
+      }
+      items.push({
+        key: "open-associated-app",
+        label: t("common.openInAssociatedApp"),
+        icon: <ExportOutlined />,
+      });
+    }
+
+    items.push(
+      { type: "divider" },
       {
         key: "close",
         label: (
-          <span className="flex items-center justify-between w-full">
+          <span className="app-tabbar-context-menu-shortcut-row">
             <span>{t("tabBar.closeTab")}</span>
             {closeKeys && <ShortcutHint keys={closeKeys} />}
           </span>
@@ -492,48 +625,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           icon: <CloseCircleOutlined />,
         },
       ] : []),
-      { type: "divider" },
-      {
-        key: "split-right-move",
-        label: t(openTabs.length <= 1 ? "tabBar.splitNewTerminalRight" : "tabBar.splitMoveRight"),
-        icon: <SplitRightIcon />,
-        disabled: !currentProject,
-      },
-      {
-        key: "split-down-move",
-        label: t(openTabs.length <= 1 ? "tabBar.splitNewTerminalDown" : "tabBar.splitMoveDown"),
-        icon: <SplitDownIcon />,
-        disabled: !currentProject,
-      },
-    ];
-
-    if (session || isFile || isDiff) {
-      items.push({ type: "divider" });
-      items.push({
-        key: "copy-path",
-        label: t("common.copyPath"),
-        icon: <CopyOutlined />,
-      });
-      items.push({
-        key: "reveal-in-explorer",
-        label: t("common.openInExplorer"),
-        icon: <AimOutlined />,
-      });
-      if (session || isFile) {
-        items.push({
-          key: "open-folder",
-          label: t("tabBar.openInSystemFileManager"),
-          icon: <FolderOpenFilled />,
-        });
-      }
-      if (isFile || isDiff) {
-        items.push({
-          key: "open-associated-app",
-          label: t("common.openInAssociatedApp"),
-          icon: <ExportOutlined />,
-        });
-      }
-    }
+    );
 
     return items;
   }
@@ -542,10 +634,11 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     const isSettings = tabId === SETTINGS_ID;
     const tab = tabsById[tabId];
     const isScheduledTasks = tabId === SCHEDULED_TASKS_TAB_ID || tab?.kind === "scheduled-tasks";
+    const isSkillMarket = tab?.kind === "skill-market";
     const isFile = tab?.kind === "file";
     const isDiff = tab?.kind === "diff";
-    const session = isSettings || isScheduledTasks || isFile || isDiff ? null : sessionById.get(tabId);
-    const targetPath = isFile || isDiff ? tab?.resourceId : session?.path;
+    const session = isSettings || isScheduledTasks || isSkillMarket || isFile || isDiff ? null : sessionById.get(tabId);
+    const targetPath = isFile || isDiff ? tab?.resourceId : undefined;
 
     if (key.startsWith("split-")) {
       const [, direction, mode] = key.split("-");
@@ -560,13 +653,26 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
     }
 
     switch (key) {
-      case "reveal-in-explorer":
-        if (targetPath) {
-          revealExplorerPath(targetPath, isFile || isDiff ? "file" : "directory");
-        }
-        return;
       case "restart":
         if (session) requestRestart(session.id);
+        return;
+      case "rename":
+        if (session) openRenameSession(session.id);
+        return;
+      case "pin":
+        if (session) {
+          const wasPinned = Boolean(session.pinned);
+          togglePinSession(session.id);
+          message.success(wasPinned ? t("sidebar.sessionUnpinned") : t("sidebar.sessionPinned"));
+        }
+        return;
+      case "archive":
+        if (session) void handleArchiveSession(session.id);
+        return;
+      case "reveal-in-explorer":
+        if (targetPath) {
+          revealExplorerPath(targetPath, "file");
+        }
         return;
       case "close":
         void requestCloseTabs([tabId]);
@@ -770,9 +876,16 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           <Dropdown
             key={tabId}
             open={openTabMenuId === tabId}
-            onOpenChange={(open) => setOpenTabMenuId(open ? tabId : null)}
+            onOpenChange={(open) => {
+              setOpenTabMenuId(open ? tabId : null);
+              if (open) {
+                setOverflowMenuOpen(false);
+                setNewSessionMenuOpen(false);
+              }
+            }}
             menu={{
               items: getTabMenuItems(tabId),
+              className: "app-tabbar-context-menu",
               onClick: ({ key }) => {
                 setOpenTabMenuId(null);
                 handleTabMenuClick(key, tabId);
@@ -891,14 +1004,22 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
                 ) : isSkillMarket ? (
                   <span className="app-tabbar-title text-xs" title={t("settings.skillMarket.title")}>{t("settings.skillMarket.title")}</span>
                 ) : isFile || isDiff ? (
-                  <Tooltip title={<><div>{tab?.title}</div><div>{filePath ?? diffPath}</div></>} mouseEnterDelay={0.5}>
+                  <Tooltip
+                    title={<><div>{tab?.title}</div><div>{filePath ?? diffPath}</div></>}
+                    mouseEnterDelay={0.5}
+                    open={suppressTabTooltips ? false : undefined}
+                  >
                     <span className={`app-tabbar-title text-xs ${tab?.preview ? 'italic opacity-70' : ''}`}>
                       {tab?.title}
                       {tab.dirty ? " *" : ""}
                     </span>
                   </Tooltip>
                 ) : (
-                  <Tooltip title={tab?.title ?? session!.name} mouseEnterDelay={0.5}>
+                  <Tooltip
+                    title={tab?.title ?? session!.name}
+                    mouseEnterDelay={0.5}
+                    open={suppressTabTooltips ? false : undefined}
+                  >
                     <span className={`app-tabbar-title text-xs ${tab?.preview ? 'italic opacity-70' : ''}`}>
                       {(tab?.title ?? session!.name) + (tab?.dirty ? " *" : "")}
                     </span>
@@ -941,18 +1062,29 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
           <Dropdown
             trigger={["click"]}
             placement="bottomLeft"
+            open={newSessionMenuOpen}
             onOpenChange={(open) => {
+              setNewSessionMenuOpen(open);
               if (open) {
+                setOpenTabMenuId(null);
+                setOverflowMenuOpen(false);
                 void loadAvailableAgents({ showLoading: availableAgents === null });
               }
             }}
             menu={{
               items: newSessionMenuItems,
-              onClick: ({ key }) => handleNewSessionMenuClick(key),
+              onClick: ({ key }) => {
+                setNewSessionMenuOpen(false);
+                handleNewSessionMenuClick(key);
+              },
               style: { minWidth: 244, padding: 6 },
             }}
           >
-          <Tooltip title={t("newSessionMenu.tooltip")} mouseEnterDelay={0.4}>
+          <Tooltip
+            title={t("newSessionMenu.tooltip")}
+            mouseEnterDelay={0.4}
+            open={suppressTabTooltips ? false : undefined}
+          >
             <button
               type="button"
               aria-label={t("sidebar.newSession")}
@@ -972,7 +1104,10 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
             open={overflowMenuOpen}
             onOpenChange={(open) => {
               setOverflowMenuOpen(open);
-              if (open) setOpenTabMenuId(null);
+              if (open) {
+                setOpenTabMenuId(null);
+                setNewSessionMenuOpen(false);
+              }
             }}
             menu={{
               items: overflowItems,
@@ -987,7 +1122,11 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
               },
             }}
           >
-            <Tooltip title={t("tabBar.allTabs")} mouseEnterDelay={0.4}>
+            <Tooltip
+              title={t("tabBar.allTabs")}
+              mouseEnterDelay={0.4}
+              open={suppressTabTooltips ? false : undefined}
+            >
               <button
                 type="button"
                 aria-label={t("tabBar.allTabs")}
@@ -1024,6 +1163,28 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
       >
         <p>{t(pendingRestart && (pendingRestart.agentId === "cmd" || pendingRestart.agentId === "powershell")
           ? "tabBar.restartTerminalDescription" : "tabBar.restartAgentDescription")}</p>
+      </Modal>
+      <Modal
+        centered
+        open={Boolean(renamingSession)}
+        title={t("sidebar.renameSessionTitle")}
+        okText={t("common.confirm")}
+        cancelText={t("common.cancel")}
+        okButtonProps={{ disabled: !renameValue.trim() }}
+        onOk={confirmRenameSession}
+        onCancel={() => {
+          setRenamingSessionId(null);
+          setRenameValue("");
+        }}
+        destroyOnHidden
+      >
+        <Input
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onPressEnter={confirmRenameSession}
+          placeholder={t("sidebar.sessionNamePlaceholder")}
+          autoFocus
+        />
       </Modal>
       {dragPreview && typeof document !== "undefined" &&
         createPortal(

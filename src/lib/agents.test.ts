@@ -126,6 +126,7 @@ describe("agent terminal behavior registry", () => {
   it("keeps provider-specific terminal workarounds in the typed registry", () => {
     expect(getAgentTerminalBehavior("claude").forceStableCursor).toBe(true);
     expect(getAgentTerminalBehavior("codex").forceStableCursor).toBe(true);
+    expect(getAgentTerminalBehavior("pi").forceStableCursor).toBe(true);
     expect(getAgentTerminalBehavior("qoder").forceStableCursor).toBeUndefined();
     expect(getAgentTerminalBehavior("powershell").forceStableCursor).toBeUndefined();
     expect(getAgentTerminalBehavior(undefined).forceStableCursor).toBeUndefined();

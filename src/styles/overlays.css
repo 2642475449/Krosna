@@ -98,6 +98,17 @@
   box-shadow: var(--cs-overlay-shadow);
 }
 
+/* 全局浮层互斥：任意下拉/右键菜单、选择器或日期浮层打开时，统一抑制 Tooltip 气泡提示，避免同时出现抢占视野。 */
+body:has(
+  .ant-dropdown:not(.ant-dropdown-hidden),
+  .ant-select-dropdown:not(.ant-select-dropdown-hidden),
+  .ant-picker-dropdown:not(.ant-picker-dropdown-hidden),
+  .monaco-menu-container
+) .ant-tooltip {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 /* Drawer 保留贴边布局，只让朝向工作区的一侧呈现圆角。 */
 [data-theme] .ant-drawer .ant-drawer-section {
   border: 1px solid var(--cs-overlay-border);
