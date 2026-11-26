@@ -532,10 +532,11 @@ html, body, #root {
 .git-branch-popover-card {
   display: flex;
   flex-direction: column;
-  width: 300px;
+  width: 308px;
   max-width: calc(100vw - 24px);
   max-height: 420px;
   overflow: hidden;
+  box-shadow: 0 6px 20px var(--cs-shadow-overlay);
 }
 
 .git-branch-popover-search {
@@ -563,18 +564,17 @@ html, body, #root {
 }
 
 .git-branch-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
   min-height: 30px;
-  padding: 0 8px;
   border-radius: var(--cs-radius-control, 6px);
   color: var(--cs-text-primary);
-  cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
-.git-branch-row:hover {
+.git-branch-row:hover,
+.git-branch-row[data-highlighted="true"] {
   background: var(--cs-bg-hover);
 }
 
@@ -583,8 +583,8 @@ html, body, #root {
   color: var(--cs-primary);
 }
 
-.git-branch-row[data-worktree="true"] {
-  color: var(--cs-text-secondary);
+.git-branch-row[data-current="true"][data-highlighted="true"] {
+  background: color-mix(in srgb, var(--cs-primary) 16%, transparent);
 }
 
 .git-branch-row[data-disabled="true"] {
@@ -594,6 +594,32 @@ html, body, #root {
 
 .git-branch-row[data-disabled="true"]:hover {
   background: transparent;
+}
+
+.git-branch-row-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--cs-radius-control, 6px);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-branch-row-main:focus-visible {
+  outline: 1.5px solid var(--cs-primary);
+  outline-offset: -1.5px;
+}
+
+.git-branch-row-main:disabled {
+  cursor: default;
 }
 
 .git-branch-row-name {
@@ -607,38 +633,49 @@ html, body, #root {
   line-height: 1.3;
 }
 
-.git-branch-worktree-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--cs-warning);
-  background: color-mix(in srgb, var(--cs-warning) 14%, transparent);
-}
-
-.git-branch-worktree-actions {
+.git-branch-row-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 2px 4px 6px;
-  padding: 7px 8px;
-  border: 1px solid var(--cs-border-sidebar);
+  align-items: center;
+  gap: 2px;
+  padding-left: 12px;
   border-radius: var(--cs-radius-control, 6px);
-  background: var(--cs-bg-app);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--cs-bg-hover) 24%,
+    var(--cs-bg-hover) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
-.git-branch-worktree-path {
+.git-branch-row:hover .git-branch-row-actions,
+.git-branch-row:focus-within .git-branch-row-actions,
+.git-branch-row[data-highlighted="true"] .git-branch-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.git-branch-worktree-row .git-branch-row-main {
+  align-items: flex-start;
+  min-height: 44px;
+  padding: 6px 8px;
+}
+
+.git-branch-worktree-subpath {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
-  line-height: 1.4;
+  line-height: 1.3;
   color: var(--cs-text-secondary);
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .git-view-tabs {
