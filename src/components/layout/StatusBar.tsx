@@ -628,6 +628,9 @@ function StatusBar() {
                 type="button"
                 className="app-statusbar-git-trigger"
                 data-open={branchPopoverOpen ? "true" : "false"}
+                aria-expanded={branchPopoverOpen}
+                aria-haspopup="listbox"
+                aria-controls="git-branch-listbox"
                 aria-label={t("sidebar.gitBranchSwitchHint")}
                 title={gitStatusEntry.branchInfo?.branchName || t("sidebar.gitDetached")}
               >

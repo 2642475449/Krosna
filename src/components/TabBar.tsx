@@ -8,7 +8,7 @@ import {
   LoadingOutlined,
   SettingOutlined,
   PlusOutlined,
-  FolderOpenFilled,
+  FolderOpenOutlined,
   CopyOutlined,
   StopOutlined,
   CloseCircleOutlined,
@@ -29,6 +29,8 @@ import { inspectAgentClis } from "@/lib/api";
 import { getFileIconByName, isMarkdownFile } from "@/lib/fileIcon";
 import { useTranslation } from "react-i18next";
 import { ShortcutHint } from "@/components/ui/ShortcutHint";
+import { PdfToolbarControls } from "@/components/pdf/PdfToolbarControls";
+import { usePdfViewerToolbarStore } from "@/store/slices/pdfViewerToolbar";
 import { useShortcutStore } from "@/store/slices/shortcutSlice";
 import { getAppShortcut } from "@/lib/appShortcuts";
 import { archiveSessionRuntime, closeTabRuntime, confirmCloseTab } from "@/lib/tabClose";
@@ -63,7 +65,7 @@ interface TabMenuSvgProps extends TabMenuIconProps {
   children: ReactNode;
 }
 
-function TabMenuSvg({ size = 14, className, children }: TabMenuSvgProps) {
+function TabMenuSvg({ size = 13, className, children }: TabMenuSvgProps) {
   return (
     <svg
       viewBox="0 0 16 16"
@@ -82,8 +84,8 @@ function TabMenuSvg({ size = 14, className, children }: TabMenuSvgProps) {
 function SplitRightIcon({ size, className }: TabMenuIconProps) {
   return (
     <TabMenuSvg size={size} className={className}>
-      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.45" />
-      <path d="M8.5 3.5V12.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.35" />
+      <path d="M8.5 3.5V12.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
     </TabMenuSvg>
   );
 }
@@ -91,8 +93,8 @@ function SplitRightIcon({ size, className }: TabMenuIconProps) {
 function SplitDownIcon({ size, className }: TabMenuIconProps) {
   return (
     <TabMenuSvg size={size} className={className}>
-      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.45" />
-      <path d="M3.5 8.5H12.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" stroke="currentColor" strokeWidth="1.35" />
+      <path d="M3.5 8.5H12.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
     </TabMenuSvg>
   );
 }
@@ -182,6 +184,9 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
   const activeTab = activeSessionId ? tabsById[activeSessionId] : undefined;
   const isActiveMarkdownTab = Boolean(
     activeTab && activeTab.kind === "file" && isMarkdownFile(activeTab.resourceId)
+  );
+  const activePdfToolbar = usePdfViewerToolbarStore((s) =>
+    activeTab && activeTab.kind === "file" ? s.viewers[activeTab.id] : undefined
   );
   const activeMarkdownViewMode = activeTab?.markdownViewMode ?? "preview";
   const setTabMarkdownViewMode = useAppStore((s) => s.setTabMarkdownViewMode);
@@ -591,7 +596,7 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
         items.push({
           key: "open-folder",
           label: t("tabBar.openInSystemFileManager"),
-          icon: <FolderOpenFilled />,
+          icon: <FolderOpenOutlined />,
         });
       }
       items.push({
@@ -1149,6 +1154,10 @@ function TabBar({ paneId, tabIds, activeTabId }: TabBarProps) {
             mode={activeMarkdownViewMode}
             onChange={(mode) => setTabMarkdownViewMode(activeTab.id, mode)}
           />
+        </div>
+      ) : activePdfToolbar ? (
+        <div className="ml-auto flex min-h-[36px] shrink-0 items-center pr-2">
+          <PdfToolbarControls {...activePdfToolbar} compact />
         </div>
       ) : null}
       <Modal

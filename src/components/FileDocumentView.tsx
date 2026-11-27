@@ -471,6 +471,7 @@ function FileDocumentView({
         <div className="min-h-0 flex-1">
           <Suspense fallback={<div className="flex h-full items-center justify-center"><Spin /></div>}>
             <PdfPreview
+              tabId={tabId}
               data={pdfData}
               loadError={errorMessage}
               onOpenExternal={() => handleOpenExternalLink(path)}

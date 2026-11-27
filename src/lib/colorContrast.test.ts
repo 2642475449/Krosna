@@ -50,9 +50,13 @@ it("extracts theme variable names from var() references", () => {
 });
 
 it("resolves nested theme variable references", () => {
-  const variables = readThemeVariables(themeCss, "light-glass");
-  expect(variables["bg-sidebar"]).toBe(variables["bg-card-solid"]);
-  expect(variables["text-quaternary"]).toBe(variables["text-tertiary"]);
+  for (const theme of THEMES) {
+    const variables = readThemeVariables(themeCss, theme);
+    expect(variables["bg-sidebar"], `${theme} --cs-bg-sidebar`).toBe(variables["bg-card-solid"]);
+    expect(variables["bg-content"], `${theme} --cs-bg-content`).toBe(variables["bg-card-solid"]);
+    expect(variables["bg-body"], `${theme} --cs-bg-body`).toBe(variables["bg-card-solid"]);
+    expect(variables["text-quaternary"], `${theme} --cs-text-quaternary`).toBe(variables["text-tertiary"]);
+  }
 });
 
 it("keeps every text and surface pair above WCAG AA in all themes", () => {

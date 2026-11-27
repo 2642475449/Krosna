@@ -57,7 +57,7 @@ vi.mock("antd", () => ({
 }));
 vi.mock("@ant-design/icons", () => Object.fromEntries([
   "CloseOutlined", "ExportOutlined", "LoadingOutlined", "SettingOutlined", "PlusOutlined",
-  "FolderOpenFilled", "CopyOutlined", "StopOutlined", "CloseCircleOutlined", "ClockCircleOutlined",
+  "FolderOpenOutlined", "CopyOutlined", "StopOutlined", "CloseCircleOutlined", "ClockCircleOutlined",
   "ShopOutlined", "ReloadOutlined", "DownOutlined", "AimOutlined", "EditOutlined", "InboxOutlined",
   "PushpinOutlined", "PushpinFilled",
 ].map((name) => [name, `test-${name}`])));
@@ -67,6 +67,7 @@ vi.mock("@/store", () => ({ useAppStore: Object.assign(
 ) }));
 vi.mock("@/hooks/useResumeSession", () => ({ useResumeSession: () => mocks.restart }));
 vi.mock("@/store/slices/shortcutSlice", () => ({ useShortcutStore: () => null }));
+vi.mock("@/store/slices/pdfViewerToolbar", () => ({ usePdfViewerToolbarStore: () => undefined }));
 vi.mock("@/lib/appShortcuts", () => ({ getAppShortcut: () => null }));
 vi.mock("@/lib/api", () => ({
   inspectAgentClis: vi.fn(), openInAssociatedApplication: vi.fn(), openInFileManager: vi.fn(),

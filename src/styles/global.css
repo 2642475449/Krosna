@@ -106,8 +106,7 @@
 }
 
 [data-theme="light-glass"] .app-glass-card,
-[data-theme="light-glass"] .app-settings-nav,
-[data-theme="light-glass"] .app-terminal-surface {
+[data-theme="light-glass"] .app-settings-nav {
   border: 1px solid var(--cs-border-card);
 }
 
@@ -567,7 +566,6 @@ html, body, #root {
   max-width: calc(100vw - 24px);
   max-height: 420px;
   overflow: hidden;
-  box-shadow: 0 6px 20px var(--cs-shadow-overlay);
 }
 
 .git-branch-section-label {
@@ -657,21 +655,11 @@ html, body, #root {
 }
 
 .git-branch-row-actions {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 2px;
-  padding-left: 12px;
-  border-radius: var(--cs-radius-control, 6px);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--cs-bg-hover) 24%,
-    var(--cs-bg-hover) 100%
-  );
+  padding-right: 4px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
@@ -679,9 +667,99 @@ html, body, #root {
 
 .git-branch-row:hover .git-branch-row-actions,
 .git-branch-row:focus-within .git-branch-row-actions,
-.git-branch-row[data-highlighted="true"] .git-branch-row-actions {
+.git-branch-row[data-highlighted="true"] .git-branch-row-actions,
+.git-branch-row[data-confirming="true"] .git-branch-row-actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.git-branch-row[data-confirming="true"] {
+  background: var(--cs-bg-hover);
+}
+
+.git-branch-row-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cs-radius-control, 6px);
+  background: transparent;
+  color: var(--cs-text-tertiary);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.git-branch-row-delete-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cs-error) 12%, transparent);
+  color: var(--cs-error);
+}
+
+.git-branch-row-delete-btn:focus-visible,
+.git-branch-inline-confirm-btn:focus-visible,
+.git-branch-inline-cancel-btn:focus-visible {
+  outline: 1.5px solid var(--cs-primary);
+  outline-offset: 1px;
+}
+
+.git-branch-row-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.git-branch-inline-confirm-btn,
+.git-branch-inline-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--cs-radius-control, 6px);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.git-branch-inline-confirm-btn {
+  background: color-mix(in srgb, var(--cs-error) 14%, transparent);
+  color: var(--cs-error);
+  font-weight: 500;
+}
+
+.git-branch-inline-confirm-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cs-error) 22%, transparent);
+}
+
+.git-branch-inline-cancel-btn {
+  background: transparent;
+  color: var(--cs-text-secondary);
+}
+
+.git-branch-inline-cancel-btn:hover:not(:disabled) {
+  background: var(--cs-bg-active);
+  color: var(--cs-text-primary);
+}
+
+.git-branch-inline-confirm-btn:disabled,
+.git-branch-inline-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-statusbar-git-trigger,
+  .app-statusbar-git-chevron,
+  .git-branch-row,
+  .git-branch-row-actions,
+  .git-branch-row-delete-btn,
+  .git-branch-inline-confirm-btn,
+  .git-branch-inline-cancel-btn {
+    transition: none;
+  }
 }
 
 .git-branch-worktree-row .git-branch-row-main {
@@ -1409,6 +1487,10 @@ html, body, #root {
   .app-mcp-test-detail
 )::-webkit-scrollbar-thumb:hover {
   background: var(--cs-scrollbar-hover) !important;
+}
+
+.app-thin-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .app-project-tree-scroll:focus-visible {
@@ -2964,6 +3046,7 @@ html, body, #root {
 .app-tabbar {
   min-width: 0;
   overflow: hidden;
+  border-bottom: 1px solid var(--cs-border-card);
 }
 
 .app-tabbar-tabs {
@@ -3032,30 +3115,34 @@ html, body, #root {
   overflow-wrap: anywhere;
 }
 
-.app-tabbar-context-menu {
-  min-width: 212px;
-  padding: 5px;
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu {
+  min-width: 172px;
+  padding: 4px;
+  border-radius: var(--cs-radius-overlay, 8px);
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item {
-  min-height: 32px;
-  padding: 6px 10px;
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item {
+  min-height: 26px;
+  padding: 3px 8px;
   border-radius: var(--cs-radius-control);
-  font-size: 13px;
-  line-height: 18px;
-  color: var(--cs-text-primary);
-  gap: 10px;
+  font-size: 12px;
+  line-height: 16px;
+  gap: 7px;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover {
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled) {
+  color: var(--cs-text-primary);
+}
+
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover {
   background: var(--cs-bg-hover);
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
   margin-inline-end: 0;
-  font-size: 14px;
-  width: 16px;
+  font-size: 13px;
+  width: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3063,20 +3150,20 @@ html, body, #root {
   transition: color 140ms ease;
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover .ant-dropdown-menu-item-icon {
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover .ant-dropdown-menu-item-icon {
   color: var(--cs-text-primary);
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item .app-tabbar-context-menu-pin-active {
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item .app-tabbar-context-menu-pin-active {
   color: var(--cs-primary);
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover .app-tabbar-context-menu-pin-active {
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover .app-tabbar-context-menu-pin-active {
   color: var(--cs-primary);
 }
 
-.app-tabbar-context-menu .ant-dropdown-menu-item-divider {
-  margin: 5px 4px;
+[data-theme] .ant-dropdown .ant-dropdown-menu.app-tabbar-context-menu .ant-dropdown-menu-item-divider {
+  margin: 3px 4px;
   background-color: var(--cs-overlay-divider);
 }
 
@@ -3084,7 +3171,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 14px;
   width: 100%;
 }
 

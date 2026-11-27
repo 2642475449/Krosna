@@ -1,22 +1,13 @@
-import {
-  ColumnWidthOutlined,
-  FilePdfOutlined,
-  FolderOpenOutlined,
-  FullscreenOutlined,
-  LeftOutlined,
-  RightOutlined,
-  ZoomInOutlined,
-  ZoomOutOutlined,
-} from "@ant-design/icons";
-import { Alert, Button, Empty, InputNumber, Spin, Tooltip } from "antd";
+import { FilePdfOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { Alert, Button, Empty, Spin } from "antd";
+import { PdfToolbarControls } from "@/components/pdf/PdfToolbarControls";
+import { usePdfViewerToolbarStore, type PdfZoomMode } from "@/store/slices/pdfViewerToolbar";
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -37,7 +28,7 @@ const SCALE_STEP = 0.25;
 const PAGE_PADDING = 24;
 const DEFAULT_PAGE_SIZE = { width: 612, height: 792 };
 
-type ZoomMode = "manual" | "width" | "page";
+type ZoomMode = PdfZoomMode;
 
 interface PageSize {
   width: number;
@@ -53,6 +44,7 @@ interface ZoomAnchor {
 }
 
 interface PdfPreviewProps {
+  tabId?: string;
   data: Uint8Array | null;
   loadError?: string | null;
   onOpenExternal: () => void | Promise<void>;
@@ -65,10 +57,6 @@ interface PdfPageCanvasProps {
   fallbackSize: PageSize;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   onRenderError: (error: string) => void;
-}
-
-interface PdfScrollProgressProps {
-  scrollContainerRef: RefObject<HTMLDivElement | null>;
 }
 
 function describePdfError(error: unknown, fallback: string): string {
@@ -219,200 +207,8 @@ function PdfPageCanvas({
   );
 }
 
-function PdfScrollProgress({
-  scrollContainerRef,
-}: PdfScrollProgressProps) {
-  const { t } = useTranslation();
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const dragOffsetRef = useRef(0);
-  const draggingRef = useRef(false);
-  const [dragging, setDragging] = useState(false);
-  const [metrics, setMetrics] = useState({
-    progress: 0,
-    viewportRatio: 1,
-    trackHeight: 0,
-  });
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    const track = trackRef.current;
-    if (!container || !track) {
-      return;
-    }
-
-    let animationFrame = 0;
-    const updateMetrics = () => {
-      animationFrame = 0;
-      const maxScrollTop = Math.max(
-        0,
-        container.scrollHeight - container.clientHeight,
-      );
-      setMetrics({
-        progress: maxScrollTop > 0 ? container.scrollTop / maxScrollTop : 0,
-        viewportRatio:
-          container.scrollHeight > 0
-            ? Math.min(1, container.clientHeight / container.scrollHeight)
-            : 1,
-        trackHeight: track.clientHeight,
-      });
-    };
-    const scheduleUpdate = () => {
-      if (!animationFrame) {
-        animationFrame = requestAnimationFrame(updateMetrics);
-      }
-    };
-
-    updateMetrics();
-    container.addEventListener("scroll", scheduleUpdate, { passive: true });
-
-    const resizeObserver = new ResizeObserver(scheduleUpdate);
-    resizeObserver.observe(container);
-    resizeObserver.observe(track);
-    if (container.firstElementChild) {
-      resizeObserver.observe(container.firstElementChild);
-    }
-
-    return () => {
-      container.removeEventListener("scroll", scheduleUpdate);
-      resizeObserver.disconnect();
-      if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
-      }
-    };
-  }, [scrollContainerRef]);
-
-  const thumbHeight = Math.min(
-    metrics.trackHeight,
-    Math.max(32, metrics.trackHeight * metrics.viewportRatio),
-  );
-  const thumbTop =
-    metrics.progress * Math.max(0, metrics.trackHeight - thumbHeight);
-  const canScroll = metrics.viewportRatio < 1;
-  const progressPercent = Math.round(metrics.progress * 100);
-
-  const scrollFromPointer = (clientY: number) => {
-    const container = scrollContainerRef.current;
-    const track = trackRef.current;
-    if (!container || !track || !canScroll) {
-      return;
-    }
-
-    const trackRect = track.getBoundingClientRect();
-    const availableTrack = Math.max(1, trackRect.height - thumbHeight);
-    const nextProgress = Math.min(
-      1,
-      Math.max(
-        0,
-        (clientY - trackRect.top - dragOffsetRef.current) / availableTrack,
-      ),
-    );
-    container.scrollTop =
-      nextProgress * (container.scrollHeight - container.clientHeight);
-  };
-
-  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!canScroll) {
-      return;
-    }
-
-    const trackRect = event.currentTarget.getBoundingClientRect();
-    const pointerY = event.clientY - trackRect.top;
-    const pointerIsOnThumb =
-      pointerY >= thumbTop && pointerY <= thumbTop + thumbHeight;
-    dragOffsetRef.current = pointerIsOnThumb
-      ? pointerY - thumbTop
-      : thumbHeight / 2;
-    draggingRef.current = true;
-    setDragging(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    scrollFromPointer(event.clientY);
-    event.preventDefault();
-  };
-
-  const stopDragging = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) {
-      return;
-    }
-    draggingRef.current = false;
-    setDragging(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const container = scrollContainerRef.current;
-    if (!container || !canScroll) {
-      return;
-    }
-
-    const pageStep = Math.max(40, container.clientHeight * 0.9);
-    switch (event.key) {
-      case "ArrowUp":
-        container.scrollBy({ top: -40 });
-        break;
-      case "ArrowDown":
-        container.scrollBy({ top: 40 });
-        break;
-      case "PageUp":
-        container.scrollBy({ top: -pageStep });
-        break;
-      case "PageDown":
-        container.scrollBy({ top: pageStep });
-        break;
-      case "Home":
-        container.scrollTo({ top: 0 });
-        break;
-      case "End":
-        container.scrollTo({ top: container.scrollHeight });
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-  };
-
-  return (
-    <div
-      ref={trackRef}
-      role="scrollbar"
-      tabIndex={canScroll ? 0 : -1}
-      aria-label={t("fileTabs.pdfReadingProgress")}
-      aria-orientation="vertical"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={progressPercent}
-      aria-valuetext={`${progressPercent}%`}
-      aria-disabled={!canScroll}
-      title={`${t("fileTabs.pdfReadingProgress")} ${progressPercent}%`}
-      className="group absolute bottom-2 right-1.5 top-2 z-20 w-3 touch-none rounded-full outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--cs-primary)]"
-      style={{
-        background: "var(--cs-scrollbar-thumb)",
-        cursor: canScroll ? (dragging ? "grabbing" : "pointer") : "default",
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={(event) => {
-        if (draggingRef.current) {
-          scrollFromPointer(event.clientY);
-        }
-      }}
-      onPointerUp={stopDragging}
-      onPointerCancel={stopDragging}
-      onKeyDown={handleKeyDown}
-    >
-      <div
-        className="absolute left-0.5 right-0.5 rounded-full bg-[var(--cs-primary)] opacity-60 shadow-xs transition-[opacity,width,left,right] group-hover:left-0 group-hover:right-0 group-hover:opacity-90"
-        style={{
-          height: thumbHeight,
-          transform: `translateY(${thumbTop}px)`,
-          opacity: canScroll ? (dragging ? 1 : undefined) : 0.25,
-        }}
-      />
-    </div>
-  );
-}
-
 export default function PdfPreview({
+  tabId,
   data,
   loadError = null,
   onOpenExternal,
@@ -674,11 +470,11 @@ export default function PdfPreview({
     return () => container.removeEventListener("wheel", handleWheel);
   }, [changeScale, scale]);
 
-  const openExternal = () => {
+  const openExternal = useCallback(() => {
     void Promise.resolve(onOpenExternal());
-  };
+  }, [onOpenExternal]);
 
-  const goToPage = (nextPage: number, behavior: ScrollBehavior = "smooth") => {
+  const goToPage = useCallback((nextPage: number, behavior: ScrollBehavior = "smooth") => {
     if (!pdfDocument) {
       return;
     }
@@ -694,7 +490,38 @@ export default function PdfPreview({
       });
     }
     setPageNumber(targetPage);
-  };
+  }, [pdfDocument]);
+
+  useEffect(() => {
+    if (!tabId) return;
+    if (!pdfDocument || loading) {
+      usePdfViewerToolbarStore.getState().removeViewerToolbar(tabId);
+      return;
+    }
+    usePdfViewerToolbarStore.getState().setViewerToolbar(tabId, {
+      pageNumber,
+      pageCount: pdfDocument.numPages,
+      zoomPercent: Math.round(scale * 100),
+      zoomMode,
+      canZoomOut: scale > MIN_SCALE,
+      canZoomIn: scale < MAX_SCALE,
+      onPrevPage: () => goToPage(pageNumber - 1),
+      onNextPage: () => goToPage(pageNumber + 1),
+      onJumpToPage: (page) => goToPage(page),
+      onZoomOut: () => changeScale(scale - SCALE_STEP),
+      onZoomIn: () => changeScale(scale + SCALE_STEP),
+      onFitWidth: () => setZoomMode("width"),
+      onFitPage: () => setZoomMode("page"),
+      onOpenExternal: openExternal,
+    });
+  }, [tabId, pdfDocument, loading, pageNumber, scale, zoomMode, goToPage, changeScale, openExternal]);
+
+  useEffect(() => {
+    if (!tabId) return;
+    return () => {
+      usePdfViewerToolbarStore.getState().removeViewerToolbar(tabId);
+    };
+  }, [tabId]);
 
   if (loading) {
     return (
@@ -731,97 +558,26 @@ export default function PdfPreview({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div
-        className="flex min-h-10 shrink-0 items-center justify-end gap-1 px-3 py-1.5"
-        style={{ borderBottom: "1px solid var(--cs-border-sidebar)" }}
-      >
-        <Tooltip title={t("fileTabs.pdfPreviousPage")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<LeftOutlined />}
-            disabled={pageNumber <= 1}
-            onClick={() => goToPage(pageNumber - 1)}
+      {!tabId ? (
+        <div className="flex min-h-10 shrink-0 items-center justify-end border-b border-[var(--cs-border-sidebar)] px-3 py-1.5">
+          <PdfToolbarControls
+            pageNumber={pageNumber}
+            pageCount={pageCount}
+            zoomPercent={zoomPercent}
+            zoomMode={zoomMode}
+            canZoomOut={scale > MIN_SCALE}
+            canZoomIn={scale < MAX_SCALE}
+            onPrevPage={() => goToPage(pageNumber - 1)}
+            onNextPage={() => goToPage(pageNumber + 1)}
+            onJumpToPage={(page) => goToPage(page)}
+            onZoomOut={() => changeScale(scale - SCALE_STEP)}
+            onZoomIn={() => changeScale(scale + SCALE_STEP)}
+            onFitWidth={() => setZoomMode("width")}
+            onFitPage={() => setZoomMode("page")}
+            onOpenExternal={openExternal}
           />
-        </Tooltip>
-        <InputNumber
-          size="small"
-          className="w-14"
-          min={1}
-          max={pageCount}
-          controls={false}
-          value={pageNumber}
-          aria-label={t("fileTabs.pdfCurrentPage")}
-          onChange={(value) => {
-            if (typeof value === "number") {
-              goToPage(value);
-            }
-          }}
-        />
-        <span className="whitespace-nowrap text-xs text-[var(--cs-text-secondary)]">
-          / {pageCount}
-        </span>
-        <Tooltip title={t("fileTabs.pdfNextPage")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<RightOutlined />}
-            disabled={pageNumber >= pageCount}
-            onClick={() => goToPage(pageNumber + 1)}
-          />
-        </Tooltip>
-        <span
-          className="mx-1 h-4 w-px"
-          style={{ background: "var(--cs-border-sidebar)" }}
-        />
-        <Tooltip title={t("fileTabs.pdfZoomOut")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<ZoomOutOutlined />}
-            disabled={scale <= MIN_SCALE}
-            onClick={() => changeScale(scale - SCALE_STEP)}
-          />
-        </Tooltip>
-        <span className="min-w-12 text-center text-xs text-[var(--cs-text-secondary)]">
-          {zoomPercent}%
-        </span>
-        <Tooltip title={t("fileTabs.pdfZoomIn")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<ZoomInOutlined />}
-            disabled={scale >= MAX_SCALE}
-            onClick={() => changeScale(scale + SCALE_STEP)}
-          />
-        </Tooltip>
-        <Tooltip title={t("fileTabs.pdfFitWidth")}>
-          <Button
-            size="small"
-            type={zoomMode === "width" ? "default" : "text"}
-            icon={<ColumnWidthOutlined />}
-            aria-label={t("fileTabs.pdfFitWidth")}
-            onClick={() => setZoomMode("width")}
-          />
-        </Tooltip>
-        <Tooltip title={t("fileTabs.pdfFitPage")}>
-          <Button
-            size="small"
-            type={zoomMode === "page" ? "default" : "text"}
-            icon={<FullscreenOutlined />}
-            aria-label={t("fileTabs.pdfFitPage")}
-            onClick={() => setZoomMode("page")}
-          />
-        </Tooltip>
-        <Tooltip title={t("common.openInAssociatedApp")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<FolderOpenOutlined />}
-            onClick={openExternal}
-          />
-        </Tooltip>
-      </div>
+        </div>
+      ) : null}
       {error ? (
         <Alert
           className="m-3 shrink-0"
@@ -837,30 +593,27 @@ export default function PdfPreview({
           onClose={() => setError(null)}
         />
       ) : null}
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollContainerRef}
-          className="h-full overflow-auto bg-[var(--cs-bg-card-solid)]"
-          style={{ overflowAnchor: "none" }}
-        >
-          <div className="flex w-max min-w-full flex-col items-center gap-4 p-6">
-            {Array.from({ length: pageCount }, (_, index) => {
-              const currentPage = index + 1;
-              return (
-                <PdfPageCanvas
-                  key={currentPage}
-                  pdfDocument={pdfDocument}
-                  pageNumber={currentPage}
-                  scale={scale}
-                  fallbackSize={fallbackPageSize}
-                  scrollContainerRef={scrollContainerRef}
-                  onRenderError={setError}
-                />
-              );
-            })}
-          </div>
+      <div
+        ref={scrollContainerRef}
+        className="app-thin-scrollbar min-h-0 flex-1 overflow-auto bg-[var(--cs-bg-card-solid)]"
+        style={{ overflowAnchor: "none" }}
+      >
+        <div className="flex w-max min-w-full flex-col items-center gap-4 p-6">
+          {Array.from({ length: pageCount }, (_, index) => {
+            const currentPage = index + 1;
+            return (
+              <PdfPageCanvas
+                key={currentPage}
+                pdfDocument={pdfDocument}
+                pageNumber={currentPage}
+                scale={scale}
+                fallbackSize={fallbackPageSize}
+                scrollContainerRef={scrollContainerRef}
+                onRenderError={setError}
+              />
+            );
+          })}
         </div>
-        <PdfScrollProgress scrollContainerRef={scrollContainerRef} />
       </div>
     </div>
   );

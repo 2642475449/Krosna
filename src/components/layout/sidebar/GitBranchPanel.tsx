@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Button, Checkbox, Dropdown, message, Modal, Popover, Tooltip } from "antd";
+import { Button, Checkbox, Dropdown, message, Modal, Popover } from "antd";
 import type { MenuProps } from "antd";
 import {
   BranchesOutlined,
@@ -26,6 +26,7 @@ import { formatWorktreeDisplayPath, partitionGitBranches } from "@/lib/gitBranch
 import { refreshGitStateAndGraph } from "@/lib/gitGraphEvents";
 import { projectPathKey } from "@/lib/openProjects";
 import { isSessionTurnRunning } from "@/lib/sessions";
+import { showWorkbenchFeedback } from "@/lib/workbenchFeedback";
 import { useAppStore } from "@/store";
 import { EMPTY_GIT_BRANCHES, useGitBranchesStore } from "@/store/slices/gitBranches";
 import { useGitRemoteStore } from "@/store/slices/gitRemote";
@@ -91,7 +92,7 @@ export function GitBranchPanel({
   const optionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [deleteTargetBranch, setDeleteTargetBranch] = useState<string | null>(null);
+  const [confirmDeleteBranch, setConfirmDeleteBranch] = useState<string | null>(null);
   const [operatingBranch, setOperatingBranch] = useState<string | null>(null);
   const [openingWorktreePath, setOpeningWorktreePath] = useState<string | null>(null);
   const [pendingWorktreePath, setPendingWorktreePath] = useState<string | null>(null);
@@ -114,10 +115,12 @@ export function GitBranchPanel({
 
   useEffect(() => {
     if (visible) {
+      setConfirmDeleteBranch(null);
       void setOpenProjectWindows();
       const timer = window.setTimeout(() => listboxRef.current?.focus(), 0);
       return () => window.clearTimeout(timer);
     }
+    setConfirmDeleteBranch(null);
   }, [setOpenProjectWindows, visible]);
 
   const handleOpenWorktreeProject = useCallback(
@@ -240,7 +243,7 @@ export function GitBranchPanel({
     async (worktreePath: string) => {
       try {
         await navigator.clipboard.writeText(worktreePath);
-        message.success(t("sidebar.gitBranchWorktreePathCopied"));
+        showWorkbenchFeedback(t("sidebar.gitBranchWorktreePathCopied"));
       } catch {
         message.error(t("common.copy"));
       }
@@ -248,15 +251,15 @@ export function GitBranchPanel({
     [t],
   );
 
-  // 切换分支
+  // 切换分支：成功后状态栏即时更新不弹 Toast；仅在失败时用全局错误提示。
   const handleSwitchBranch = useCallback(
     async (name: string) => {
       if (!projectPath || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
       useGitRemoteStore.getState().setBusy(projectPath, "branch");
       setOperatingBranch(name);
+      setConfirmDeleteBranch(null);
       try {
         await gitSwitchBranch(projectPath, name);
-        message.success(t("sidebar.gitBranchSwitchSuccess", { name }));
         onVisibleChange(false);
         await loadBranches();
         await refreshGitStateAndGraph(projectPath, onBranchChanged);
@@ -272,7 +275,7 @@ export function GitBranchPanel({
     [projectPath, disabled, loadBranches, onBranchChanged, onVisibleChange, t],
   );
 
-  // 删除分支
+  // 删除分支：行内确认后直接执行，成功后列表即时移除不弹 Toast；失败时全局错误提示。
   const handleDeleteBranch = useCallback(
     async (name: string, force = false) => {
       if (!projectPath || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
@@ -280,32 +283,33 @@ export function GitBranchPanel({
       setOperatingBranch(name);
       try {
         await gitDeleteBranch(projectPath, name, force);
-        message.success(t("sidebar.gitBranchDeleteSuccess"));
+        setConfirmDeleteBranch(null);
         await loadBranches();
         await refreshGitStateAndGraph(projectPath, onBranchChanged);
       } catch (e) {
+        setConfirmDeleteBranch(null);
         message.error(
           `${t("sidebar.gitBranchDeleteFailed")}: ${e instanceof Error ? e.message : String(e)}`,
         );
       } finally {
         setOperatingBranch(null);
         useGitRemoteStore.getState().setBusy(projectPath, null);
-        setDeleteTargetBranch(null);
       }
     },
     [projectPath, disabled, loadBranches, onBranchChanged, t],
   );
 
-  // 合并分支
+  // 合并分支：成功后静默反馈；失败时全局错误提示。
   const handleMergeBranch = useCallback(
     async (name: string) => {
       if (!projectPath || disabled || useGitRemoteStore.getState().busy[projectPath]) return;
       useGitRemoteStore.getState().setBusy(projectPath, "branch");
       setOperatingBranch(name);
+      setConfirmDeleteBranch(null);
       try {
         const result = await gitMergeBranch(projectPath, name);
         if (result.success) {
-          message.success(t("sidebar.gitMergeSuccess"));
+          showWorkbenchFeedback(t("sidebar.gitMergeSuccess"));
           onVisibleChange(false);
         } else {
           message.error(`${t("sidebar.gitMergeFailed")}: ${result.message}`);
@@ -324,14 +328,10 @@ export function GitBranchPanel({
     [projectPath, disabled, loadBranches, onBranchChanged, onVisibleChange, t],
   );
 
-  // 先关闭 Popover 再打开删除确认弹窗，避免浮层叠层冲突。
-  const requestDeleteBranch = useCallback(
-    (branchName: string) => {
-      onVisibleChange(false);
-      window.setTimeout(() => setDeleteTargetBranch(branchName), 0);
-    },
-    [onVisibleChange],
-  );
+  // 就地进入行内二次确认，保持 Popover 打开避免弹窗打断。
+  const requestDeleteBranch = useCallback((branchName: string) => {
+    setConfirmDeleteBranch(branchName);
+  }, []);
 
   const buildBranchMenu = useCallback(
     (branch: GitBranchListItem): MenuProps => {
@@ -550,22 +550,28 @@ export function GitBranchPanel({
         ref={listboxRef}
         id="git-branch-listbox"
         role="listbox"
+        aria-label={t("sidebar.gitBranchSwitchHint")}
         tabIndex={0}
         aria-activedescendant={activeOption?.id}
         onKeyDown={(e) => {
-          if (e.target !== e.currentTarget) return;
+          if (e.key === "Escape") {
+            e.preventDefault();
+            if (confirmDeleteBranch) {
+              setConfirmDeleteBranch(null);
+            } else {
+              onVisibleChange(false);
+            }
+            return;
+          }
           if (e.key === "ArrowDown") {
             e.preventDefault();
             moveActiveIndex(1);
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
             moveActiveIndex(-1);
-          } else if (e.key === "Enter") {
+          } else if (e.key === "Enter" && e.target === e.currentTarget) {
             e.preventDefault();
             activateSelectableItem(activeOption);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onVisibleChange(false);
           }
         }}
         className="app-project-tree-scroll min-h-0 flex-1 overflow-y-auto p-1.5"
@@ -586,6 +592,8 @@ export function GitBranchPanel({
                 {localBranches.map((branch) => {
                   const optionId = `git-branch-option-local-${branch.name}`;
                   const isHighlighted = activeOption?.id === optionId;
+                  const isConfirmingDelete = confirmDeleteBranch === branch.name;
+                  const isDeleting = operatingBranch === branch.name;
                   return (
                     <Dropdown key={branch.name} trigger={["contextMenu"]} menu={buildBranchMenu(branch)}>
                       <div
@@ -598,6 +606,7 @@ export function GitBranchPanel({
                         className="git-branch-row group"
                         data-current={branch.isCurrent ? "true" : "false"}
                         data-highlighted={isHighlighted ? "true" : "false"}
+                        data-confirming={isConfirmingDelete ? "true" : "false"}
                         onMouseEnter={() => {
                           const idx = itemIndexById.get(optionId);
                           if (idx !== undefined) setActiveIndex(idx);
@@ -608,6 +617,10 @@ export function GitBranchPanel({
                           className="git-branch-row-main"
                           disabled={blocked && !branch.isCurrent}
                           onClick={() => {
+                            if (isConfirmingDelete) {
+                              setConfirmDeleteBranch(null);
+                              return;
+                            }
                             if (!branch.isCurrent && !blocked) {
                               void handleSwitchBranch(branch.name);
                             }
@@ -627,17 +640,17 @@ export function GitBranchPanel({
                           >
                             {branch.name}
                           </span>
-                          {operatingBranch === branch.name ? (
+                          {isDeleting && !isConfirmingDelete ? (
                             <LoadingOutlined className="shrink-0 text-[12px] text-[var(--cs-primary)]" />
                           ) : branch.isCurrent ? (
                             <CheckOutlined className="shrink-0 text-[12px] text-[var(--cs-primary)]" />
                           ) : null}
-                          {branch.ahead > 0 && (
+                          {!isConfirmingDelete && branch.ahead > 0 && (
                             <span className="shrink-0 rounded-sm bg-[color-mix(in_srgb,var(--cs-success)_12%,transparent)] px-1 font-mono text-[10px] tabular-nums text-[var(--cs-success)]">
                               ↑{branch.ahead}
                             </span>
                           )}
-                          {branch.behind > 0 && (
+                          {!isConfirmingDelete && branch.behind > 0 && (
                             <span className="shrink-0 rounded-sm bg-[color-mix(in_srgb,var(--cs-error)_12%,transparent)] px-1 font-mono text-[10px] tabular-nums text-[var(--cs-error)]">
                               ↓{branch.behind}
                             </span>
@@ -645,21 +658,45 @@ export function GitBranchPanel({
                         </button>
                         {!branch.isCurrent && (
                           <div className="git-branch-row-actions">
-                            <Tooltip title={t("sidebar.gitDeleteBranch")} mouseEnterDelay={0.4}>
-                              <Button
-                                type="text"
-                                size="small"
+                            {isConfirmingDelete ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="git-branch-inline-confirm-btn"
+                                  disabled={blocked}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleDeleteBranch(branch.name, false);
+                                  }}
+                                >
+                                  {isDeleting ? <LoadingOutlined className="text-[12px]" /> : t("common.delete")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="git-branch-inline-cancel-btn"
+                                  disabled={isDeleting}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeleteBranch(null);
+                                  }}
+                                >
+                                  {t("common.cancel")}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
                                 aria-label={t("sidebar.gitDeleteBranch")}
-                                icon={<DeleteOutlined className="text-[12px]" />}
-                                className="h-5 w-5 min-w-5 p-0 text-[var(--cs-text-tertiary)]"
+                                className="git-branch-row-delete-btn"
                                 disabled={blocked}
-                                loading={operatingBranch === branch.name}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   requestDeleteBranch(branch.name);
                                 }}
-                              />
-                            </Tooltip>
+                              >
+                                <DeleteOutlined className="text-[12px]" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -894,31 +931,6 @@ export function GitBranchPanel({
             </div>
           ) : null}
         </div>
-      </Modal>
-
-      <Modal
-        centered
-        title={t("sidebar.gitDeleteBranch")}
-        open={deleteTargetBranch !== null}
-        okText={t("common.delete")}
-        cancelText={t("common.cancel")}
-        okButtonProps={{ danger: true }}
-        confirmLoading={operatingBranch === deleteTargetBranch}
-        onOk={() => {
-          if (deleteTargetBranch) {
-            void handleDeleteBranch(deleteTargetBranch, false);
-          }
-        }}
-        onCancel={() => {
-          if (operatingBranch) return;
-          setDeleteTargetBranch(null);
-        }}
-      >
-        <p>
-          {t("sidebar.gitBranchDeleteConfirm", {
-            name: deleteTargetBranch ?? "",
-          })}
-        </p>
       </Modal>
     </>
   );

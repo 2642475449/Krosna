@@ -30,7 +30,7 @@
   --cs-bg-sidebar: var(--cs-bg-card-solid);
   --cs-bg-header: #f1f3f7;
   --cs-bg-statusbar: #f1f3f7;
-  --cs-bg-content: #f1f3f7;
+  --cs-bg-content: var(--cs-bg-card-solid);
   --cs-bg-body: var(--cs-bg-card-solid);
   --cs-bg-elevated: #ffffff;
   --cs-bg-hover: #e9edf4;
@@ -112,7 +112,7 @@
   --cs-bg-sidebar: var(--cs-bg-card-solid);
   --cs-bg-header: #f3eee6;
   --cs-bg-statusbar: #f3eee6;
-  --cs-bg-content: #f3eee6;
+  --cs-bg-content: var(--cs-bg-card-solid);
   --cs-bg-body: var(--cs-bg-card-solid);
   --cs-bg-elevated: #fffcf6;
   --cs-bg-hover: #eee5d8;
@@ -194,7 +194,7 @@
   --cs-bg-sidebar: var(--cs-bg-card-solid);
   --cs-bg-header: #15181f;
   --cs-bg-statusbar: #15181f;
-  --cs-bg-content: #1e232d;
+  --cs-bg-content: var(--cs-bg-card-solid);
   --cs-bg-body: var(--cs-bg-card-solid);
   --cs-bg-elevated: #282f3c;
   --cs-bg-hover: #2b3342;
@@ -276,7 +276,7 @@
   --cs-bg-sidebar: var(--cs-bg-card-solid);
   --cs-bg-header: #211c19;
   --cs-bg-statusbar: #211c19;
-  --cs-bg-content: #2b2521;
+  --cs-bg-content: var(--cs-bg-card-solid);
   --cs-bg-body: var(--cs-bg-card-solid);
   --cs-bg-elevated: #37302a;
   --cs-bg-hover: #3d332b;
